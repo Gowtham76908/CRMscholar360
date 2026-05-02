@@ -1,0 +1,513 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String          @id @default(uuid())
+  name           String
+  email          String          @unique
+  phone          String?
+  password       String
+  role           Role            @default(EMPLOYEE)
+  isActive       Boolean         @default(true)
+  department     String?
+  jobTitle       String?
+  profilePhoto   String?
+  preferences    Json?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  workspaceId    String?
+  departmentId   String?
+  breakStartedAt DateTime?
+  onlineStatus   OnlineStatus    @default(OFFLINE)
+  lastSeen       DateTime?
+  activities     Activity[]
+  attendances    Attendance[]
+  leads          Lead[]
+  taskComments   TaskComment[]
+  leaves         Leave[]
+  leaveApprovals LeaveApproval[] @relation("ApproverLeaves")
+  sessions       Session[]
+  tasks          Task[]
+  invoices       Invoice[]       @relation("CreatedInvoices")
+  departmentRel  Department?     @relation(fields: [departmentId], references: [id])
+  workspace      Workspace?      @relation(fields: [workspaceId], references: [id])
+  statusLogs     UserStatusLog[]
+}
+
+model UserStatusLog {
+  id        String       @id @default(uuid())
+  userId    String
+  status    OnlineStatus
+  note      String?
+  changedAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, changedAt])
+}
+
+model Lead {
+  id              String      @id @default(uuid())
+  name            String
+  email           String?
+  phone           String?
+  source          LeadSource
+  enquiryType     EnquiryType
+  status          LeadStatus  @default(NEW)
+  assignedToId    String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  score           Int         @default(0)
+  category        String?
+  firstResponseAt DateTime?
+  workspaceId     String?
+  isSearchLead    Boolean     @default(false)
+  linkedinUrl     String?
+  jobTitle        String?
+  company         String?
+  biodata         String?
+  activities      Activity[]
+  callLogs        CallLog[]
+  salestrailCalls SalestrailCall[]
+  assignedTo      User?       @relation(fields: [assignedToId], references: [id])
+  workspace       Workspace?  @relation(fields: [workspaceId], references: [id])
+  notes           Note[]
+  tasks           Task[]
+}
+
+model Note {
+  id        String   @id @default(uuid())
+  leadId    String?
+  content   String
+  createdAt DateTime @default(now())
+  lead      Lead?    @relation(fields: [leadId], references: [id])
+}
+
+model Sprint {
+  id        String       @id @default(uuid())
+  name      String
+  goal      String?
+  startDate DateTime
+  endDate   DateTime
+  status    SprintStatus @default(PLANNING)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  tasks     Task[]
+}
+
+model Task {
+  id             String       @id @default(uuid())
+  title          String
+  description    String?
+  leadId         String?
+  assignedToId   String?
+  dueDate        DateTime
+  status         TaskStatus   @default(PENDING)
+  kanbanStatus   KanbanStatus @default(TODO)
+  priority       Priority     @default(MEDIUM)
+  type           TaskType     @default(TASK)
+  storyPoints    Int?
+  estimatedHours Float?
+  actualHours    Float?
+  labels         String[]
+  sprintId       String?
+  orderIndex     Int          @default(0)
+  completedAt    DateTime?
+  updatedAt      DateTime     @default(now()) @updatedAt
+  assignedTo     User?        @relation(fields: [assignedToId], references: [id])
+  lead           Lead?        @relation(fields: [leadId], references: [id])
+  sprint         Sprint?      @relation(fields: [sprintId], references: [id])
+  files          TaskFile[]
+  comments       TaskComment[]
+}
+
+model TaskComment {
+  id        String   @id @default(uuid())
+  taskId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model TaskFile {
+  id        String   @id @default(uuid())
+  taskId    String
+  fileName  String
+  fileUrl   String
+  fileSize  Int
+  mimeType  String
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model Integration {
+  id          String    @id @default(uuid())
+  platform    String    @unique
+  isConnected Boolean   @default(false)
+  lastSynced  DateTime?
+  config      Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Activity {
+  id        String   @id @default(uuid())
+  leadId    String?
+  userId    String?
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  lead      Lead?    @relation(fields: [leadId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id])
+}
+
+model Reminder {
+  id       String   @id @default(uuid())
+  leadId   String?
+  taskId   String?
+  userId   String
+  remindAt DateTime
+  message  String
+  isSent   Boolean  @default(false)
+}
+
+model Commission {
+  id        String   @id @default(uuid())
+  userId    String
+  leadId    String
+  amount    Float
+  createdAt DateTime @default(now())
+}
+
+model Permission {
+  id       String @id @default(uuid())
+  role     Role
+  resource String
+  action   String
+}
+
+model CallLog {
+  id            String    @id @default(uuid())
+  leadId        String
+  userId        String
+  duration      Int       @default(0)
+  callType      String    @default("OUTBOUND")
+  createdAt     DateTime  @default(now())
+  callStatus    String?
+  recordingUrl  String?
+  agentNumber   String?
+  callDate      DateTime?
+  greeterCallId String?
+  transcription String?
+  plainText     String?
+  summary       String?
+  tone          String?
+  urgency       String?
+  emotion       String?
+  callCategory  String?
+  sentiment     String?
+  feedback      String?
+  conclusion    String?
+  isTranscribed Boolean   @default(false)
+  transcribedAt DateTime?
+  lead          Lead      @relation(fields: [leadId], references: [id])
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  device    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Workspace {
+  id         String  @id @default(uuid())
+  name       String
+  logo       String?
+  brandColor String?
+  leads      Lead[]
+  users      User[]
+}
+
+model Department {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+}
+
+model Attendance {
+  id        String           @id @default(uuid())
+  userId    String
+  date      DateTime         @default(now()) @db.Date
+  checkIn   DateTime?
+  checkOut  DateTime?
+  status    AttendanceStatus @default(PRESENT)
+  location  Json?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+model Leave {
+  id        String          @id @default(uuid())
+  userId    String
+  fromDate  DateTime        @db.Date
+  toDate    DateTime        @db.Date
+  totalDays Int
+  reason    String
+  leaveType String          @default("LEAVE")
+  status    LeaveStatus     @default(PENDING)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  approvals LeaveApproval[]
+
+  @@index([userId, status])
+}
+
+model LeaveApproval {
+  id         String         @id @default(uuid())
+  leaveId    String
+  approverId String
+  status     ApprovalStatus @default(PENDING)
+  comments   String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  approver   User           @relation("ApproverLeaves", fields: [approverId], references: [id], onDelete: Cascade)
+  leave      Leave          @relation(fields: [leaveId], references: [id], onDelete: Cascade)
+
+  @@unique([leaveId, approverId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  EMPLOYEE
+  TEAM_LEAD
+  AGENT
+}
+
+enum LeadSource {
+  FACEBOOK
+  INSTAGRAM
+  GMAIL
+  WEBSITE
+  PHONE_CALL
+  LINKEDIN
+}
+
+enum EnquiryType {
+  PRODUCT
+  WHITE_LABEL
+  LMS
+  SERVICES
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  FOLLOW_UP
+  CONVERTED
+  LOST
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LEAVE
+  HALF_DAY
+  WFH
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OnlineStatus {
+  ONLINE
+  OFFLINE
+  BREAK
+}
+
+enum TaskStatus {
+  PENDING
+  COMPLETED
+}
+
+enum SprintStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum Priority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum TaskType {
+  EPIC
+  STORY
+  TASK
+  BUG
+  SUBTASK
+}
+
+enum KanbanStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  BLOCKED
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  invoiceType   InvoiceType   @default(PROFORMA)
+  clientName    String
+  clientEmail   String?
+  clientPhone   String?
+  clientAddress String?
+  clientGstin   String?
+  subtotal      Float
+  cgst          Float         @default(0)
+  sgst          Float         @default(0)
+  igst          Float         @default(0)
+  total         Float
+  status        InvoiceStatus @default(DRAFT)
+  dueDate       DateTime?
+  notes         String?
+  emailSentAt   DateTime?
+  emailSentTo   String?
+  createdById   String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  items         InvoiceItem[]
+  payments      PaymentEntry[]
+  createdBy     User          @relation("CreatedInvoices", fields: [createdById], references: [id])
+}
+
+model InvoiceItem {
+  id           String  @id @default(uuid())
+  invoiceId    String
+  description  String
+  price        Float
+  quantity     Float   @default(1)
+  taxRate      Float   @default(18)
+  taxableValue Float
+  amount       Float
+  invoice      Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model PaymentEntry {
+  id          String      @id @default(uuid())
+  invoiceId   String
+  amount      Float
+  type        PaymentType @default(CREDIT)
+  description String?
+  paymentDate DateTime    @default(now())
+  createdAt   DateTime    @default(now())
+  invoice     Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+enum InvoiceType {
+  PROFORMA
+  TAX_INVOICE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum PaymentType {
+  CREDIT
+  DEBIT
+}
+
+model CompanySettings {
+  id            String   @id @default(uuid())
+  companyName   String   @default("HEXITE TECHNOLOGIES PRIVATE LIMITED")
+  shortName     String   @default("HXZ")
+  gstin         String   @default("33AAHCH4159D1ZT")
+  address       String   @default("No 98, Varadharajan Street Kaladipet")
+  city          String   @default("Chennai")
+  state         String   @default("Tamil Nadu")
+  pincode       String   @default("600019")
+  phone         String   @default("+91 9994081905, 9566999018")
+  email         String   @default("praveen@hexitetechnologies.com")
+  website       String   @default("https://hexitetechnologies.com/")
+  placeOfSupply String   @default("33-Tamil Nadu")
+  bankName      String   @default("Axis Bank")
+  accountNo     String   @default("924020046598227")
+  ifsc          String   @default("UTIB0001619")
+  branch        String   @default("Thiruvottriyur")
+  defaultTaxRate Float   @default(18)
+  defaultNotes  String   @default("")
+  updatedAt     DateTime @updatedAt
+}
+
+model SalestrailCall {
+  id            String    @id @default(uuid())
+  salestrailId  String?   @unique
+  direction     String    @default("outgoing")
+  status        String?
+  duration      Int       @default(0)
+  fromNumber    String?
+  toNumber      String?
+  agentName     String?
+  agentEmail    String?
+  contactName   String?
+  contactPhone  String?
+  recordingUrl  String?
+  notes         String?
+  rawPayload    Json?
+  startedAt     DateTime?
+  endedAt       DateTime?
+  createdAt     DateTime  @default(now())
+  leadId        String?
+  lead          Lead?     @relation(fields: [leadId], references: [id])
+}
