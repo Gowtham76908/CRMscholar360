@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { Search, Filter, Edit, Plus, Upload, Phone, PhoneCall, Play, Pause, SearchCheck, Users, History } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
@@ -9,6 +9,19 @@ import MergeLeadModal from "../components/MergeLeadModal";
 import LeadActivityModal from "../components/LeadActivityModal";
 import CallDetailModal from "../components/CallDetailModal";
 import { useAuth } from "../context/AuthContext";
+
+const getPages = (current, total) => {
+    const delta = 2;
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    const result = [1];
+    if (current > delta + 2) result.push("...");
+    const start = Math.max(2, current - delta);
+    const end = Math.min(total - 1, current + delta);
+    for (let i = start; i <= end; i++) result.push(i);
+    if (current < total - delta - 1) result.push("...");
+    result.push(total);
+    return result;
+};
 
 const Leads = () => {
     const [activeTab, setActiveTab] = useState("leads"); // "leads" | "search-leads"
@@ -39,6 +52,20 @@ const Leads = () => {
 
     const leads = leadsData?.data || [];
     const meta = leadsData?.meta || { total: 0, totalPages: 0 };
+
+    const pageButtons = useMemo(() => getPages(page, meta.totalPages), [page, meta.totalPages]);
+
+    const goTo = useCallback((p) => setPage(Math.max(1, Math.min(meta.totalPages, p))), [meta.totalPages]);
+
+    useEffect(() => {
+        const handler = (e) => {
+            if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+            if (e.key === "ArrowLeft") goTo(page - 1);
+            if (e.key === "ArrowRight") goTo(page + 1);
+        };
+        window.addEventListener("keydown", handler);
+        return () => window.removeEventListener("keydown", handler);
+    }, [page, goTo]);
 
     // Bulk Actions
     const [selectedLeads, setSelectedLeads] = useState([]);
@@ -493,33 +520,34 @@ const Leads = () => {
                         <div>
                             <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                                 <button
-                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    onClick={() => goTo(page - 1)}
                                     disabled={page === 1}
-                                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                    className="relative inline-flex items-center px-3 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
                                 >
-                                    <span className="sr-only">Previous</span>
-                                    &lt;
+                                    ← Prev
                                 </button>
-                                {[...Array(meta.totalPages)].map((_, i) => (
-                                    <button
-                                        key={i + 1}
-                                        onClick={() => setPage(i + 1)}
-                                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                                            page === i + 1
-                                                ? "z-10 bg-indigo-50 border-indigo-500 text-indigo-600"
-                                                : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"
-                                        }`}
-                                    >
-                                        {i + 1}
-                                    </button>
-                                ))}
+                                {pageButtons.map((p, i) =>
+                                    p === "..." ? (
+                                        <span key={`e${i}`} className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500">…</span>
+                                    ) : (
+                                        <button
+                                            key={p}
+                                            onClick={() => goTo(p)}
+                                            aria-current={page === p ? "page" : undefined}
+                                            className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                                                page === p ? "z-10 bg-indigo-50 border-indigo-500 text-indigo-600" : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"
+                                            }`}
+                                        >
+                                            {p}
+                                        </button>
+                                    )
+                                )}
                                 <button
-                                    onClick={() => setPage(p => Math.min(meta.totalPages, p + 1))}
+                                    onClick={() => goTo(page + 1)}
                                     disabled={page >= meta.totalPages}
-                                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                    className="relative inline-flex items-center px-3 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
                                 >
-                                    <span className="sr-only">Next</span>
-                                    &gt;
+                                    Next →
                                 </button>
                             </nav>
                         </div>
