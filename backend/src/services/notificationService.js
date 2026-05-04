@@ -69,11 +69,21 @@ const getPrevMonthWinner = async () => {
  * If the logged-in user is last month's #1, sends them a winner notification (once per month).
  */
 const notifyIfLeaderboardWinner = async (userId) => {
-    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-    if (nowIST.getDate() !== 1) return;
+    // Robustly check if it's the 1st of the month in IST
+    const now = new Date();
+    const istDay = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Kolkata",
+        day: "numeric"
+    }).format(now);
 
-    // Duplicate guard
-    const thisMonthStart = new Date(Date.UTC(nowIST.getFullYear(), nowIST.getMonth(), 1));
+    if (istDay !== "1") return;
+
+    // For the duplicate guard and labeling, we need the year and month in IST
+    const istYear = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", year: "numeric" }).format(now);
+    const istMonth = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", month: "numeric" }).format(now);
+    
+    // Month is 1-indexed from Intl, Date.UTC expects 0-indexed
+    const thisMonthStart = new Date(Date.UTC(Number(istYear), Number(istMonth) - 1, 1));
     const alreadySent = await prisma.notification.findFirst({
         where: { userId, type: "LEADERBOARD_WINNER", createdAt: { gte: thisMonthStart } }
     });
@@ -83,7 +93,7 @@ const notifyIfLeaderboardWinner = async (userId) => {
     if (!winner || winner.id !== userId) return;
 
     // Use UTC for labeling to match getPrevMonthWinner's logic
-    const currentMonthStartUTC = new Date(Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth(), 1));
+    const currentMonthStartUTC = thisMonthStart;
     const prevMonthEnd = new Date(currentMonthStartUTC.getTime() - 1);
     const monthLabel = prevMonthEnd.toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
 

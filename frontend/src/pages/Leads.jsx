@@ -478,7 +478,7 @@ const Leads = () => {
                         </button>
                         <button
                             onClick={() => setPage(p => Math.min(meta.totalPages, p + 1))}
-                            disabled={page === meta.totalPages}
+                            disabled={page >= meta.totalPages}
                             className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                         >
                             Next
@@ -487,7 +487,7 @@ const Leads = () => {
                     <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                         <div>
                             <p className="text-sm text-gray-700">
-                                Showing <span className="font-medium">{(page - 1) * limit + 1}</span> to <span className="font-medium">{Math.min(page * limit, meta.total)}</span> of <span className="font-medium">{meta.total}</span> results
+                                Showing <span className="font-medium">{meta.total === 0 ? 0 : (page - 1) * limit + 1}</span> to <span className="font-medium">{Math.min(page * limit, meta.total)}</span> of <span className="font-medium">{meta.total}</span> results
                             </p>
                         </div>
                         <div>
@@ -515,7 +515,7 @@ const Leads = () => {
                                 ))}
                                 <button
                                     onClick={() => setPage(p => Math.min(meta.totalPages, p + 1))}
-                                    disabled={page === meta.totalPages}
+                                    disabled={page >= meta.totalPages}
                                     className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
                                 >
                                     <span className="sr-only">Next</span>

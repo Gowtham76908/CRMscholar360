@@ -39,8 +39,12 @@ const getLeads = async ({
             where.createdAt.gte = new Date(filters.startDate);
         }
         if (filters.endDate) {
-            // End of day logic could be added here if needed
-            where.createdAt.lte = new Date(filters.endDate);
+            const end = new Date(filters.endDate);
+            // If the time is exactly midnight UTC, assume it's a date-only input and set to end of day
+            if (end.getUTCHours() === 0 && end.getUTCMinutes() === 0 && end.getUTCSeconds() === 0) {
+                end.setUTCHours(23, 59, 59, 999);
+            }
+            where.createdAt.lte = end;
         }
     }
 

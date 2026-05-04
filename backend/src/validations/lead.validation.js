@@ -5,8 +5,8 @@ const getLeadsSchema = z.object({
     limit: z.coerce.number().min(1).max(100).default(20),
     status: z.enum(["NEW", "CONTACTED", "FOLLOW_UP", "CONVERTED", "LOST", "ALL"]).optional(),
     assignedTo: z.string().uuid().optional(),
-    startDate: z.string().datetime().optional(), // Enforces ISO-8601
-    endDate: z.string().datetime().optional(),
+    startDate: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional(),
     search: z.string().trim().max(100).optional(),
     sortBy: z.enum(["createdAt", "updatedAt"]).default("createdAt"),
     sortOrder: z.enum(["asc", "desc"]).default("desc"),
