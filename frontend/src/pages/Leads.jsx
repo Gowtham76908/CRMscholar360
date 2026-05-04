@@ -1,8 +1,8 @@
 import { useState, useRef } from "react";
-import { Search, Filter, Edit, Plus, Upload, Phone, PhoneCall, Play, Pause, SearchCheck, Users } from "lucide-react";
+import { Search, Filter, Edit, Plus, Upload, Phone, PhoneCall, Play, Pause, SearchCheck, Users, History } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
-import { Loader2, Merge, History } from "lucide-react";
+import { Loader2, Merge } from "lucide-react";
 import { Modal } from "../components/Modal";
 import AddLeadForm from "../components/AddLeadForm";
 import MergeLeadModal from "../components/MergeLeadModal";
@@ -14,38 +14,38 @@ const Leads = () => {
     const [activeTab, setActiveTab] = useState("leads"); // "leads" | "search-leads"
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("ALL");
+    const [page, setPage] = useState(1);
+    const limit = 20;
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingLead, setEditingLead] = useState(null);
     const [isImporting, setIsImporting] = useState(false);
     const csvInputRef = useRef(null);
     const queryClient = useQueryClient();
 
-    const { data: leads, isLoading } = useQuery({
-        queryKey: ["leads"],
+    const { data: leadsData, isLoading } = useQuery({
+        queryKey: ["leads", page, searchTerm, statusFilter, activeTab],
         queryFn: async () => {
-            const res = await api.get("/leads");
-            return res.data.data || res.data;
+            const params = {
+                page,
+                limit,
+                search: searchTerm || undefined,
+                status: statusFilter === "ALL" ? undefined : statusFilter,
+                isSearchLead: activeTab === "search-leads"
+            };
+            const res = await api.get("/leads", { params });
+            return res.data;
         },
     });
 
-    const tabLeads = leads?.filter((lead) =>
-        activeTab === "search-leads" ? lead.isSearchLead : !lead.isSearchLead
-    );
-
-    const filteredLeads = tabLeads?.filter((lead) => {
-        const matchesSearch =
-            lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            lead.email?.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStatus = statusFilter === "ALL" || lead.status === statusFilter;
-        return matchesSearch && matchesStatus;
-    });
+    const leads = leadsData?.data || [];
+    const meta = leadsData?.meta || { total: 0, totalPages: 0 };
 
     // Bulk Actions
     const [selectedLeads, setSelectedLeads] = useState([]);
 
     const handleSelectAll = (e) => {
         if (e.target.checked) {
-            setSelectedLeads(filteredLeads.map(l => l.id));
+            setSelectedLeads(leads.map(l => l.id));
         } else {
             setSelectedLeads([]);
         }
@@ -157,9 +157,6 @@ const Leads = () => {
         );
     }
 
-    const regularCount = leads?.filter((l) => !l.isSearchLead).length ?? 0;
-    const searchCount = leads?.filter((l) => l.isSearchLead).length ?? 0;
-
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -200,7 +197,7 @@ const Leads = () => {
             {/* Tabs */}
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
                 <button
-                    onClick={() => { setActiveTab("leads"); setSearchTerm(""); setStatusFilter("ALL"); setSelectedLeads([]); }}
+                    onClick={() => { setActiveTab("leads"); setSearchTerm(""); setStatusFilter("ALL"); setSelectedLeads([]); setPage(1); }}
                     className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                         activeTab === "leads"
                             ? "bg-white text-indigo-700 shadow-sm"
@@ -212,11 +209,11 @@ const Leads = () => {
                     <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
                         activeTab === "leads" ? "bg-indigo-100 text-indigo-600" : "bg-gray-200 text-gray-500"
                     }`}>
-                        {regularCount}
+                        {activeTab === "leads" ? meta.total : "-"}
                     </span>
                 </button>
                 <button
-                    onClick={() => { setActiveTab("search-leads"); setSearchTerm(""); setStatusFilter("ALL"); setSelectedLeads([]); }}
+                    onClick={() => { setActiveTab("search-leads"); setSearchTerm(""); setStatusFilter("ALL"); setSelectedLeads([]); setPage(1); }}
                     className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                         activeTab === "search-leads"
                             ? "bg-white text-indigo-700 shadow-sm"
@@ -228,7 +225,7 @@ const Leads = () => {
                     <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
                         activeTab === "search-leads" ? "bg-indigo-100 text-indigo-600" : "bg-gray-200 text-gray-500"
                     }`}>
-                        {searchCount}
+                        {activeTab === "search-leads" ? meta.total : "-"}
                     </span>
                 </button>
             </div>
@@ -242,7 +239,7 @@ const Leads = () => {
                         placeholder="Search leads by name or email..."
                         className="pl-10 w-full border border-gray-300 rounded-lg py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
                     />
                 </div>
                 <div className="relative w-full sm:w-48">
@@ -250,7 +247,7 @@ const Leads = () => {
                     <select
                         className="pl-10 w-full border border-gray-300 rounded-lg py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500 appearance-none bg-white"
                         value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
+                        onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                     >
                         <option value="ALL">All Status</option>
                         <option value="NEW">New</option>
@@ -312,7 +309,7 @@ const Leads = () => {
                                         type="checkbox"
                                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                                         onChange={handleSelectAll}
-                                        checked={filteredLeads?.length > 0 && selectedLeads.length === filteredLeads.length}
+                                        checked={leads.length > 0 && selectedLeads.length === leads.length}
                                     />
                                 </th>
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
@@ -326,7 +323,7 @@ const Leads = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {filteredLeads?.map((lead) => (
+                            {leads.map((lead) => (
                                 <tr key={lead.id} className={`hover:bg-gray-50 transition-colors ${selectedLeads.includes(lead.id) ? 'bg-indigo-50/50' : ''}`}>
                                     <td className="px-6 py-4">
                                         <input
@@ -338,7 +335,7 @@ const Leads = () => {
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="text-sm font-medium text-gray-900">{lead.name}</div>
-                                        <div className="text-xs text-gray-500 capitalize">{lead.enquiryType.toLowerCase().replace("_", " ")}</div>
+                                        <div className="text-xs text-gray-500 capitalize">{lead.enquiryType?.toLowerCase()?.replace("_", " ") || "n/a"}</div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="text-sm text-gray-900">{lead.email || "-"}</div>
@@ -419,7 +416,7 @@ const Leads = () => {
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-700 capitalize">
-                                            {lead.source.toLowerCase().replace("_", " ")}
+                                            {lead.source?.toLowerCase().replace("_", " ") || "n/a"}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -458,7 +455,7 @@ const Leads = () => {
                                     </td>
                                 </tr>
                             ))}
-                            {filteredLeads?.length === 0 && (
+                            {leads.length === 0 && (
                                 <tr>
                                     <td colSpan="9" className="px-6 py-10 text-center text-sm text-gray-500">
                                         No leads found matching your filters.
@@ -467,6 +464,66 @@ const Leads = () => {
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+                    <div className="flex-1 flex justify-between sm:hidden">
+                        <button
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={page === 1}
+                            className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                        >
+                            Previous
+                        </button>
+                        <button
+                            onClick={() => setPage(p => Math.min(meta.totalPages, p + 1))}
+                            disabled={page === meta.totalPages}
+                            className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                        >
+                            Next
+                        </button>
+                    </div>
+                    <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                        <div>
+                            <p className="text-sm text-gray-700">
+                                Showing <span className="font-medium">{(page - 1) * limit + 1}</span> to <span className="font-medium">{Math.min(page * limit, meta.total)}</span> of <span className="font-medium">{meta.total}</span> results
+                            </p>
+                        </div>
+                        <div>
+                            <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                                <button
+                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    disabled={page === 1}
+                                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    <span className="sr-only">Previous</span>
+                                    &lt;
+                                </button>
+                                {[...Array(meta.totalPages)].map((_, i) => (
+                                    <button
+                                        key={i + 1}
+                                        onClick={() => setPage(i + 1)}
+                                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                                            page === i + 1
+                                                ? "z-10 bg-indigo-50 border-indigo-500 text-indigo-600"
+                                                : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"
+                                        }`}
+                                    >
+                                        {i + 1}
+                                    </button>
+                                ))}
+                                <button
+                                    onClick={() => setPage(p => Math.min(meta.totalPages, p + 1))}
+                                    disabled={page === meta.totalPages}
+                                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    <span className="sr-only">Next</span>
+                                    &gt;
+                                </button>
+                            </nav>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -478,7 +535,6 @@ const Leads = () => {
                 <AddLeadForm onClose={() => setIsAddModalOpen(false)} />
             </Modal>
 
-            {/* Merge Modal - Render directly without generic Modal wrapper for custom layout if needed, or wrap */}
             {isMergeModalOpen && (
                 <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
                     <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -486,11 +542,11 @@ const Leads = () => {
                         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
                         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
                             <MergeLeadModal
-                                leads={filteredLeads.filter(l => selectedLeads.includes(l.id))}
+                                leads={leads.filter(l => selectedLeads.includes(l.id))}
                                 onClose={() => setIsMergeModalOpen(false)}
                                 onSuccess={() => {
                                     setSelectedLeads([]);
-                                    window.location.reload(); // Simple reload for now
+                                    queryClient.invalidateQueries({ queryKey: ["leads"] });
                                 }}
                             />
                         </div>
@@ -498,7 +554,6 @@ const Leads = () => {
                 </div>
             )}
 
-            {/* Call Detail Modal */}
             {selectedLeadForCalls && (
                 <CallDetailModal
                     lead={selectedLeadForCalls}
@@ -508,7 +563,6 @@ const Leads = () => {
                 />
             )}
 
-            {/* Edit Lead Modal */}
             {editingLead && (
                 <Modal
                     isOpen={!!editingLead}
@@ -522,7 +576,6 @@ const Leads = () => {
                 </Modal>
             )}
 
-            {/* Activity Modal */}
             {selectedLeadForActivity && (
                 <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
                     <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">

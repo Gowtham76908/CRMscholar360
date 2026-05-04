@@ -10,6 +10,7 @@ const getLeadsSchema = z.object({
     search: z.string().trim().max(100).optional(),
     sortBy: z.enum(["createdAt", "updatedAt"]).default("createdAt"),
     sortOrder: z.enum(["asc", "desc"]).default("desc"),
+    isSearchLead: z.string().optional().transform(v => v === 'true' ? true : v === 'false' ? false : undefined),
 })
 .refine((data) => {
     if (data.startDate && data.endDate) {

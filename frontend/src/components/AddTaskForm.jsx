@@ -44,7 +44,7 @@ const AddTaskForm = ({ onClose, leadId: initialLeadId }) => {
     const { data: leads } = useQuery({
         queryKey: ["leads"],
         queryFn: async () => {
-            const res = await api.get("/leads");
+            const res = await api.get("/leads", { params: { limit: 100 } });
             return res.data.data || res.data;
         },
     });

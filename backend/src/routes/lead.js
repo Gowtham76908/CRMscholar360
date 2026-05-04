@@ -15,6 +15,9 @@ router.use(authMiddleware);
 router.patch("/bulk-update", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), bulkController.bulkUpdateLeads);
 router.patch("/bulk-assign", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), bulkController.bulkAssignLeads);
 
+// Get Lead Stats for Dashboard
+router.get("/stats", leadController.getDashboardStats);
+
 // Export Leads
 router.get("/export", leadController.exportLeads);
 
@@ -41,5 +44,9 @@ router.patch("/:id/assign", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), leadContro
 
 // Update Lead Status (e.g. Employee can update status)
 router.patch("/:id/status", leadController.updateLead);
+
+// Update entire Lead
+router.put("/:id", leadController.updateLead);
+router.patch("/:id", leadController.updateLead);
 
 module.exports = router;

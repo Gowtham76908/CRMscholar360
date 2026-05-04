@@ -32,19 +32,14 @@ const StatCard = ({ title, value, subtext, icon: Icon, colorClass }) => {
     );
 };
 
-const DashboardStats = ({ leads = [], tasks = [] }) => {
-    const totalLeads = leads.length;
-    const newLeadsToday = leads.filter(l => {
-        const today = new Date().toISOString().split('T')[0];
-        const created = new Date(l.createdAt).toISOString().split('T')[0];
-        return today === created;
-    }).length;
-
-    const convertedLeads = leads.filter(l => l.status === "CONVERTED").length;
-    const pendingTasks = tasks.filter(t => t.status === "PENDING").length;
-
-    // Calculate conversion rate
-    const conversionRate = totalLeads > 0 ? Math.round((convertedLeads / totalLeads) * 100) : 0;
+const DashboardStats = ({ stats = {} }) => {
+    const { 
+        totalLeads = 0, 
+        newLeadsToday = 0, 
+        convertedLeads = 0, 
+        pendingTasks = 0, 
+        conversionRate = 0 
+    } = stats;
 
     return (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">

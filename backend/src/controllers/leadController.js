@@ -21,13 +21,14 @@ const getLeads = async (req, res) => {
             });
         }
 
-        const { page, limit, status, assignedTo, startDate, endDate, search, sortBy, sortOrder } = validationResult.data;
+        const { page, limit, status, assignedTo, startDate, endDate, search, sortBy, sortOrder, isSearchLead } = validationResult.data;
 
         const rawFilters = {
             status,
             assignedTo,
             startDate,
-            endDate
+            endDate,
+            isSearchLead
         };
 
         const filters = Object.fromEntries(
@@ -98,10 +99,9 @@ const updateLead = async (req, res) => {
     try {
         const { userId } = req.user;
         const { id } = req.params;
-        const { status, name, email, phone, source } = req.body; // Allow updating other fields too
+        const { status, name, email, phone, source, enquiryType } = req.body; 
 
         // Fetch current lead to calculate delta for scoring if needed
-        // For simplicity, we just recalculate if core fields are present or just update what's passed
         const currentLead = await prisma.lead.findUnique({ where: { id } });
         if (!currentLead) return res.status(404).json({ message: "Lead not found" });
 
@@ -109,17 +109,21 @@ const updateLead = async (req, res) => {
         const leadForScoring = { ...currentLead, ...req.body };
         const { score, category } = calculateLeadScore(leadForScoring);
 
+        // Build clean update object, explicitly ignoring undefined to support partial PATCH
+        const updateData = {
+            ...(status !== undefined && { status }),
+            ...(name !== undefined && { name }),
+            ...(email !== undefined && { email }),
+            ...(phone !== undefined && { phone }),
+            ...(source !== undefined && { source }),
+            ...(enquiryType !== undefined && { enquiryType }),
+            score,
+            category
+        };
+
         const updatedLead = await prisma.lead.update({
             where: { id },
-            data: {
-                status,
-                name,
-                email,
-                phone,
-                source,
-                score,
-                category
-            }
+            data: updateData
         });
 
         // Log Activity
@@ -470,6 +474,34 @@ const importLeads = async (req, res) => {
     }
 };
 
+const getDashboardStats = async (req, res) => {
+    try {
+        const { userId, role } = req.user;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const leadWhere = role === "EMPLOYEE" ? { assignedToId: userId } : {};
+        const taskWhere = role === "EMPLOYEE" ? { assignedToId: userId, status: "PENDING" } : { status: "PENDING" };
+
+        const [totalLeads, newLeadsToday, convertedLeads, pendingTasks] = await prisma.$transaction([
+            prisma.lead.count({ where: leadWhere }),
+            prisma.lead.count({ where: { ...leadWhere, createdAt: { gte: today } } }),
+            prisma.lead.count({ where: { ...leadWhere, status: "CONVERTED" } }),
+            prisma.task.count({ where: taskWhere })
+        ]);
+
+        res.json({
+            totalLeads,
+            newLeadsToday,
+            convertedLeads,
+            pendingTasks,
+            conversionRate: totalLeads > 0 ? Math.round((convertedLeads / totalLeads) * 100) : 0
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching dashboard stats", error: error.message });
+    }
+};
+
 module.exports = {
     getLeads,
     createLead,
@@ -479,5 +511,6 @@ module.exports = {
     importLeads,
     checkDuplicate,
     mergeLeads,
-    getLeadActivities
+    getLeadActivities,
+    getDashboardStats
 };

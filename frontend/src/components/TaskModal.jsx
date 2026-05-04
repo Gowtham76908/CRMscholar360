@@ -65,7 +65,7 @@ const TaskModal = ({ task, defaultSprint, onClose }) => {
     });
     const { data: leads = [] } = useQuery({
         queryKey: ["leads"],
-        queryFn: () => api.get("/leads").then(r => r.data.data || r.data),
+        queryFn: () => api.get("/leads", { params: { limit: 100 } }).then(r => r.data.data || r.data),
     });
 
     // Create mutation

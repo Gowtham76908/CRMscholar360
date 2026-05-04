@@ -36,7 +36,7 @@ const AddLeadForm = ({ onClose, lead }) => {
     const mutation = useMutation({
         mutationFn: async (data) => {
             if (isEdit) {
-                return await api.patch(`/leads/${lead.id}/status`, data);
+                return await api.patch(`/leads/${lead.id}`, data);
             }
             return await api.post("/leads", data);
         },
@@ -46,8 +46,15 @@ const AddLeadForm = ({ onClose, lead }) => {
         },
     });
 
+    const onSubmit = (data) => {
+        const cleanData = Object.fromEntries(
+            Object.entries(data).filter(([_, v]) => v !== undefined && v !== "")
+        );
+        mutation.mutate(cleanData);
+    };
+
     return (
-        <form onSubmit={handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
                 <label className="block text-sm font-medium text-gray-700">Name</label>
                 <input

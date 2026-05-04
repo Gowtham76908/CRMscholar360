@@ -14,11 +14,9 @@ const createNotification = async ({ userId, title, message, type, link = null })
  */
 const getPrevMonthWinner = async () => {
     const now = new Date();
-    const prevMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
-    const prevYear  = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-
-    const startDate = new Date(Date.UTC(prevYear, prevMonth - 1, 1));
-    const endDate   = new Date(Date.UTC(prevYear, prevMonth, 0, 23, 59, 59, 999));
+    const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const endDate = new Date(currentMonthStart.getTime() - 1);
+    const startDate = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), 1));
 
     const employees = await prisma.user.findMany({
         where: { role: { in: ["EMPLOYEE", "ADMIN"] }, isActive: true },
@@ -84,11 +82,10 @@ const notifyIfLeaderboardWinner = async (userId) => {
     const winner = await getPrevMonthWinner();
     if (!winner || winner.id !== userId) return;
 
-    const now = new Date();
-    const prevMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
-    const prevYear  = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-    const monthLabel = new Date(Date.UTC(prevYear, prevMonth - 1, 1))
-        .toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
+    // Use UTC for labeling to match getPrevMonthWinner's logic
+    const currentMonthStartUTC = new Date(Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth(), 1));
+    const prevMonthEnd = new Date(currentMonthStartUTC.getTime() - 1);
+    const monthLabel = prevMonthEnd.toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
 
     await createNotification({
         userId:  winner.id,
@@ -107,10 +104,10 @@ const notifyIfLeaderboardWinner = async (userId) => {
  */
 const notifyLeaderboardWinner = async () => {
     const now = new Date();
-    const prevMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
-    const prevYear  = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-    const monthLabel = new Date(Date.UTC(prevYear, prevMonth - 1, 1))
-        .toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
+    const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const endDate = new Date(currentMonthStart.getTime() - 1);
+    const startDate = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), 1));
+    const monthLabel = startDate.toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
 
     console.log(`[Notifications] Cron: calculating leaderboard winner for ${monthLabel}...`);
 

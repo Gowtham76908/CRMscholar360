@@ -28,6 +28,10 @@ const getLeads = async ({
         where.status = filters.status; // assuming status is string or enum
     }
 
+    if (filters.isSearchLead !== undefined) {
+        where.isSearchLead = filters.isSearchLead;
+    }
+
     // Date range filter
     if (filters.startDate || filters.endDate) {
         where.createdAt = {};
