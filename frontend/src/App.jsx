@@ -25,9 +25,20 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import TaskDetail from "./pages/TaskDetail";
 import InvoiceBilling from "./pages/InvoiceBilling";
 import SalestrailCalls from "./pages/SalestrailCalls";
+import ErrorBoundary from "./components/ErrorBoundary";
 
-// Create a client
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    },
+    mutations: {
+      retry: 0,
+    },
+  },
+});
 
 function App() {
   return (
@@ -39,7 +50,7 @@ function App() {
           <Route path="/login" element={<Login />} />
 
           {/* Protected Routes */}
-          <Route element={<AppLayout />}>
+          <Route element={<ErrorBoundary><AppLayout /></ErrorBoundary>}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/search-leads" element={<SearchLeads />} />
             <Route path="/linkedin-leads" element={<LinkedInLeads />} />

@@ -110,6 +110,7 @@ const TaskDrawer = ({ task, onClose, onEdit, onDelete }) => {
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
             setComment("");
         },
+        onError: (e) => alert(e.response?.data?.message || "Failed to add comment"),
     });
 
     const deleteCommentMutation = useMutation({
@@ -118,6 +119,7 @@ const TaskDrawer = ({ task, onClose, onEdit, onDelete }) => {
             queryClient.invalidateQueries({ queryKey: ["tasks"] });
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
         },
+        onError: (e) => alert(e.response?.data?.message || "Failed to delete comment"),
     });
 
     const pm = PRIORITY_META[task.priority] || PRIORITY_META.MEDIUM;
@@ -324,6 +326,7 @@ const Kanban = () => {
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
             setDrawerTask(null);
         },
+        onError: (e) => alert(e.response?.data?.message || "Failed to delete task"),
     });
 
     // ── Drag & Drop ───────────────────────────────────────────────────────────

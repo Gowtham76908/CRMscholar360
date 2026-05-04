@@ -5,16 +5,15 @@ import { Loader2 } from "lucide-react";
 
 const Dashboard = () => {
     // Fetch Leads
-    const { data: leads, isLoading: leadsLoading } = useQuery({
+    const { data: leads, isLoading: leadsLoading, error: leadsError } = useQuery({
         queryKey: ["leads"],
         queryFn: async () => {
             const res = await api.get("/leads");
-            return res.data;
+            return res.data.data || res.data;
         },
     });
 
-    // Fetch Tasks
-    const { data: tasks, isLoading: tasksLoading } = useQuery({
+    const { data: tasks, isLoading: tasksLoading, error: tasksError } = useQuery({
         queryKey: ["tasks"],
         queryFn: async () => {
             const res = await api.get("/tasks");
@@ -26,6 +25,17 @@ const Dashboard = () => {
         return (
             <div className="flex items-center justify-center h-64">
                 <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+        );
+    }
+
+    if (leadsError || tasksError) {
+        return (
+            <div className="flex items-center justify-center h-64 text-center">
+                <div>
+                    <p className="text-red-600 font-semibold">Failed to load dashboard data.</p>
+                    <p className="text-gray-500 text-sm mt-1">Please refresh the page.</p>
+                </div>
             </div>
         );
     }

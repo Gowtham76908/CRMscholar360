@@ -23,9 +23,12 @@ const login = async (req, res) => {
             return res.status(401).json({ message: "Invalid credentials" });
         }
 
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) throw new Error("JWT_SECRET is not set in environment variables");
+
         const token = jwt.sign(
             { userId: user.id, role: user.role },
-            process.env.JWT_SECRET || "fallback_secret",
+            jwtSecret,
             { expiresIn: "7d" }
         );
 

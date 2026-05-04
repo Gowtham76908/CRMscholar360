@@ -18,7 +18,7 @@ const Integrations = () => {
             return await api.patch(`/integrations/${id}/toggle`);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(["integrations"]);
+            queryClient.invalidateQueries({ queryKey: ["integrations"] });
         },
     });
 

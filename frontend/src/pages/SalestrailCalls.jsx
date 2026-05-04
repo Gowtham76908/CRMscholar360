@@ -14,6 +14,7 @@ import {
     ChevronRight,
     TrendingUp,
     Calendar,
+    Loader2,
 } from "lucide-react";
 import {
     BarChart,
@@ -132,7 +133,7 @@ const SalestrailCalls = () => {
     });
 
     // Fetch call logs
-    const { data: callsData, isLoading } = useQuery({
+    const { data: callsData, isLoading, error: callsError } = useQuery({
         queryKey: ["salestrail-calls", page, direction, status, search, dateFrom, dateTo],
         queryFn: () => {
             const params = new URLSearchParams({ page, limit });
@@ -162,6 +163,25 @@ const SalestrailCalls = () => {
         setter(e.target.value);
         setPage(1);
     };
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+        );
+    }
+
+    if (callsError) {
+        return (
+            <div className="flex items-center justify-center h-64 text-center">
+                <div>
+                    <p className="text-red-600 font-semibold">Failed to load call logs.</p>
+                    <p className="text-gray-500 text-sm mt-1">{callsError.response?.data?.message || callsError.message}</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="p-6 space-y-6">

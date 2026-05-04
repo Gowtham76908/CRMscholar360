@@ -14,13 +14,15 @@ const Team = () => {
     const [editingUser, setEditingUser] = useState(null);
 
     // Fetch Team
-    const { data: team, isLoading } = useQuery({
+    const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(currentUser?.role);
+
+    const { data: team, isLoading, error: teamError } = useQuery({
         queryKey: ["team"],
         queryFn: async () => {
             const res = await api.get("/team");
             return res.data;
         },
-        enabled: ["SUPER_ADMIN", "ADMIN"].includes(currentUser.role),
+        enabled: isAdmin,
     });
 
     // Toggle Access Mutation (Active/Inactive)
@@ -29,8 +31,9 @@ const Team = () => {
             return await api.patch(`/team/${userId}/toggle`);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(["team"]);
+            queryClient.invalidateQueries({ queryKey: ["team"] });
         },
+        onError: (err) => alert(err.response?.data?.message || "Failed to toggle access"),
     });
 
     // Update Role Mutation
@@ -39,8 +42,9 @@ const Team = () => {
             return await api.patch(`/team/${userId}`, { role });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(["team"]);
+            queryClient.invalidateQueries({ queryKey: ["team"] });
         },
+        onError: (err) => alert(err.response?.data?.message || "Failed to update role"),
     });
 
     // Delete User Mutation
@@ -49,8 +53,9 @@ const Team = () => {
             return await api.delete(`/team/${userId}`);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(["team"]);
+            queryClient.invalidateQueries({ queryKey: ["team"] });
         },
+        onError: (err) => alert(err.response?.data?.message || "Failed to delete user"),
     });
 
     if (isLoading) {
@@ -61,7 +66,16 @@ const Team = () => {
         );
     }
 
-    if (!["SUPER_ADMIN", "ADMIN"].includes(currentUser.role)) {
+    if (teamError) {
+        return (
+            <div className="text-center py-20">
+                <p className="text-red-600 font-semibold">Failed to load team.</p>
+                <p className="text-gray-500 text-sm mt-1">{teamError.response?.data?.message || teamError.message}</p>
+            </div>
+        );
+    }
+
+    if (!isAdmin) {
         return (
             <div className="text-center py-20">
                 <Shield className="h-12 w-12 text-gray-400 mx-auto mb-4" />

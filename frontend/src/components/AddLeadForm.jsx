@@ -13,32 +13,41 @@ const leadSchema = z.object({
     enquiryType: z.enum(["PRODUCT", "WHITE_LABEL", "LMS", "SERVICES"]),
 });
 
-const AddLeadForm = ({ onClose }) => {
+// Pass `lead` prop to enter edit mode; omit it for create mode
+const AddLeadForm = ({ onClose, lead }) => {
     const queryClient = useQueryClient();
+    const isEdit = !!lead;
+
     const {
         register,
         handleSubmit,
         formState: { errors },
     } = useForm({
         resolver: zodResolver(leadSchema),
+        defaultValues: isEdit ? {
+            name: lead.name || "",
+            email: lead.email || "",
+            phone: lead.phone || "",
+            source: lead.source || "WEBSITE",
+            enquiryType: lead.enquiryType || "PRODUCT",
+        } : {},
     });
 
     const mutation = useMutation({
-        mutationFn: async (newLead) => {
-            return await api.post("/leads", newLead);
+        mutationFn: async (data) => {
+            if (isEdit) {
+                return await api.patch(`/leads/${lead.id}/status`, data);
+            }
+            return await api.post("/leads", data);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(["leads"]);
+            queryClient.invalidateQueries({ queryKey: ["leads"] });
             onClose();
         },
     });
 
-    const onSubmit = (data) => {
-        mutation.mutate(data);
-    };
-
     return (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
             <div>
                 <label className="block text-sm font-medium text-gray-700">Name</label>
                 <input
@@ -89,6 +98,12 @@ const AddLeadForm = ({ onClose }) => {
                 </div>
             </div>
 
+            {mutation.isError && (
+                <p className="text-sm text-red-600">
+                    {mutation.error?.response?.data?.message || "Failed to save lead. Please try again."}
+                </p>
+            )}
+
             <div className="flex justify-end pt-4">
                 <button
                     type="button"
@@ -100,9 +115,9 @@ const AddLeadForm = ({ onClose }) => {
                 <button
                     type="submit"
                     disabled={mutation.isPending}
-                    className="inline-flex justify-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    className="inline-flex justify-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-60"
                 >
-                    {mutation.isPending ? <Loader2 className="animate-spin h-4 w-4" /> : "Save Lead"}
+                    {mutation.isPending ? <Loader2 className="animate-spin h-4 w-4" /> : isEdit ? "Save Changes" : "Save Lead"}
                 </button>
             </div>
         </form>

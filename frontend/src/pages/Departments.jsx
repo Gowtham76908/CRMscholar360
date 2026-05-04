@@ -29,7 +29,7 @@ const Departments = () => {
     const createMutation = useMutation({
         mutationFn: async (data) => await api.post("/departments", data),
         onSuccess: () => {
-            queryClient.invalidateQueries(["departments"]);
+            queryClient.invalidateQueries({ queryKey: ["departments"] });
             setIsAdding(false);
             reset();
         },
@@ -41,7 +41,7 @@ const Departments = () => {
     const deleteMutation = useMutation({
         mutationFn: async (id) => await api.delete(`/departments/${id}`),
         onSuccess: () => {
-            queryClient.invalidateQueries(["departments"]);
+            queryClient.invalidateQueries({ queryKey: ["departments"] });
         },
         onError: (error) => {
             alert(error.response?.data?.message || "Failed to delete department");

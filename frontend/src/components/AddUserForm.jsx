@@ -38,8 +38,12 @@ const AddUserForm = ({ onClose }) => {
             return await api.post("/team", newUser);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(["team"]);
+            queryClient.invalidateQueries({ queryKey: ["team"] });
             onClose();
+        },
+        onError: (err) => {
+            // error is shown inline via mutation.isError below
+            console.error("[AddUserForm]", err.response?.data?.message || err.message);
         },
     });
 
@@ -139,6 +143,12 @@ const AddUserForm = ({ onClose }) => {
                 />
             </div>
 
+            {mutation.isError && (
+                <p className="text-sm text-red-600">
+                    {mutation.error?.response?.data?.message || "Failed to create user. Please try again."}
+                </p>
+            )}
+
             <div className="flex justify-end pt-4">
                 <button
                     type="button"
@@ -150,7 +160,7 @@ const AddUserForm = ({ onClose }) => {
                 <button
                     type="submit"
                     disabled={mutation.isPending}
-                    className="inline-flex justify-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    className="inline-flex justify-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-60"
                 >
                     {mutation.isPending ? <Loader2 className="animate-spin h-4 w-4" /> : "Create User"}
                 </button>

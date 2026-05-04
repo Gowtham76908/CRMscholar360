@@ -15,11 +15,15 @@ const applyLeave = async (req, res) => {
         // Calculate total days
         const from = new Date(fromDate);
         const to = new Date(toDate);
-        const totalDays = Math.ceil((to - from) / (1000 * 60 * 60 * 24)) + 1;
 
-        if (totalDays <= 0) {
-            return res.status(400).json({ message: "Invalid date range" });
+        if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+            return res.status(400).json({ message: "Invalid date format" });
         }
+        if (from > to) {
+            return res.status(400).json({ message: "Start date cannot be after end date" });
+        }
+
+        const totalDays = Math.ceil((to - from) / (1000 * 60 * 60 * 24)) + 1;
 
         if (leaveType === "COMP_OFF") {
             const balance = await calculateCompOffBalance(userId);
@@ -304,8 +308,8 @@ const createAttendanceForLeave = async (leave) => {
     const current = new Date(fromDate);
     const end = new Date(toDate);
     
-    // Default to LEAVE if not WFH or COMP_OFF
-    const attendanceStatus = (leaveType === "WFH" || leaveType === "COMP_OFF") ? leaveType : "LEAVE";
+    // AttendanceStatus enum only has WFH and LEAVE (not COMP_OFF)
+    const attendanceStatus = leaveType === "WFH" ? "WFH" : "LEAVE";
 
     while (current <= end) {
         try {

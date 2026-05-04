@@ -35,7 +35,7 @@ const initiateCall = async (req, res) => {
         const formData = new FormData();
         formData.append("user_id", process.env.GREETER_USER_ID);
         formData.append("customer_number", customerNumber);
-        formData.append("agen_number", user.phone);
+        formData.append("agent_number", user.phone);
         formData.append("number", process.env.GREETER_NUMBER);
         formData.append("Customer_CRM_ID", leadId);
 
@@ -156,7 +156,7 @@ const greeterWebhook = async (req, res) => {
                 await prisma.callLog.create({
                     data: {
                         leadId,
-                        userId: "system",
+                        userId: null,
                         duration: parseInt(callDuration) || 0,
                         callType: callType || "OUTBOUND",
                         callStatus: callStatus || "COMPLETED",

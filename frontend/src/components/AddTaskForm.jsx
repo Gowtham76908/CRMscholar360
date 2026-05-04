@@ -45,7 +45,7 @@ const AddTaskForm = ({ onClose, leadId: initialLeadId }) => {
         queryKey: ["leads"],
         queryFn: async () => {
             const res = await api.get("/leads");
-            return res.data;
+            return res.data.data || res.data;
         },
     });
 
@@ -54,7 +54,7 @@ const AddTaskForm = ({ onClose, leadId: initialLeadId }) => {
             return await api.post("/tasks", newTask);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(["tasks"]);
+            queryClient.invalidateQueries({ queryKey: ["tasks"] });
             onClose();
         },
         onError: (error) => {

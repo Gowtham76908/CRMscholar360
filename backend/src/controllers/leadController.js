@@ -2,38 +2,54 @@ const prisma = require("../utils/prisma");
 const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
 const { createCommission } = require("../services/commissionService");
+const leadService = require("../services/leadService");
+const { getLeadsSchema } = require("../validations/lead.validation");
 
 // Get Leads
 const getLeads = async (req, res) => {
     try {
         const { userId, role } = req.user;
 
-        const callLogsInclude = {
-            callLogs: {
-                orderBy: { createdAt: "desc" },
-                take: 10
-            }
-        };
-
-        let leads;
-        if (role === "EMPLOYEE") {
-            leads = await prisma.lead.findMany({
-                where: { assignedToId: userId },
-                include: callLogsInclude,
-                orderBy: { createdAt: "desc" }
-            });
-        } else {
-            leads = await prisma.lead.findMany({
-                include: {
-                    assignedTo: { select: { id: true, name: true, email: true } },
-                    ...callLogsInclude
-                },
-                orderBy: { createdAt: "desc" }
+        // 1. Validate query params using Zod
+        const validationResult = getLeadsSchema.safeParse(req.query);
+        
+        if (!validationResult.success) {
+            return res.status(400).json({
+                success: false,
+                error: "Invalid query parameters",
+                details: validationResult.error.errors
             });
         }
 
-        res.json(leads);
+        const { page, limit, status, assignedTo, startDate, endDate, search, sortBy, sortOrder } = validationResult.data;
+
+        const rawFilters = {
+            status,
+            assignedTo,
+            startDate,
+            endDate
+        };
+
+        const filters = Object.fromEntries(
+            Object.entries(rawFilters).filter(([_, value]) => value !== undefined)
+        );
+
+        // 2. Call Service
+        const result = await leadService.getLeads({
+            userId,
+            role,
+            page,
+            limit,
+            filters,
+            search,
+            sortBy,
+            sortOrder
+        });
+
+        // 4. Send Response
+        res.json(result);
     } catch (error) {
+        console.error("Error in getLeads:", error);
         res.status(500).json({ message: "Error fetching leads", error: error.message });
     }
 };
@@ -43,6 +59,10 @@ const createLead = async (req, res) => {
     try {
         const { userId } = req.user;
         const { name, email, phone, source, enquiryType } = req.body;
+
+        if (!name || !phone || !source || !enquiryType) {
+            return res.status(400).json({ message: "Name, phone, source, and enquiry type are required" });
+        }
 
         // Scoring
         const { score, category } = calculateLeadScore({ source, phone, email });
@@ -134,6 +154,10 @@ const assignLead = async (req, res) => {
         const { userId } = req.user; // Admin ID
         const { id } = req.params;
         const { assignedToId } = req.body;
+
+        if (!assignedToId) {
+            return res.status(400).json({ message: "assignedToId is required" });
+        }
 
         const user = await prisma.user.findUnique({ where: { id: assignedToId } });
         if (!user) {
@@ -438,7 +462,6 @@ const importLeads = async (req, res) => {
             imported: results.imported,
             skipped: results.skipped,
             failed: results.failed,
-            skipped: results.skipped,
             errors: results.errors.slice(0, 20) // Limit errors in response
         });
     } catch (error) {

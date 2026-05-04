@@ -14,7 +14,7 @@ const createNotification = async ({ userId, title, message, type, link = null })
  */
 const getPrevMonthWinner = async () => {
     const now = new Date();
-    const prevMonth = now.getMonth() === 0 ? 12 : now.getMonth();
+    const prevMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
     const prevYear  = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
 
     const startDate = new Date(Date.UTC(prevYear, prevMonth - 1, 1));
@@ -85,7 +85,7 @@ const notifyIfLeaderboardWinner = async (userId) => {
     if (!winner || winner.id !== userId) return;
 
     const now = new Date();
-    const prevMonth = now.getMonth() === 0 ? 12 : now.getMonth();
+    const prevMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
     const prevYear  = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
     const monthLabel = new Date(Date.UTC(prevYear, prevMonth - 1, 1))
         .toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
@@ -107,7 +107,7 @@ const notifyIfLeaderboardWinner = async (userId) => {
  */
 const notifyLeaderboardWinner = async () => {
     const now = new Date();
-    const prevMonth = now.getMonth() === 0 ? 12 : now.getMonth();
+    const prevMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
     const prevYear  = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
     const monthLabel = new Date(Date.UTC(prevYear, prevMonth - 1, 1))
         .toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "Asia/Kolkata" });

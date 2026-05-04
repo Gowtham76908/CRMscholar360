@@ -118,7 +118,8 @@ const Leave = () => {
                         <div className="divide-y divide-gray-200">
                             {pendingLeaves.map((leave) => (
                                 <PendingLeaveCard key={leave.id} leave={leave} onUpdate={() => {
-                                    queryClient.invalidateQueries(["pending-leaves", "my-leaves"]);
+                                    queryClient.invalidateQueries({ queryKey: ["pending-leaves"] });
+                                    queryClient.invalidateQueries({ queryKey: ["my-leaves"] });
                                 }} />
                             ))}
                         </div>
@@ -153,7 +154,7 @@ const Leave = () => {
                                         <div className="flex items-center gap-2 mt-3 ml-8">
                                             <User className="h-4 w-4 text-gray-400" />
                                             <p className="text-xs text-gray-500">
-                                                Approvers: {leave.approvals.map(a => a.approver.name).join(", ")}
+                                                Approvers: {leave.approvals.map(a => a.approver?.name || "Unknown").join(", ")}
                                             </p>
                                         </div>
                                     </div>
@@ -187,7 +188,8 @@ const Leave = () => {
                         onClose={() => setShowApplyModal(null)}
                         onSuccess={() => {
                             setShowApplyModal(null);
-                            queryClient.invalidateQueries(["my-leaves", "leave-stats"]);
+                            queryClient.invalidateQueries({ queryKey: ["my-leaves"] });
+                            queryClient.invalidateQueries({ queryKey: ["leave-stats"] });
                         }}
                     />
                 )}

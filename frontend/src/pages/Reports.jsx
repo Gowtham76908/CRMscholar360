@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, TrendingUp, PieChart as PieIcon, Users, Shield } from "lucide-react";
+import { Download, TrendingUp, PieChart as PieIcon, Users, Shield, Loader2 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
@@ -12,29 +12,31 @@ const Reports = () => {
     const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(currentUser?.role);
 
     // Fetch Analytics Data (Only if Admin)
-    const { data: leadsBySource } = useQuery({
+    const { data: leadsBySource, isLoading: loadingSource } = useQuery({
         queryKey: ["leads-by-source", dateRange],
         queryFn: async () => (await api.get("/reports/leads-by-source", { params: dateRange })).data,
         enabled: isAdmin
     });
 
-    const { data: monthlyGrowth } = useQuery({
+    const { data: monthlyGrowth, isLoading: loadingGrowth } = useQuery({
         queryKey: ["monthly-growth"],
         queryFn: async () => (await api.get("/reports/monthly-growth")).data,
         enabled: isAdmin
     });
 
-    const { data: conversionData } = useQuery({
+    const { data: conversionData, isLoading: loadingConversion } = useQuery({
         queryKey: ["conversion-rate", dateRange],
         queryFn: async () => (await api.get("/reports/conversion-rate", { params: dateRange })).data,
         enabled: isAdmin
     });
 
-    const { data: teamPerformance } = useQuery({
+    const { data: teamPerformance, isLoading: loadingTeam } = useQuery({
         queryKey: ["team-performance"],
         queryFn: async () => (await api.get("/analytics/team-performance")).data,
         enabled: isAdmin
     });
+
+    const isLoading = loadingSource || loadingGrowth || loadingConversion || loadingTeam;
 
     const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8"];
 
@@ -59,6 +61,14 @@ const Reports = () => {
                 <Shield className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h2 className="text-xl font-bold text-gray-900">Access Denied</h2>
                 <p className="text-gray-500 mt-2">Only Admins can view reports and analytics.</p>
+            </div>
+        );
+    }
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
             </div>
         );
     }

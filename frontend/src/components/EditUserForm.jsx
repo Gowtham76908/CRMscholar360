@@ -54,7 +54,7 @@ const EditUserForm = ({ user, onClose }) => {
             return await api.patch(`/team/${user.id}`, data);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(["team"]);
+            queryClient.invalidateQueries({ queryKey: ["team"] });
             onClose();
             // alert("User updated successfully");
         },

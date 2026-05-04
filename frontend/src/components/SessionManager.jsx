@@ -18,7 +18,7 @@ const SessionManager = () => {
             await api.post("/sessions/logout-all", { userId });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(["sessions"]);
+            queryClient.invalidateQueries({ queryKey: ["sessions"] });
             alert("User logged out from all devices.");
         },
         onError: () => {

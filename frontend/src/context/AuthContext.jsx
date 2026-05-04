@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }) => {
             const data = await loginApi({ email, password });
             const { token, user } = data;
 
-            const expiryTime = new Date().getTime() + (24 * 60 * 60 * 1000);
+            const expiryTime = new Date().getTime() + (7 * 24 * 60 * 60 * 1000);
 
             localStorage.setItem("token", token);
             localStorage.setItem("user", JSON.stringify(user));

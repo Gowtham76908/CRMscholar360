@@ -15,6 +15,7 @@ const Leads = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("ALL");
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [editingLead, setEditingLead] = useState(null);
     const [isImporting, setIsImporting] = useState(false);
     const csvInputRef = useRef(null);
     const queryClient = useQueryClient();
@@ -23,7 +24,7 @@ const Leads = () => {
         queryKey: ["leads"],
         queryFn: async () => {
             const res = await api.get("/leads");
-            return res.data;
+            return res.data.data || res.data;
         },
     });
 
@@ -62,9 +63,8 @@ const Leads = () => {
         if (!confirm(`Update ${selectedLeads.length} leads to ${status}?`)) return;
         try {
             await api.patch("/leads/bulk-update", { leadIds: selectedLeads, status });
-            alert("Leads updated successfully");
+            queryClient.invalidateQueries({ queryKey: ["leads"] });
             setSelectedLeads([]);
-            // refetch(); // React Query refetch would be ideal here
         } catch (error) {
             alert("Failed to update leads");
         }
@@ -448,7 +448,11 @@ const Leads = () => {
                                         >
                                             <History className="h-4 w-4" />
                                         </button>
-                                        <button className="text-indigo-600 hover:text-indigo-900 mr-3">
+                                        <button
+                                            onClick={() => setEditingLead(lead)}
+                                            className="text-indigo-600 hover:text-indigo-900 mr-3"
+                                            title="Edit Lead"
+                                        >
                                             <Edit className="h-4 w-4" />
                                         </button>
                                     </td>
@@ -502,6 +506,20 @@ const Leads = () => {
                     onClose={() => setSelectedLeadForCalls(null)}
                     onUpdate={() => queryClient.invalidateQueries({ queryKey: ["leads"] })}
                 />
+            )}
+
+            {/* Edit Lead Modal */}
+            {editingLead && (
+                <Modal
+                    isOpen={!!editingLead}
+                    onClose={() => setEditingLead(null)}
+                    title="Edit Lead"
+                >
+                    <AddLeadForm
+                        lead={editingLead}
+                        onClose={() => setEditingLead(null)}
+                    />
+                </Modal>
             )}
 
             {/* Activity Modal */}

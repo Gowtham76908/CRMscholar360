@@ -120,6 +120,7 @@ const BacklogRow = ({ task, sprintId, onEdit, onDelete, sprints }) => {
             queryClient.invalidateQueries({ queryKey: ["sprints"] });
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
         },
+        onError: (e) => alert(e.response?.data?.message || "Failed to add task to sprint"),
     });
 
     const removeFromSprintMutation = useMutation({
@@ -129,6 +130,7 @@ const BacklogRow = ({ task, sprintId, onEdit, onDelete, sprints }) => {
             queryClient.invalidateQueries({ queryKey: ["sprints"] });
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
         },
+        onError: (e) => alert(e.response?.data?.message || "Failed to remove task from sprint"),
     });
 
     const plannable = sprints.filter(s => s.status !== "COMPLETED");
@@ -354,6 +356,7 @@ const Sprints = () => {
             queryClient.invalidateQueries({ queryKey: ["sprints"] });
             queryClient.invalidateQueries({ queryKey: ["backlog"] });
         },
+        onError: (e) => alert(e.response?.data?.message || "Failed to delete sprint"),
     });
 
     const deleteTaskMutation = useMutation({
@@ -362,6 +365,7 @@ const Sprints = () => {
             queryClient.invalidateQueries({ queryKey: ["backlog"] });
             queryClient.invalidateQueries({ queryKey: ["sprints"] });
         },
+        onError: (e) => alert(e.response?.data?.message || "Failed to delete task"),
     });
 
     // ── Summary stats ─────────────────────────────────────────────────────────

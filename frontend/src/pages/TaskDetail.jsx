@@ -34,8 +34,8 @@ const TaskDetail = () => {
             return await api.patch(`/tasks/${id}/status`, { status });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(["tasks", id]);
-            queryClient.invalidateQueries(["tasks"]);
+            queryClient.invalidateQueries({ queryKey: ["tasks", id] });
+            queryClient.invalidateQueries({ queryKey: ["tasks"] });
         },
     });
 

@@ -34,7 +34,7 @@ const Tasks = () => {
             return await api.patch(`/tasks/${id}/status`, { status });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(["tasks"]);
+            queryClient.invalidateQueries({ queryKey: ["tasks"] });
         },
     });
 
@@ -68,7 +68,7 @@ const Tasks = () => {
                 <p className="text-red-600 font-bold">Failed to load tasks</p>
                 <p className="text-red-400 text-sm mt-1">{error.response?.data?.message || error.message}</p>
                 <button 
-                    onClick={() => queryClient.invalidateQueries(["tasks"])}
+                    onClick={() => queryClient.invalidateQueries({ queryKey: ["tasks"] })}
                     className="mt-4 px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-red-100 hover:bg-red-700 transition-all"
                 >
                     Try Again

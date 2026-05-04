@@ -22,6 +22,13 @@ const createTask = async (req, res) => {
             estimatedHours, labels = [], sprintId, kanbanStatus
         } = req.body;
 
+        if (!title || !title.trim()) {
+            return res.status(400).json({ message: "Task title is required" });
+        }
+        if (!dueDate || isNaN(new Date(dueDate).getTime())) {
+            return res.status(400).json({ message: "A valid due date is required" });
+        }
+
         if (!leadId || leadId === "") leadId = null;
         if (!sprintId || sprintId === "") sprintId = null;
 
@@ -70,17 +77,19 @@ const createTask = async (req, res) => {
 
         res.status(201).json({ message: "Task created successfully", task: newTask });
 
-        // Notify the assignee
-        const due = new Date(dueDate).toLocaleString("en-IN", {
-            dateStyle: "medium", timeZone: "Asia/Kolkata"
-        });
-        createNotification({
-            userId:  assignedTo,
-            title:   "📋 New Task Assigned",
-            message: `You have been assigned a new task: "${title}". Due date: ${due}.`,
-            type:    "TASK_ASSIGNED",
-            link:    `/tasks/${newTask.id}`
-        }).catch(err => console.error("[Notification] TASK_ASSIGNED failed:", err));
+        // Notify the assignee if one was set
+        if (assignedTo) {
+            const due = new Date(dueDate).toLocaleString("en-IN", {
+                dateStyle: "medium", timeZone: "Asia/Kolkata"
+            });
+            createNotification({
+                userId:  assignedTo,
+                title:   "📋 New Task Assigned",
+                message: `You have been assigned a new task: "${title}". Due date: ${due}.`,
+                type:    "TASK_ASSIGNED",
+                link:    `/tasks/${newTask.id}`
+            }).catch(err => console.error("[Notification] TASK_ASSIGNED failed:", err));
+        }
     } catch (error) {
         console.error("CREATE_TASK_ERROR:", error);
         res.status(500).json({ message: "Error creating task", error: error.message });
@@ -165,9 +174,10 @@ const updateTaskStatus = async (req, res) => {
             return res.status(400).json({ message: "Invalid status" });
         }
 
+        // Only force kanban to DONE when completing — don't reset position when un-completing
         const updateData = {
             status,
-            kanbanStatus: status === "COMPLETED" ? "DONE" : "TODO",
+            ...(status === "COMPLETED" && { kanbanStatus: "DONE" }),
             completedAt: status === "COMPLETED" ? new Date() : null
         };
 
