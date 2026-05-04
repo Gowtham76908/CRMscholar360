@@ -110,7 +110,7 @@ const greeterWebhook = async (req, res) => {
         if (!callLog && agentNumber) {
             callLog = await prisma.callLog.findFirst({
                 where: {
-                    agentNumber: { contains: agentNumber.replace(/^91/, "") },
+                    agentNumber: { endsWith: agentNumber.replace(/\D/g, "").slice(-10) },
                     callStatus: { in: ["INITIATED", "RINGING", "CONNECTED"] }
                 },
                 orderBy: { createdAt: "desc" }
@@ -147,16 +147,25 @@ const greeterWebhook = async (req, res) => {
             let leadId = customerCrmId;
             if (!leadId && customerNumber) {
                 const lead = await prisma.lead.findFirst({
-                    where: { phone: { contains: customerNumber.replace(/^91/, "") } }
+                    where: { phone: { endsWith: customerNumber.replace(/\D/g, "").slice(-10) } }
                 });
                 leadId = lead?.id;
             }
 
             if (leadId) {
+                // Try to find the user by agent number
+                let userId = null;
+                if (agentNumber) {
+                    const user = await prisma.user.findFirst({
+                        where: { phone: { endsWith: agentNumber.replace(/\D/g, "").slice(-10) } }
+                    });
+                    userId = user?.id;
+                }
+
                 await prisma.callLog.create({
                     data: {
                         leadId,
-                        userId: null,
+                        userId,
                         duration: parseInt(callDuration) || 0,
                         callType: callType || "OUTBOUND",
                         callStatus: callStatus || "COMPLETED",

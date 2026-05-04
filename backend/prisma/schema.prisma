@@ -198,7 +198,7 @@ model Permission {
 model CallLog {
   id            String    @id @default(uuid())
   leadId        String
-  userId        String
+  userId        String?
   duration      Int       @default(0)
   callType      String    @default("OUTBOUND")
   createdAt     DateTime  @default(now())
