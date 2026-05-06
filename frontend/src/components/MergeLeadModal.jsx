@@ -3,7 +3,8 @@ import { AlertTriangle, ArrowRight, Check } from "lucide-react";
 import api from "../api/axios";
 
 const MergeLeadModal = ({ leads, onClose, onSuccess }) => {
-    // defaults: lead[0] is primary, lead[1] is secondary
+    if (!leads || leads.length < 2) return null;
+
     const [primaryId, setPrimaryId] = useState(leads[0].id);
     const [loading, setLoading] = useState(false);
 

@@ -4,6 +4,7 @@ const logActivity = require("../utils/activityLogger");
 const { createCommission } = require("../services/commissionService");
 const leadService = require("../services/leadService");
 const { getLeadsSchema } = require("../validations/lead.validation");
+const normalizePhone = require("../utils/normalizePhone");
 
 // Get Leads
 const getLeads = async (req, res) => {
@@ -73,6 +74,7 @@ const createLead = async (req, res) => {
                 name,
                 email,
                 phone,
+                phoneNormalized: normalizePhone(phone),
                 source,
                 enquiryType,
                 score,
@@ -114,7 +116,7 @@ const updateLead = async (req, res) => {
             ...(status !== undefined && { status }),
             ...(name !== undefined && { name }),
             ...(email !== undefined && { email }),
-            ...(phone !== undefined && { phone }),
+            ...(phone !== undefined && { phone, phoneNormalized: normalizePhone(phone) }),
             ...(source !== undefined && { source }),
             ...(enquiryType !== undefined && { enquiryType }),
             score,
@@ -274,6 +276,37 @@ const mergeLeads = async (req, res) => {
     }
 };
 
+// Get Single Lead (detail page)
+const getLead = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const lead = await prisma.lead.findUnique({
+            where: { id },
+            include: {
+                assignedTo: {
+                    select: { id: true, name: true, email: true, phone: true, profilePhoto: true }
+                },
+                notes: { orderBy: { createdAt: "desc" } },
+                tasks: {
+                    include: {
+                        assignedTo: { select: { id: true, name: true } },
+                        files: { select: { id: true, fileName: true, fileUrl: true } },
+                    },
+                    orderBy: { dueDate: "asc" },
+                },
+                callLogs: {
+                    orderBy: { createdAt: "desc" },
+                    take: 50,
+                },
+            },
+        });
+        if (!lead) return res.status(404).json({ message: "Lead not found" });
+        res.json(lead);
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching lead", error: error.message });
+    }
+};
+
 // Get Activities
 const getLeadActivities = async (req, res) => {
     try {
@@ -281,6 +314,7 @@ const getLeadActivities = async (req, res) => {
         const activities = await prisma.activity.findMany({
             where: { leadId: id },
             orderBy: { createdAt: "desc" },
+            take: 50,
             include: { user: { select: { name: true } } }
         });
         res.json(activities);
@@ -289,6 +323,9 @@ const getLeadActivities = async (req, res) => {
     }
 };
 
+// RFC 4180: escape internal quotes by doubling them, then wrap field in quotes
+const csvField = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+
 // Export Leads to CSV
 const exportLeads = async (req, res) => {
     try {
@@ -296,24 +333,23 @@ const exportLeads = async (req, res) => {
             include: { assignedTo: { select: { name: true } } }
         });
 
-        const fields = ["Name", "Email", "Phone", "Source", "Type", "Status", "Score", "Category", "Assigned To", "Created At"];
-        const csv = [
-            fields.join(","),
-            ...leads.map(lead => [
-                lead.name,
-                lead.email || "",
-                lead.phone,
-                lead.source,
-                lead.enquiryType,
-                lead.status,
-                lead.score,
-                lead.category,
-                lead.assignedTo?.name || "Unassigned",
-                new Date(lead.createdAt).toLocaleDateString()
-            ].map(field => `"${field}"`).join(","))
-        ].join("\n");
+        const headers = ["Name", "Email", "Phone", "Source", "Type", "Status", "Score", "Category", "Assigned To", "Created At"];
+        const rows = leads.map(lead => [
+            lead.name,
+            lead.email || "",
+            lead.phone || "",
+            lead.source,
+            lead.enquiryType,
+            lead.status,
+            lead.score,
+            lead.category || "",
+            lead.assignedTo?.name || "Unassigned",
+            new Date(lead.createdAt).toLocaleDateString("en-IN")
+        ].map(csvField).join(","));
 
-        res.header("Content-Type", "text/csv");
+        const csv = [headers.map(csvField).join(","), ...rows].join("\r\n");
+
+        res.header("Content-Type", "text/csv; charset=utf-8");
         res.attachment("leads.csv");
         res.send(csv);
     } catch (error) {
@@ -404,14 +440,15 @@ const importLeads = async (req, res) => {
         const validSources = ["FACEBOOK", "INSTAGRAM", "GMAIL", "WEBSITE", "PHONE_CALL"];
         const validEnquiryTypes = ["PRODUCT", "WHITE_LABEL", "LMS", "SERVICES"];
 
-        const results = { imported: 0, skipped: 0, failed: 0, errors: [] };
+        const results = { imported: 0, skipped: 0, duplicates: 0, duplicatesFromRace: 0, failed: 0, errors: [] };
 
+        // ── Pass 1: parse every data row so we can bulk-check duplicates upfront ──
+        const parsedRows = [];
         for (let i = 1; i < allRows.length; i++) {
             const values = allRows[i];
             const row = {};
             headers.forEach((h, idx) => { row[h] = values[idx] || ""; });
 
-            // Detection for junk/date rows (e.g. 3/20/2026)
             const firstCell = values[0] || "";
             if (values.length < 2 || (firstCell.includes("/") && values.slice(1).every(v => !v))) {
                 results.skipped++;
@@ -421,13 +458,10 @@ const importLeads = async (req, res) => {
             const name = row["name"] || row["leadname"] || row["fullname"] || "";
             const email = row["email"] || "";
             let phone = row["phone"] || row["phonenumber"] || row["mobile"] || "";
-            
-            // Clean phone (strip p: or other common prefixes)
             phone = phone.replace(/^p:\s*/i, "").trim();
 
             let source = (row["source"] || "WEBSITE").toUpperCase().replace(/[\s]+/g, "_");
             let enquiryType = (row["type"] || row["enquirytype"] || "PRODUCT").toUpperCase().replace(/[\s]+/g, "_");
-
             if (!validSources.includes(source)) source = "WEBSITE";
             if (!validEnquiryTypes.includes(enquiryType)) enquiryType = "PRODUCT";
 
@@ -437,36 +471,96 @@ const importLeads = async (req, res) => {
                 continue;
             }
 
-            try {
-                // Scoring
-                const { score, category } = calculateLeadScore({ source, phone, email });
-                
-                const newLead = await prisma.lead.create({
-                    data: { name, email: email || null, phone, source, enquiryType, score, category }
-                });
-
-                await logActivity({
-                    leadId: newLead.id,
-                    userId,
-                    action: "LEAD_CREATED",
-                    metadata: { source: "CSV_IMPORT", score, category }
-                });
-                results.imported++;
-            } catch (err) {
-                results.failed++;
-                results.errors.push(`Row ${i + 1}: ${err.message}`);
-            }
+            parsedRows.push({ rowNum: i + 1, name, email, phone, source, enquiryType });
         }
 
-        const summary = `Import complete: ${results.imported} imported, ${results.failed} failed, ${results.skipped} skipped`;
-        console.log(summary, results.errors.length > 0 ? results.errors : "");
+        // ── Pass 2: bulk duplicate check — one query for all normalized phones ──
+        const allNormalized = parsedRows.map(r => normalizePhone(r.phone)).filter(Boolean);
+
+        const existingPhones = new Set();
+        if (allNormalized.length > 0) {
+            const existing = await prisma.lead.findMany({
+                where: { phoneNormalized: { in: allNormalized } },
+                select: { phoneNormalized: true }
+            });
+            existing.forEach(l => existingPhones.add(l.phoneNormalized));
+        }
+
+        // ── Pass 3: split into duplicates (for UX reporting) and new rows (for bulk insert) ──
+        const seenInBatch = new Set();
+        const newRows = [];
+
+        for (const r of parsedRows) {
+            const normalized = normalizePhone(r.phone);
+            if (normalized && (existingPhones.has(normalized) || seenInBatch.has(normalized))) {
+                results.duplicates++;
+                results.errors.push(`Row ${r.rowNum}: Duplicate phone ${r.phone} — skipped`);
+                continue;
+            }
+            const { score, category } = calculateLeadScore({ source: r.source, phone: r.phone, email: r.email });
+            newRows.push({ ...r, normalized, score, category });
+            if (normalized) seenInBatch.add(normalized);
+        }
+
+        // ── Pass 4: bulk insert + activity logging in one transaction ──
+        if (newRows.length > 0) {
+            const insertedAt = new Date();
+
+            await prisma.$transaction(async (tx) => {
+                const { count } = await tx.lead.createMany({
+                    data: newRows.map(r => ({
+                        name: r.name,
+                        email: r.email || null,
+                        phone: r.phone,
+                        phoneNormalized: r.normalized,
+                        source: r.source,
+                        enquiryType: r.enquiryType,
+                        score: r.score,
+                        category: r.category
+                    })),
+                    skipDuplicates: true  // DB-level guard catches races the app check missed
+                });
+
+                results.imported = count;
+                // Rows the app approved but the DB rejected (concurrent import race)
+                results.duplicatesFromRace = newRows.length - count;
+                results.duplicates += results.duplicatesFromRace;
+
+                if (count > 0) {
+                    const createdLeads = await tx.lead.findMany({
+                        where: {
+                            phoneNormalized: { in: newRows.map(r => r.normalized).filter(Boolean) },
+                            createdAt: { gte: insertedAt }
+                        },
+                        select: { id: true }
+                    });
+
+                    if (createdLeads.length > 0) {
+                        await tx.activity.createMany({
+                            data: createdLeads.map(l => ({
+                                leadId: l.id,
+                                userId,
+                                action: "LEAD_CREATED",
+                                metadata: { source: "CSV_IMPORT" }
+                            }))
+                        });
+                    }
+                }
+            });
+        }
+
+        const raceLine = results.duplicatesFromRace > 0
+            ? `, ${results.duplicatesFromRace} caught by DB race guard`
+            : "";
 
         res.json({
-            message: `Import complete: ${results.imported} lead(s) imported, ${results.skipped} skipped, ${results.failed} failed`,
+            message: `Import complete: ${results.imported} imported, ${results.duplicates} duplicate(s) skipped${raceLine}, ${results.failed} failed`,
             imported: results.imported,
+            duplicates: results.duplicates,
+            duplicatesFromRace: results.duplicatesFromRace,
             skipped: results.skipped,
             failed: results.failed,
-            errors: results.errors.slice(0, 20) // Limit errors in response
+            errors: results.errors.slice(0, 20)
         });
     } catch (error) {
         console.error("CSV Import error:", error);
@@ -504,6 +598,7 @@ const getDashboardStats = async (req, res) => {
 
 module.exports = {
     getLeads,
+    getLead,
     createLead,
     updateLead,
     assignLead,

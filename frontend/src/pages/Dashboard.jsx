@@ -27,7 +27,7 @@ const Dashboard = () => {
         queryKey: ["tasks", "recent"],
         queryFn: async () => {
             const res = await api.get("/tasks");
-            return res.data;
+            return res.data.data ?? res.data;
         },
     });
 

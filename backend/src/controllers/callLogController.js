@@ -1,5 +1,6 @@
 const prisma = require("../utils/prisma");
 const logActivity = require("../utils/activityLogger");
+const normalizePhone = require("../utils/normalizePhone");
 const FormData = require("form-data");
 const axios = require("axios");
 
@@ -19,6 +20,12 @@ const initiateCall = async (req, res) => {
             return res.status(400).json({ message: "Your phone number is not set. Please update your profile with your phone number." });
         }
 
+        // Normalize before storing so webhook lookups can use exact match
+        const normalizedAgentNumber = normalizePhone(user.phone);
+        if (!normalizedAgentNumber) {
+            return res.status(400).json({ message: "Your phone number is invalid. Please update your profile with a valid phone number." });
+        }
+
         // Create a call log entry first (status: INITIATED)
         const callLog = await prisma.callLog.create({
             data: {
@@ -26,7 +33,7 @@ const initiateCall = async (req, res) => {
                 userId,
                 callType: "OUTBOUND",
                 callStatus: "INITIATED",
-                agentNumber: user.phone,
+                agentNumber: normalizedAgentNumber,
                 duration: 0
             }
         });
@@ -106,15 +113,18 @@ const greeterWebhook = async (req, res) => {
             });
         }
 
-        // Fallback: match by agent number
+        // Fallback: exact match on normalized agent number (stored normalized at call creation)
         if (!callLog && agentNumber) {
-            callLog = await prisma.callLog.findFirst({
-                where: {
-                    agentNumber: { endsWith: agentNumber.replace(/\D/g, "").slice(-10) },
-                    callStatus: { in: ["INITIATED", "RINGING", "CONNECTED"] }
-                },
-                orderBy: { createdAt: "desc" }
-            });
+            const normalizedAgent = normalizePhone(agentNumber);
+            if (normalizedAgent) {
+                callLog = await prisma.callLog.findFirst({
+                    where: {
+                        agentNumber: normalizedAgent,
+                        callStatus: { in: ["INITIATED", "RINGING", "CONNECTED"] }
+                    },
+                    orderBy: { createdAt: "desc" }
+                });
+            }
         }
 
         if (callLog) {
@@ -146,20 +156,25 @@ const greeterWebhook = async (req, res) => {
             // Try to find lead by customer number
             let leadId = customerCrmId;
             if (!leadId && customerNumber) {
-                const lead = await prisma.lead.findFirst({
-                    where: { phone: { endsWith: customerNumber.replace(/\D/g, "").slice(-10) } }
-                });
-                leadId = lead?.id;
+                const normalizedCustomer = normalizePhone(customerNumber);
+                if (normalizedCustomer) {
+                    const lead = await prisma.lead.findFirst({
+                        where: { phoneNormalized: normalizedCustomer }
+                    });
+                    leadId = lead?.id;
+                }
             }
 
             if (leadId) {
-                // Try to find the user by agent number
                 let userId = null;
                 if (agentNumber) {
-                    const user = await prisma.user.findFirst({
-                        where: { phone: { endsWith: agentNumber.replace(/\D/g, "").slice(-10) } }
-                    });
-                    userId = user?.id;
+                    const normalizedAgent = normalizePhone(agentNumber);
+                    if (normalizedAgent) {
+                        const user = await prisma.user.findFirst({
+                            where: { phoneNormalized: normalizedAgent }
+                        });
+                        userId = user?.id;
+                    }
                 }
 
                 await prisma.callLog.create({

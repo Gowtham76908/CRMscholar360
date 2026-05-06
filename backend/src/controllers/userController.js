@@ -1,5 +1,7 @@
 const prisma = require("../utils/prisma");
 const bcrypt = require("bcrypt");
+const normalizePhone = require("../utils/normalizePhone");
+const { toSafeUser } = require("../utils/safeUser");
 
 const registerUser = async (req, res) => {
     try {
@@ -21,15 +23,14 @@ const registerUser = async (req, res) => {
                 name,
                 email,
                 phone,
+                phoneNormalized: normalizePhone(phone),
                 password: hashedPassword,
                 role: role || "EMPLOYEE",
                 department
             }
         });
 
-        const { password: _, ...userWithoutPassword } = newUser;
-
-        res.status(201).json({ message: "User registered successfully", user: userWithoutPassword });
+        res.status(201).json({ message: "User registered successfully", user: toSafeUser(newUser) });
 
     } catch (error) {
         res.status(500).json({ message: "Internal server error", error: error.message });
@@ -44,20 +45,10 @@ const updateProfile = async (req, res) => {
 
         const updatedUser = await prisma.user.update({
             where: { id: userId },
-            data: { name, phone, department },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
-                role: true,
-                department: true,
-                profilePhoto: true,
-                preferences: true
-            }
+            data: { name, phone, phoneNormalized: normalizePhone(phone), department }
         });
 
-        res.json(updatedUser);
+        res.json(toSafeUser(updatedUser));
     } catch (error) {
         res.status(500).json({ message: "Error updating profile", error: error.message });
     }

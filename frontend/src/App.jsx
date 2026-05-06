@@ -3,6 +3,8 @@ import { AuthProvider } from "./context/AuthContext";
 import AppLayout from "./layouts/AppLayout";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Team from "./pages/Team";
 import Tasks from "./pages/Tasks";
@@ -23,8 +25,10 @@ import Sprints from "./pages/Sprints";
 import SprintAnalytics from "./pages/SprintAnalytics";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import TaskDetail from "./pages/TaskDetail";
+import LeadDetail from "./pages/LeadDetail";
 import InvoiceBilling from "./pages/InvoiceBilling";
 import SalestrailCalls from "./pages/SalestrailCalls";
+import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 const queryClient = new QueryClient({
@@ -47,7 +51,9 @@ function App() {
         <Routes>
           {/* Public routes */}
           <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<Login />} />
+          <Route path="/login"            element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password"  element={<ResetPassword />} />
 
           {/* Protected Routes */}
           <Route element={<ErrorBoundary><AppLayout /></ErrorBoundary>}>
@@ -58,6 +64,7 @@ function App() {
             <Route path="/sprints" element={<Sprints />} />
             <Route path="/sprint-analytics/:id" element={<SprintAnalytics />} />
             <Route path="/leads" element={<Leads />} />
+            <Route path="/leads/:id" element={<LeadDetail />} />
             <Route path="/team" element={<Team />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/tasks/:id" element={<TaskDetail />} />
@@ -72,9 +79,10 @@ function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/invoices" element={<InvoiceBilling />} />
             <Route path="/salestrail" element={<SalestrailCalls />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </AuthProvider>
     </QueryClientProvider>

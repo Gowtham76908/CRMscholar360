@@ -38,7 +38,7 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static files from uploads directory
 app.use("/uploads", express.static("uploads"));
 
-// Auth rate limit — 20 attempts per 15 minutes
+// Auth rate limit — 20 attempts per 15 minutes (login, etc.)
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 20,
@@ -48,6 +48,35 @@ const authLimiter = rateLimit({
 });
 app.use("/api/auth", authLimiter);
 
+// Forgot-password: composite IP+email limiter (primary)
+// express.json() runs before this so req.body.email is available.
+// Falls back to IP-only if email is missing — never throws on empty body.
+const forgotPasswordLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    keyGenerator: (req) => {
+        const email = (req.body?.email ?? "").toLowerCase().trim();
+        return email ? `${req.ip}:${email}` : req.ip;
+    },
+    message: { error: "Too many reset requests. Please wait 15 minutes before trying again." },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Email-only limiter (secondary) — stops distributed attacks targeting one address
+// across multiple IPs (e.g. botnet spraying reset requests at one victim email)
+const forgotPasswordEmailLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    keyGenerator: (req) => (req.body?.email ?? "unknown").toLowerCase().trim(),
+    message: { error: "Too many reset requests for this email. Please wait 15 minutes." },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => !(req.body?.email), // no email in body → skip email limiter, IP limiter still fires
+});
+
+app.use("/api/auth/forgot-password", forgotPasswordLimiter, forgotPasswordEmailLimiter);
+
 app.get("/health", (req, res) => {
     res.json({ status: "ok", time: new Date().toISOString() });
 });
@@ -56,37 +85,45 @@ app.get("/", (req, res) => {
     res.send("Backend is running...");
 });
 
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/leads", leadRoutes);
-app.use("/api/team", teamRoutes);
-app.use("/api", noteRoutes);
-app.use("/api", taskRoutes);
-app.use("/api/integrations", integrationRoutes);
-app.use("/api/reminders", reminderRoutes);
-app.use("/api/analytics", analyticsRoutes);
-app.use("/api/commission", commissionRoutes);
-app.use("/api/webhooks", webhookRoutes);
-app.use("/api/calls", callLogRoutes);
-app.use("/api/reports", reportRoutes);
-app.use("/api/export", exportRoutes);
-app.use("/api/search", searchRoutes);
-app.use("/api/search-leads", searchLeadsRoutes);
-app.use("/api/linkedin-leads", linkedinLeadsRoutes);
-app.use("/api/sprints", sprintRoutes);
-app.use("/api/audit-logs", auditRoutes);
-app.use("/api/sessions", sessionRoutes);
-app.use("/api/departments", require("./routes/department"));
-app.use("/api/chat", require("./routes/chat"));
-app.use("/api/attendance", require("./routes/attendance"));
-app.use("/api/leave", require("./routes/leave"));
-app.use("/api/upload", require("./routes/upload"));
-app.use("/api/user-status", require("./routes/userStatus"));
-app.use("/api/invoices", require("./routes/invoice"));
-app.use("/api/salestrail", require("./routes/salestrail"));
+// ─── PUBLIC ROUTES ────────────────────────────────────────────────────────────
+// No authentication required. Do NOT add router.use(authMiddleware) inside
+// these routers — they must remain open for unauthenticated callers.
+app.use("/api/auth",        authRoutes);    // login, forgot-password, reset-password
+app.use("/api/webhooks",    webhookRoutes); // external lead ingestion (no user session)
+app.use("/api/demo-booking", require("./routes/demoBooking")); // public booking form
+
+// ─── PROTECTED ROUTES ─────────────────────────────────────────────────────────
+// Every router listed here MUST call router.use(authMiddleware) at its top.
+// Adding a new router? Ensure it starts with router.use(authMiddleware) before
+// any route definitions — otherwise its endpoints will be publicly accessible.
+app.use("/api/users",           userRoutes);
+app.use("/api/leads",           leadRoutes);
+app.use("/api/team",            teamRoutes);
+app.use("/api",                 noteRoutes);
+app.use("/api",                 taskRoutes);
+app.use("/api/integrations",    integrationRoutes);
+app.use("/api/reminders",       reminderRoutes);
+app.use("/api/analytics",       analyticsRoutes);
+app.use("/api/commission",      commissionRoutes);
+app.use("/api/calls",           callLogRoutes);
+app.use("/api/reports",         reportRoutes);
+app.use("/api/export",          exportRoutes);
+app.use("/api/search",          searchRoutes);
+app.use("/api/search-leads",    searchLeadsRoutes);
+app.use("/api/linkedin-leads",  linkedinLeadsRoutes);
+app.use("/api/sprints",         sprintRoutes);
+app.use("/api/audit-logs",      auditRoutes);
+app.use("/api/sessions",        sessionRoutes);
+app.use("/api/departments",     require("./routes/department"));
+app.use("/api/chat",            require("./routes/chat"));
+app.use("/api/attendance",      require("./routes/attendance"));
+app.use("/api/leave",           require("./routes/leave"));
+app.use("/api/upload",          require("./routes/upload"));
+app.use("/api/user-status",     require("./routes/userStatus"));
+app.use("/api/invoices",        require("./routes/invoice"));
+app.use("/api/salestrail",      require("./routes/salestrail"));
 app.use("/api/company-settings", require("./routes/companySettings"));
-app.use("/api/demo-booking", require("./routes/demoBooking"));
-app.use("/api/notifications", require("./routes/notification"));
+app.use("/api/notifications",   require("./routes/notification"));
 
 // Global error handler — must be last middleware
 app.use((err, req, res, next) => {

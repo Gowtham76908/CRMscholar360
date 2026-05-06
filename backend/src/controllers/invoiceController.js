@@ -26,17 +26,21 @@ const computeInvoiceTotals = (items) => {
     return { processedItems, subtotal, cgst, sgst, igst: 0, total };
 };
 
-const generateInvoiceNumber = async (type) => {
-    const settings = await prisma.companySettings.findFirst();
+const generateInvoiceNumber = async (type, tx) => {
+    const settings = await tx.companySettings.findFirst();
     const base = settings?.shortName || "HXZ";
     const prefix = type === "PROFORMA" ? `${base}-PRO` : base;
-    const latest = await prisma.invoice.findFirst({
-        where: { invoiceType: type, invoiceNumber: { startsWith: prefix } },
-        orderBy: { createdAt: "desc" },
-    });
-    if (!latest) return `${prefix}-1`;
-    const lastNum = parseInt(latest.invoiceNumber.split("-").pop()) || 0;
-    return `${prefix}-${lastNum + 1}`;
+
+    // Atomic increment inside a transaction so that if invoice creation later
+    // fails the counter rolls back with it — guaranteeing no gaps.
+    const rows = await tx.$queryRaw`
+        INSERT INTO "InvoiceCounter" ("prefix", "currentValue")
+        VALUES (${prefix}, 1)
+        ON CONFLICT ("prefix") DO UPDATE
+            SET "currentValue" = "InvoiceCounter"."currentValue" + 1
+        RETURNING "currentValue"
+    `;
+    return `${prefix}-${rows[0].currentValue}`;
 };
 
 const getPaymentSummary = (payments) => {
@@ -70,28 +74,32 @@ const createInvoice = async (req, res) => {
         if (!items.length) return res.status(400).json({ message: "At least one item is required" });
 
         const { processedItems, subtotal, cgst, sgst, igst, total } = computeInvoiceTotals(items);
-        const invoiceNumber = await generateInvoiceNumber(invoiceType);
 
-        const invoice = await prisma.invoice.create({
-            data: {
-                invoiceNumber,
-                invoiceType,
-                clientName,
-                clientEmail,
-                clientPhone,
-                clientAddress,
-                clientGstin,
-                subtotal,
-                cgst,
-                sgst,
-                igst,
-                total,
-                dueDate: dueDate ? new Date(dueDate) : null,
-                notes,
-                createdById: userId,
-                items: { create: processedItems },
-            },
-            include: { items: true, payments: true, createdBy: { select: { id: true, name: true } } },
+        // Transaction ensures counter increment and invoice row are committed together.
+        // If invoice creation fails for any reason, the counter rolls back — no gaps.
+        const invoice = await prisma.$transaction(async (tx) => {
+            const invoiceNumber = await generateInvoiceNumber(invoiceType, tx);
+            return tx.invoice.create({
+                data: {
+                    invoiceNumber,
+                    invoiceType,
+                    clientName,
+                    clientEmail,
+                    clientPhone,
+                    clientAddress,
+                    clientGstin,
+                    subtotal,
+                    cgst,
+                    sgst,
+                    igst,
+                    total,
+                    dueDate: dueDate ? new Date(dueDate) : null,
+                    notes,
+                    createdById: userId,
+                    items: { create: processedItems },
+                },
+                include: { items: true, payments: true, createdBy: { select: { id: true, name: true } } },
+            });
         });
 
         res.status(201).json(invoice);

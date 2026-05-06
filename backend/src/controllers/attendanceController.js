@@ -1,5 +1,6 @@
 const prisma = require("../utils/prisma");
-const { calculateCompOffBalance } = require("../utils/attendance");
+const { calculateCompOffBalance, calculateCompOffBalanceBulk } = require("../utils/attendance");
+const { nowIST, todayIST } = require("../utils/istTime");
 
 // Check In
 const checkIn = async (req, res) => {
@@ -7,30 +8,25 @@ const checkIn = async (req, res) => {
         const userId = req.user.userId;
         const { latitude, longitude } = req.body;
 
-        // Check-in deadline validation
-        // Weekdays: 11:50 AM
-        // Sundays: 12:30 PM
-        const now = new Date();
-        const isSunday = now.getDay() === 0;
-        const hours = now.getHours();
-        const minutes = now.getMinutes();
-        const currentTimeInMinutes = hours * 60 + minutes;
-        
-        const DEADLINE_WEEKDAY = 11 * 60 + 50; // 11:50 AM
-        const DEADLINE_SUNDAY = 12 * 60 + 30;  // 12:30 PM
-        const currentDeadline = isSunday ? DEADLINE_SUNDAY : DEADLINE_WEEKDAY;
+        // Deadline check in IST — server runs UTC, business is IST (UTC+5:30)
+        const ist = nowIST();
+        const isSunday = ist.getUTCDay() === 0;
+        const currentTimeInMinutes = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+
+        const DEADLINE_WEEKDAY = 11 * 60 + 50; // 11:50 AM IST
+        const DEADLINE_SUNDAY  = 12 * 60 + 30; // 12:30 PM IST
+        const currentDeadline  = isSunday ? DEADLINE_SUNDAY : DEADLINE_WEEKDAY;
 
         if (currentTimeInMinutes > currentDeadline) {
             return res.status(400).json({
-                message: `Check-in deadline has passed. You must check in before ${isSunday ? '12:30 PM' : '11:50 AM'}`,
+                message: `Check-in deadline has passed. You must check in before ${isSunday ? "12:30 PM" : "11:50 AM"} IST`,
                 code: "LATE_CHECK_IN",
                 deadline: isSunday ? "12:30 PM" : "11:50 AM"
             });
         }
 
-        // Get today's date in UTC to avoid timezone issues
-        const today = new Date();
-        const todayDateOnly = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+        // IST calendar date — avoids wrong-day storage after midnight IST (still previous UTC day)
+        const todayDateOnly = todayIST();
 
         // Check if already checked in today
         const existing = await prisma.attendance.findUnique({
@@ -80,8 +76,7 @@ const checkIn = async (req, res) => {
 const checkOut = async (req, res) => {
     try {
         const userId = req.user.userId;
-        const today = new Date();
-        const todayDateOnly = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+        const todayDateOnly = todayIST();
 
         const attendance = await prisma.attendance.findUnique({
             where: {
@@ -234,45 +229,69 @@ const getAdminMonthlyReport = async (req, res) => {
         const totalDaysInMonth = endDate.getUTCDate();
         const workingDays = totalDaysInMonth - sundayCount;
 
-        // Get all active employees
+        // 1. Employees
         const employees = await prisma.user.findMany({
             where: { role: 'EMPLOYEE', isActive: true },
             select: { id: true, name: true, email: true, department: true, jobTitle: true, createdAt: true }
         });
+        const employeeIds = employees.map(e => e.id);
 
-        // Get all attendance for the month
-        const allAttendance = await prisma.attendance.findMany({
-            where: { date: { gte: startDate, lte: endDate } }
+        // 2. Attendance counts by userId + status — DB does the counting, no raw rows in Node
+        const attGroups = await prisma.attendance.groupBy({
+            by: ["userId", "status"],
+            where: { userId: { in: employeeIds }, date: { gte: startDate, lte: endDate } },
+            _count: { _all: true }
         });
 
-        // Get all approved leaves for the month
-        const allLeaves = await prisma.leave.findMany({
+        // 3. Approved leave days by userId + leaveType — one query for all employees
+        const leaveGroups = await prisma.leave.groupBy({
+            by: ["userId", "leaveType"],
             where: {
+                userId: { in: employeeIds },
                 status: 'APPROVED',
                 OR: [
                     { fromDate: { gte: startDate, lte: endDate } },
-                    { toDate: { gte: startDate, lte: endDate } },
+                    { toDate:   { gte: startDate, lte: endDate } },
                     { fromDate: { lte: startDate }, toDate: { gte: endDate } }
                 ]
             },
-            select: { userId: true, leaveType: true, totalDays: true }
+            _sum: { totalDays: true }
         });
 
-        const report = await Promise.all(employees.map(async emp => {
-            const empAtt = allAttendance.filter(a => a.userId === emp.id);
-            const empLeaves = allLeaves.filter(l => l.userId === emp.id);
+        // 4+5. Comp off balances — 2 queries total inside (Sunday earned + COMP_OFF used)
+        const compOffMap = await calculateCompOffBalanceBulk(employeeIds);
+
+        // Build O(1) lookup maps — one pass each, then O(1) per employee below
+        // attMap:   userId → { status → count }
+        const attMap = new Map();
+        for (const row of attGroups) {
+            if (!attMap.has(row.userId)) attMap.set(row.userId, {});
+            attMap.get(row.userId)[row.status] = row._count._all;
+        }
+
+        // leaveMap: userId → { leaveType → totalDays }
+        const leaveMap = new Map();
+        for (const row of leaveGroups) {
+            if (!leaveMap.has(row.userId)) leaveMap.set(row.userId, {});
+            leaveMap.get(row.userId)[row.leaveType] = row._sum.totalDays ?? 0;
+        }
+
+        // Final assembly — pure O(N), no filtering loops
+        const report = employees.map(emp => {
+            const att   = attMap.get(emp.id)   ?? {};
+            const leave = leaveMap.get(emp.id) ?? {};
             return {
-                user: emp,
-                present: empAtt.filter(a => a.status === 'PRESENT').length,
-                absent: empAtt.filter(a => a.status === 'ABSENT').length,
-                leave: empAtt.filter(a => a.status === 'LEAVE').length,
-                wfh: empAtt.filter(a => a.status === 'WFH').length,
-                halfDay: empAtt.filter(a => a.status === 'HALF_DAY').length,
-                pendingLeaves: empLeaves.filter(l => l.leaveType === 'LEAVE').reduce((s, l) => s + l.totalDays, 0),
-                pendingWfh: empLeaves.filter(l => l.leaveType === 'WFH').reduce((s, l) => s + l.totalDays, 0),
-                compOffBalance: await calculateCompOffBalance(emp.id)
+                user:           emp,
+                present:        att.PRESENT   ?? 0,
+                absent:         att.ABSENT    ?? 0,
+                leave:          att.LEAVE     ?? 0,
+                wfh:            att.WFH       ?? 0,
+                halfDay:        att.HALF_DAY  ?? 0,
+                pendingLeaves:  leave.LEAVE   ?? 0,
+                pendingWfh:     leave.WFH     ?? 0,
+                compOffBalance: compOffMap.get(emp.id) ?? 0,
             };
-        }));
+        });
 
         res.json({ report, meta: { month: targetMonth, year: targetYear, workingDays, sundayCount, totalDaysInMonth } });
     } catch (error) {

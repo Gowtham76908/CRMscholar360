@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { Search, Filter, Edit, Plus, Upload, Phone, PhoneCall, Play, Pause, SearchCheck, Users, History } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
@@ -35,7 +36,7 @@ const Leads = () => {
     const csvInputRef = useRef(null);
     const queryClient = useQueryClient();
 
-    const { data: leadsData, isLoading } = useQuery({
+    const { data: leadsData, isLoading, isFetching } = useQuery({
         queryKey: ["leads", page, searchTerm, statusFilter, activeTab],
         queryFn: async () => {
             const params = {
@@ -48,6 +49,7 @@ const Leads = () => {
             const res = await api.get("/leads", { params });
             return res.data;
         },
+        placeholderData: (prev) => prev,
     });
 
     const leads = leadsData?.data || [];
@@ -188,7 +190,10 @@ const Leads = () => {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Leads</h1>
+                    <div className="flex items-center gap-2">
+                        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Leads</h1>
+                        {isFetching && !isLoading && <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />}
+                    </div>
                     <p className="text-sm text-gray-500">Manage your potential customers</p>
                 </div>
                 <div className="flex gap-2">
@@ -326,9 +331,9 @@ const Leads = () => {
             )}
 
             {/* Table */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className={`bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition-opacity duration-150 ${isFetching && !isLoading ? "opacity-60" : ""}`}>
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200" aria-busy={isFetching && !isLoading}>
                         <thead className="bg-gray-50">
                             <tr>
                                 <th scope="col" className="px-6 py-3 text-left">
@@ -361,7 +366,7 @@ const Leads = () => {
                                         />
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm font-medium text-gray-900">{lead.name}</div>
+                                        <Link to={`/leads/${lead.id}`} className="text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline">{lead.name}</Link>
                                         <div className="text-xs text-gray-500 capitalize">{lead.enquiryType?.toLowerCase()?.replace("_", " ") || "n/a"}</div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
@@ -460,21 +465,24 @@ const Leads = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <button
                                             onClick={() => setSelectedLeadForCalls(lead)}
-                                            className="text-indigo-500 hover:text-indigo-700 mr-3"
+                                            disabled={isFetching && !isLoading}
+                                            className="text-indigo-500 hover:text-indigo-700 mr-3 disabled:pointer-events-none"
                                             title="Call Details"
                                         >
                                             <Phone className="h-4 w-4" />
                                         </button>
                                         <button
                                             onClick={() => setSelectedLeadForActivity(lead)}
-                                            className="text-gray-400 hover:text-gray-600 mr-3"
+                                            disabled={isFetching && !isLoading}
+                                            className="text-gray-400 hover:text-gray-600 mr-3 disabled:pointer-events-none"
                                             title="View Timeline"
                                         >
                                             <History className="h-4 w-4" />
                                         </button>
                                         <button
                                             onClick={() => setEditingLead(lead)}
-                                            className="text-indigo-600 hover:text-indigo-900 mr-3"
+                                            disabled={isFetching && !isLoading}
+                                            className="text-indigo-600 hover:text-indigo-900 mr-3 disabled:pointer-events-none"
                                             title="Edit Lead"
                                         >
                                             <Edit className="h-4 w-4" />

@@ -1,5 +1,7 @@
 const prisma = require("../utils/prisma");
 const { createNotification } = require("../services/notificationService");
+const { getTasks: getTasksPaginated } = require("../services/taskService");
+const { getTasksSchema } = require("../validations/task.validation");
 
 const taskInclude = {
     lead: { select: { id: true, name: true, phone: true, email: true } },
@@ -96,19 +98,32 @@ const createTask = async (req, res) => {
     }
 };
 
-// ─── Get Tasks ────────────────────────────────────────────────────────────────
+// ─── Get Tasks (paginated) ────────────────────────────────────────────────────
 
 const getTasks = async (req, res) => {
     try {
         const { userId, role } = req.user;
-        const where = ["EMPLOYEE", "AGENT"].includes(role) ? { assignedToId: userId } : {};
 
-        const tasks = await prisma.task.findMany({
-            where,
-            include: taskInclude,
-            orderBy: [{ dueDate: "asc" }]
-        });
-        res.json(tasks);
+        const validation = getTasksSchema.safeParse(req.query);
+        if (!validation.success) {
+            return res.status(400).json({ message: "Invalid query parameters", errors: validation.error.errors });
+        }
+
+        const { page, limit, filter, leadId } = validation.data;
+
+        if (leadId) {
+            const lead = await prisma.lead.findUnique({
+                where: { id: leadId },
+                select: { assignedToId: true }
+            });
+            if (!lead) return res.status(404).json({ message: "Lead not found" });
+            if (["EMPLOYEE", "AGENT"].includes(role) && lead.assignedToId !== userId) {
+                return res.status(403).json({ message: "Access denied" });
+            }
+        }
+
+        const result = await getTasksPaginated({ userId, role, page, limit, filter, leadId });
+        res.json(result);
     } catch (error) {
         res.status(500).json({ message: "Error fetching tasks", error: error.message });
     }

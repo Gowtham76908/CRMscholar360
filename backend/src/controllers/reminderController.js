@@ -24,8 +24,11 @@ const createReminder = async (req, res) => {
 const getMyReminders = async (req, res) => {
     try {
         const { userId } = req.user;
+        const { leadId } = req.query;
+        const where = { userId };
+        if (leadId) where.leadId = leadId;
         const reminders = await prisma.reminder.findMany({
-            where: { userId },
+            where,
             orderBy: { remindAt: "asc" }
         });
         res.json(reminders);

@@ -13,6 +13,7 @@ model User {
   name           String
   email          String          @unique
   phone          String?
+  phoneNormalized String?        @db.VarChar(15)
   password       String
   role           Role            @default(EMPLOYEE)
   isActive       Boolean         @default(true)
@@ -24,9 +25,11 @@ model User {
   updatedAt      DateTime        @updatedAt
   workspaceId    String?
   departmentId   String?
-  breakStartedAt DateTime?
-  onlineStatus   OnlineStatus    @default(OFFLINE)
-  lastSeen       DateTime?
+  breakStartedAt    DateTime?
+  onlineStatus      OnlineStatus    @default(OFFLINE)
+  lastSeen          DateTime?
+  resetToken        String?
+  resetTokenExpiry  DateTime?
   activities     Activity[]
   attendances    Attendance[]
   leads          Lead[]
@@ -39,6 +42,8 @@ model User {
   departmentRel  Department?     @relation(fields: [departmentId], references: [id])
   workspace      Workspace?      @relation(fields: [workspaceId], references: [id])
   statusLogs     UserStatusLog[]
+
+  @@index([phoneNormalized])
 }
 
 model UserStatusLog {
@@ -57,6 +62,7 @@ model Lead {
   name            String
   email           String?
   phone           String?
+  phoneNormalized String?     @db.VarChar(15)
   source          LeadSource
   enquiryType     EnquiryType
   status          LeadStatus  @default(NEW)
@@ -79,6 +85,8 @@ model Lead {
   workspace       Workspace?  @relation(fields: [workspaceId], references: [id])
   notes           Note[]
   tasks           Task[]
+
+  @@index([phoneNormalized])
 }
 
 model Note {
@@ -125,6 +133,10 @@ model Task {
   sprint         Sprint?      @relation(fields: [sprintId], references: [id])
   files          TaskFile[]
   comments       TaskComment[]
+
+  @@index([status])
+  @@index([dueDate])
+  @@index([assignedToId, status])
 }
 
 model TaskComment {
@@ -178,6 +190,8 @@ model Reminder {
   remindAt DateTime
   message  String
   isSent   Boolean  @default(false)
+
+  @@index([remindAt, isSent])
 }
 
 model Commission {
@@ -277,6 +291,7 @@ model Leave {
   approvals LeaveApproval[]
 
   @@index([userId, status])
+  @@index([userId, fromDate, toDate], map: "Leave_compoff_approved_idx")
 }
 
 model LeaveApproval {
@@ -466,6 +481,11 @@ enum InvoiceStatus {
 enum PaymentType {
   CREDIT
   DEBIT
+}
+
+model InvoiceCounter {
+  prefix       String @id
+  currentValue Int    @default(0)
 }
 
 model CompanySettings {

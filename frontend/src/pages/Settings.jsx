@@ -26,7 +26,7 @@ const passwordSchema = z.object({
 });
 
 const Settings = () => {
-    const { user, login } = useAuth();
+    const { user, refreshUser } = useAuth();
     const [activeTab, setActiveTab] = useState("profile");
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState({ type: "", text: "" });
@@ -83,10 +83,7 @@ const Settings = () => {
             // Use the photo upload response if available (it has the updated profilePhoto)
             // Otherwise use the profile update response
             const finalUserData = photoUploadResponse?.data?.user || res.data;
-            // Preserve existing user fields (id, role, etc.) and merge updated fields
-            const mergedUser = { ...user, ...finalUserData };
-            localStorage.setItem("user", JSON.stringify(mergedUser));
-
+            refreshUser(finalUserData);
             setMessage({ type: "success", text: "Profile updated successfully!" });
 
             // Reset edit mode and photo states
@@ -94,9 +91,6 @@ const Settings = () => {
             setPhotoPreview(null);
             setSelectedPhotoFile(null);
             if (fileInputRef.current) fileInputRef.current.value = "";
-
-            // Reload to reflect changes
-            setTimeout(() => window.location.reload(), 1000);
         } catch (error) {
             console.error("Profile submit error:", error);
             setMessage({ type: "error", text: error.response?.data?.message || "Failed to update profile." });
@@ -147,10 +141,8 @@ const Settings = () => {
         setIsUploadingPhoto(true);
         try {
             await api.delete("/upload/profile-photo");
-            const updatedUser = { ...user, profilePhoto: null };
-            localStorage.setItem("user", JSON.stringify(updatedUser));
+            refreshUser({ profilePhoto: null });
             setMessage({ type: "success", text: "Profile photo removed" });
-            setTimeout(() => window.location.reload(), 1000);
         } catch (error) {
             setMessage({ type: "error", text: "Failed to remove photo" });
         } finally {

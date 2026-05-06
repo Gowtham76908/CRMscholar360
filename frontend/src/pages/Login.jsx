@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Lock, Mail, Loader2, Eye, EyeOff } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const loginSchema = z.object({
     email: z.string().email("Invalid email address"),
@@ -115,6 +116,15 @@ const Login = () => {
                                 <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
                             )}
                         </div>
+                    </div>
+
+                    <div className="flex justify-end">
+                        <Link
+                            to="/forgot-password"
+                            className="text-sm text-indigo-600 hover:text-indigo-500"
+                        >
+                            Forgot password?
+                        </Link>
                     </div>
 
                     <button

@@ -1,45 +1,75 @@
 const prisma = require("../utils/prisma");
-// In a real app, integrate a mailer service here (e.g., nodemailer or SendGrid)
-// const mailer = require("../utils/mailer");
+const { createNotification } = require("./notificationService");
+const logger = require("../utils/logger").child({ service: "ReminderService" });
 
 const processReminders = async () => {
     try {
         const now = new Date();
-        const tenMinutesFromNow = new Date(now.getTime() + 10 * 60000);
 
-        // Find reminders that are due and haven't been sent
-        const pendingReminders = await prisma.reminder.findMany({
-            where: {
-                remindAt: {
-                    lte: now // Due now or in the past
-                },
-                isSent: false
-            },
-            include: {
-                // Join user to get email/phone if needed
-                // user: true 
-                // lead: true
-                // task: true
-            }
+        // Fetch candidates first — cheap indexed read
+        const candidates = await prisma.reminder.findMany({
+            where: { remindAt: { lte: now }, isSent: false },
+            select: { id: true },
         });
 
-        if (pendingReminders.length === 0) return;
+        if (candidates.length === 0) return;
 
-        console.log(`[Reminder Service] Found ${pendingReminders.length} pending reminders.`);
+        for (const { id } of candidates) {
+            try {
+                // Atomic claim: only the worker that flips isSent false→true owns this reminder.
+                // If two cron ticks overlap, updateMany returns count=0 for the second one → skip.
+                const claimed = await prisma.reminder.updateMany({
+                    where: { id, isSent: false },
+                    data:  { isSent: true },
+                });
 
-        for (const reminder of pendingReminders) {
-            // Mock Sending Notification
-            // await mailer.send({ to: user.email, subject: "Reminder", text: reminder.message });
-            console.log(`[Mock Notification] To User ${reminder.userId}: ${reminder.message}`);
+                if (claimed.count === 0) continue; // already claimed by another tick
 
-            // Mark as sent
-            await prisma.reminder.update({
-                where: { id: reminder.id },
-                data: { isSent: true }
-            });
+                // Fetch full detail now that we own it
+                const reminder = await prisma.reminder.findUnique({
+                    where: { id },
+                    select: {
+                        id: true,
+                        userId: true,
+                        message: true,
+                        leadId: true,
+                        taskId: true,
+                    },
+                });
+
+                if (!reminder) continue;
+
+                // Deep link: task detail page exists (/tasks/:id).
+                // Lead has no detail page — link to list. When a lead detail route
+                // is added, change this to /leads/${reminder.leadId}.
+                const link = reminder.taskId
+                    ? `/tasks/${reminder.taskId}`
+                    : reminder.leadId
+                        ? `/leads`
+                        : null;
+
+                await createNotification({
+                    userId:  reminder.userId,
+                    title:   "🔔 Reminder",
+                    message: reminder.message,
+                    type:    "REMINDER",
+                    link,
+                });
+
+                logger.info({ reminderId: id, userId: reminder.userId }, "Reminder delivered");
+            } catch (err) {
+                // Per-reminder failure: log and continue the batch.
+                // isSent was already set to true during the atomic claim — if the
+                // notification failed to create, roll it back so the next tick retries.
+                logger.error({ reminderId: id, err: err.message }, "Failed to deliver reminder — rolling back claim");
+                await prisma.reminder.updateMany({
+                    where: { id },
+                    data:  { isSent: false },
+                }).catch((rbErr) => logger.error({ reminderId: id, err: rbErr.message }, "Rollback failed"));
+            }
         }
     } catch (error) {
-        console.error("Error processing reminders:", error);
+        logger.error({ err: error.message }, "Reminder batch error");
     }
 };
 

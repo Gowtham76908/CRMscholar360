@@ -3,8 +3,10 @@ const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const { getMyNotifications, markAsRead, markAllAsRead } = require("../controllers/notificationController");
 
-router.get("/", authMiddleware, getMyNotifications);
-router.patch("/read-all", authMiddleware, markAllAsRead);
-router.patch("/:id/read", authMiddleware, markAsRead);
+router.use(authMiddleware);
+
+router.get("/", getMyNotifications);
+router.patch("/read-all", markAllAsRead);
+router.patch("/:id/read", markAsRead);
 
 module.exports = router;

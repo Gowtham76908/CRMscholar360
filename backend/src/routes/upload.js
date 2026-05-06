@@ -5,6 +5,7 @@ const path = require("path");
 const fs = require("fs");
 const authMiddleware = require("../middleware/authMiddleware");
 const prisma = require("../utils/prisma");
+const { toSafeUser } = require("../utils/safeUser");
 
 // Ensure upload directory exists
 const uploadDir = "uploads/profiles";
@@ -18,7 +19,7 @@ const taskUploadDir = "uploads/tasks";
 
 // Configure multer storage for profiles
 const profileStorage = multer.diskStorage({
-    destination: (req, file, cb) => {
+    destination: (_req, _file, cb) => {
         cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
@@ -29,17 +30,17 @@ const profileStorage = multer.diskStorage({
 
 // Configure multer storage for tasks
 const taskStorage = multer.diskStorage({
-    destination: (req, file, cb) => {
+    destination: (_req, _file, cb) => {
         cb(null, taskUploadDir);
     },
-    filename: (req, file, cb) => {
+    filename: (_req, file, cb) => {
         const uniqueName = `task-${Date.now()}-${Math.round(Math.random() * 1E9)}${path.extname(file.originalname)}`;
         cb(null, uniqueName);
     }
 });
 
 // File filter for images only
-const profileFileFilter = (req, file, cb) => {
+const profileFileFilter = (_req, file, cb) => {
     const filetypes = /jpeg|jpg|png|gif|webp/;
     const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = filetypes.test(file.mimetype);
@@ -64,8 +65,10 @@ const uploadTask = multer({
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
 });
 
+router.use(authMiddleware);
+
 // Upload profile photo
-router.post("/profile-photo", authMiddleware, uploadProfile.single("photo"), async (req, res) => {
+router.post("/profile-photo", uploadProfile.single("photo"), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ message: "No file uploaded" });
@@ -76,21 +79,12 @@ router.post("/profile-photo", authMiddleware, uploadProfile.single("photo"), asy
         // Update user's profile photo in database
         const updatedUser = await prisma.user.update({
             where: { id: req.user.userId },
-            data: { profilePhoto: photoUrl },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                profilePhoto: true,
-                phone: true,
-                department: true
-            }
+            data: { profilePhoto: photoUrl }
         });
 
         res.json({
             message: "Profile photo uploaded successfully",
-            user: updatedUser
+            user: toSafeUser(updatedUser)
         });
     } catch (error) {
         console.error("Profile photo upload error:", error);
@@ -107,7 +101,7 @@ router.post("/profile-photo", authMiddleware, uploadProfile.single("photo"), asy
 });
 
 // Upload task files
-router.post("/task-files", authMiddleware, uploadTask.array("files", 5), async (req, res) => {
+router.post("/task-files", uploadTask.array("files", 5), async (req, res) => {
     try {
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({ message: "No files uploaded" });

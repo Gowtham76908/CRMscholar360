@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { login as loginApi } from "../api/auth";
 import api from "../api/axios";
 
@@ -13,6 +14,7 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
+    const navigate = useNavigate();
     const [user, setUser] = useState(null);
     const [token, setToken] = useState(localStorage.getItem("token"));
     const [loading, setLoading] = useState(true);
@@ -68,7 +70,7 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const logout = () => {
+    const logout = useCallback(() => {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
         localStorage.removeItem("tokenExpiry");
@@ -76,8 +78,15 @@ export const AuthProvider = ({ children }) => {
         setToken(null);
         setUser(null);
         setOnlineStatus("OFFLINE");
-        window.location.href = "/login";
-    };
+        navigate("/login", { replace: true });
+    }, [navigate]);
+
+    // Handle 401 responses fired from the axios interceptor
+    useEffect(() => {
+        const handler = () => logout();
+        window.addEventListener("auth:logout", handler);
+        return () => window.removeEventListener("auth:logout", handler);
+    }, [logout]);
 
     // Update the user's online presence status
     const updateStatus = useCallback(async (status) => {

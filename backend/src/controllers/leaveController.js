@@ -1,6 +1,27 @@
 const prisma = require("../utils/prisma");
-const { calculateCompOffBalance } = require("../utils/attendance");
+const { currentFYStart } = require("../utils/attendance");
 const { createNotification } = require("../services/notificationService");
+
+const fmtDate = (d) => new Date(d).toLocaleDateString("en-IN", { dateStyle: "medium" });
+
+// Postgres exclusion constraint violation code is 23P01.
+// Prisma surfaces it inside the error message string.
+const isOverlapViolation = (err) =>
+    err?.message?.includes("Leave_no_approved_overlap") ||
+    err?.message?.includes("23P01");
+
+// Fetch the conflicting approved leave for a user + date range (for error context).
+const findConflict = (userId, from, to, excludeId = null) =>
+    prisma.leave.findFirst({
+        where: {
+            userId,
+            status: "APPROVED",
+            fromDate: { lte: to },
+            toDate:   { gte: from },
+            ...(excludeId && { id: { not: excludeId } }),
+        },
+        select: { fromDate: true, toDate: true },
+    });
 
 // Apply for Leave
 const applyLeave = async (req, res) => {
@@ -25,41 +46,93 @@ const applyLeave = async (req, res) => {
 
         const totalDays = Math.ceil((to - from) / (1000 * 60 * 60 * 24)) + 1;
 
-        if (leaveType === "COMP_OFF") {
-            const balance = await calculateCompOffBalance(userId);
-            if (totalDays > balance) {
-                return res.status(400).json({ 
-                    message: `Insufficient Comp Off balance. You requested ${totalDays} day(s) but only have ${balance} day(s) available.` 
-                });
-            }
-        }
-
         const type = ["WFH", "COMP_OFF"].includes(leaveType) ? leaveType : "LEAVE";
 
-        // Create leave with approvals
-        const leave = await prisma.leave.create({
-            data: {
-                userId,
-                fromDate: from,
-                toDate: to,
-                totalDays,
-                reason,
-                leaveType: type,
-                approvals: {
-                    create: approverIds.map(approverId => ({
-                        approverId
-                    }))
+        // Create leave inside a transaction so the overlap check, comp off balance check,
+        // and insert are all atomic — prevents race conditions on concurrent submissions.
+        const leave = await prisma.$transaction(async (tx) => {
+            // Comp off balance check must be inside the tx so two concurrent requests
+            // for the same user both see the committed state and can't both pass.
+            if (leaveType === "COMP_OFF") {
+                const since = currentFYStart();
+                const now   = new Date();
+
+                const earnedRows = await tx.$queryRaw`
+                    SELECT COUNT(*)::int AS earned
+                    FROM "Attendance"
+                    WHERE "userId" = ${userId}
+                      AND status   = 'PRESENT'
+                      AND date     >= ${since}
+                      AND EXTRACT(DOW FROM date) = 0
+                `;
+                const earned = earnedRows[0]?.earned ?? 0;
+
+                const usedLeaves = await tx.leave.findMany({
+                    where: {
+                        userId,
+                        leaveType: "COMP_OFF",
+                        status:    "APPROVED",
+                        fromDate:  { lte: now },
+                        toDate:    { gte: since },
+                    },
+                    select: { fromDate: true, toDate: true },
+                });
+
+                const MS_PER_DAY = 86_400_000;
+                const used = usedLeaves.reduce((sum, l) => {
+                    const overlapStart = l.fromDate > since ? l.fromDate : since;
+                    const overlapEnd   = l.toDate   < now   ? l.toDate   : now;
+                    const overlapMs    = Math.max(0, overlapEnd - overlapStart);
+                    return sum + (overlapMs > 0 ? Math.floor(overlapMs / MS_PER_DAY) + 1 : 0);
+                }, 0);
+
+                const balance = Math.max(0, earned - used);
+                if (totalDays > balance) {
+                    throw Object.assign(
+                        new Error(`Insufficient Comp Off balance. You requested ${totalDays} day(s) but only have ${balance} day(s) available.`),
+                        { statusCode: 400 }
+                    );
                 }
-            },
-            include: {
-                approvals: {
-                    include: {
-                        approver: {
-                            select: { id: true, name: true, email: true }
+            }
+
+            const overlap = await tx.leave.findFirst({
+                where: {
+                    userId,
+                    status: { in: ["PENDING", "APPROVED"] },
+                    fromDate: { lte: to },
+                    toDate: { gte: from }
+                },
+                select: { fromDate: true, toDate: true, status: true }
+            });
+
+            if (overlap) {
+                const fmt = (d) => new Date(d).toLocaleDateString("en-IN", { dateStyle: "medium" });
+                throw Object.assign(
+                    new Error(`You already have a ${overlap.status.toLowerCase()} leave from ${fmt(overlap.fromDate)} to ${fmt(overlap.toDate)} that overlaps with these dates.`),
+                    { statusCode: 409 }
+                );
+            }
+
+            return tx.leave.create({
+                data: {
+                    userId,
+                    fromDate: from,
+                    toDate: to,
+                    totalDays,
+                    reason,
+                    leaveType: type,
+                    approvals: {
+                        create: approverIds.map(approverId => ({ approverId }))
+                    }
+                },
+                include: {
+                    approvals: {
+                        include: {
+                            approver: { select: { id: true, name: true, email: true } }
                         }
                     }
                 }
-            }
+            });
         });
 
         res.json({ message: "Leave application submitted", leave });
@@ -81,6 +154,18 @@ const applyLeave = async (req, res) => {
             }).catch(err => console.error("[Notification] LEAVE_REQUESTED failed:", err));
         }
     } catch (error) {
+        if (error.statusCode === 409) {
+            return res.status(409).json({ message: error.message });
+        }
+        // DB exclusion constraint tripped (race between two simultaneous submissions)
+        if (isOverlapViolation(error)) {
+            const conflict = await findConflict(userId, from, to).catch(() => null);
+            return res.status(409).json({
+                message: conflict
+                    ? `Leave overlaps with an approved leave from ${fmtDate(conflict.fromDate)} to ${fmtDate(conflict.toDate)}.`
+                    : "Leave overlaps with an already approved leave for these dates.",
+            });
+        }
         console.error("Apply leave error:", error);
         res.status(500).json({ message: "Failed to apply for leave" });
     }
@@ -155,7 +240,7 @@ const getPendingLeaves = async (req, res) => {
 };
 
 // Get All Leaves (Admin)
-const getAllLeaves = async (req, res) => {
+const getAllLeaves = async (_req, res) => {
     try {
         const leaves = await prisma.leave.findMany({
             include: {
@@ -208,28 +293,52 @@ const approveLeave = async (req, res) => {
             return res.status(403).json({ message: "You are not an approver for this leave" });
         }
 
-        // Update approval
-        await prisma.leaveApproval.update({
-            where: { id: approval.id },
-            data: { status: 'APPROVED', comments }
-        });
+        // Atomic: update approval + check all approved + overlap guard + status update in one tx.
+        // Without a transaction, two concurrent approvers could both pass the overlap check and
+        // both set the leave to APPROVED before either sees the other's write.
+        let allApproved = false;
+        await prisma.$transaction(async (tx) => {
+            await tx.leaveApproval.update({
+                where: { id: approval.id },
+                data: { status: 'APPROVED', comments }
+            });
 
-        // Check if all approvals are done
-        const allApprovals = await prisma.leaveApproval.findMany({
-            where: { leaveId: id }
-        });
+            const allApprovals = await tx.leaveApproval.findMany({
+                where: { leaveId: id }
+            });
 
-        const allApproved = allApprovals.every(a => a.status === 'APPROVED');
+            allApproved = allApprovals.every(a => a.status === 'APPROVED');
 
-        if (allApproved) {
-            await prisma.leave.update({
+            if (!allApproved) return;
+
+            const overlap = await tx.leave.findFirst({
+                where: {
+                    userId: leave.userId,
+                    status: "APPROVED",
+                    id: { not: id },
+                    fromDate: { lte: leave.toDate },
+                    toDate: { gte: leave.fromDate }
+                },
+                select: { fromDate: true, toDate: true }
+            });
+
+            if (overlap) {
+                const fmt = (d) => new Date(d).toLocaleDateString("en-IN", { dateStyle: "medium" });
+                throw Object.assign(
+                    new Error(`Cannot approve: an overlapping leave (${fmt(overlap.fromDate)} – ${fmt(overlap.toDate)}) is already approved for this employee.`),
+                    { statusCode: 409 }
+                );
+            }
+
+            await tx.leave.update({
                 where: { id },
                 data: { status: 'APPROVED' }
             });
 
-            // Create attendance records (LEAVE or WFH) for the period
-            await createAttendanceForLeave(leave);
-        }
+            // Inside the transaction: if attendance creation fails, the whole tx rolls back —
+            // leave stays PENDING and no partial state is committed.
+            await createAttendanceForLeave(leave, tx);
+        });
 
         res.json({ message: "Leave approved successfully" });
 
@@ -244,6 +353,21 @@ const approveLeave = async (req, res) => {
             }).catch(err => console.error("[Notification] LEAVE_APPROVED failed:", err));
         }
     } catch (error) {
+        // Overlap thrown inside the transaction (application-level guard)
+        if (error.statusCode === 409) {
+            return res.status(409).json({ message: error.message });
+        }
+        // DB exclusion constraint tripped (belt-and-suspenders)
+        if (isOverlapViolation(error)) {
+            const conflict = leave
+                ? await findConflict(leave.userId, leave.fromDate, leave.toDate, leave.id).catch(() => null)
+                : null;
+            return res.status(409).json({
+                message: conflict
+                    ? `Cannot approve: an overlapping leave (${fmtDate(conflict.fromDate)} – ${fmtDate(conflict.toDate)}) was already approved for this employee.`
+                    : "Cannot approve: an overlapping leave is already approved for this employee.",
+            });
+        }
         console.error("Approve leave error:", error);
         res.status(500).json({ message: "Failed to approve leave" });
     }
@@ -302,28 +426,26 @@ const rejectLeave = async (req, res) => {
     }
 };
 
-// Helper: Create attendance records for approved leave
-const createAttendanceForLeave = async (leave) => {
+// Helper: Create attendance records for approved leave.
+// Must be called with the transaction client (tx) so failures roll back the approval too.
+const createAttendanceForLeave = async (leave, tx) => {
     const { userId, fromDate, toDate, leaveType } = leave;
     const current = new Date(fromDate);
     const end = new Date(toDate);
-    
+
     // AttendanceStatus enum only has WFH and LEAVE (not COMP_OFF)
     const attendanceStatus = leaveType === "WFH" ? "WFH" : "LEAVE";
 
     while (current <= end) {
-        try {
-            const dateOnly = new Date(current.getFullYear(), current.getMonth(), current.getDate());
+        const dateOnly = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate()));
 
-            await prisma.attendance.upsert({
-                where: { userId_date: { userId, date: dateOnly } },
-                update: { status: attendanceStatus },
-                create: { userId, date: dateOnly, status: attendanceStatus }
-            });
-        } catch (error) {
-            console.error("Error creating attendance for", current, error);
-        }
-        current.setDate(current.getDate() + 1);
+        await tx.attendance.upsert({
+            where: { userId_date: { userId, date: dateOnly } },
+            update: { status: attendanceStatus },
+            create: { userId, date: dateOnly, status: attendanceStatus },
+        });
+
+        current.setUTCDate(current.getUTCDate() + 1);
     }
 };
 
