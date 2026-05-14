@@ -124,6 +124,8 @@ app.use("/api/invoices",        require("./routes/invoice"));
 app.use("/api/salestrail",      require("./routes/salestrail"));
 app.use("/api/company-settings", require("./routes/companySettings"));
 app.use("/api/notifications",   require("./routes/notification"));
+app.use("/api/automations",     require("./routes/automation"));
+app.use("/api/whatsapp",        require("./routes/whatsapp"));
 
 // Global error handler — must be last middleware
 app.use((err, req, res, next) => {

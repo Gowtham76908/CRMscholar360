@@ -35,6 +35,10 @@ router.post("/merge", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(mergeLe
 // Get Lead Activities
 router.get("/:id/activities", leadController.getLeadActivities);
 
+// Smart follow-up suggestions
+router.get("/:id/suggestions", leadController.getLeadSuggestions);
+router.post("/:id/suggestions/dismiss", leadController.dismissLeadSuggestion);
+
 // Get Single Lead (must come after all fixed-path GET routes to avoid shadowing /stats, /export)
 router.get("/:id", leadController.getLead);
 

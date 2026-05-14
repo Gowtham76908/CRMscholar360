@@ -30,9 +30,12 @@ model User {
   lastSeen          DateTime?
   resetToken        String?
   resetTokenExpiry  DateTime?
-  activities     Activity[]
-  attendances    Attendance[]
-  leads          Lead[]
+  activities       Activity[]
+  attendances      Attendance[]
+  leads            Lead[]
+  whatsappMessages WhatsAppMessage[]
+  whatsappCampaigns WhatsAppCampaign[]
+  whatsappAutoReplies WhatsAppAutoReply[]
   taskComments   TaskComment[]
   leaves         Leave[]
   leaveApprovals LeaveApproval[] @relation("ApproverLeaves")
@@ -69,7 +72,8 @@ model Lead {
   assignedToId    String?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
-  score           Int         @default(0)
+  score            Int         @default(0)
+  scoreExplanation Json?
   category        String?
   firstResponseAt DateTime?
   workspaceId     String?
@@ -85,8 +89,56 @@ model Lead {
   workspace       Workspace?  @relation(fields: [workspaceId], references: [id])
   notes           Note[]
   tasks           Task[]
+  automationLogs  AutomationLog[]
+  whatsappMessages WhatsAppMessage[]
+  whatsappCampaignRecipients WhatsAppCampaignRecipient[]
+  whatsappOptIn   Boolean   @default(false)
+  whatsappOptInAt DateTime?
 
   @@index([phoneNormalized])
+}
+
+model AutomationRule {
+  id            String                @id @default(uuid())
+  name          String
+  description   String?
+  isActive      Boolean               @default(true)
+  triggerType   String                // LEAD_CREATED | STATUS_CHANGED | NO_ACTIVITY | LEAD_ASSIGNED
+  triggerConfig Json?                 // { status: "CONTACTED" } | { days: 1 }
+  conditions    AutomationCondition[]
+  actions       AutomationAction[]
+  logs          AutomationLog[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+}
+
+model AutomationCondition {
+  id       String         @id @default(uuid())
+  ruleId   String
+  field    String         // source | status | assignedTo
+  operator String         // equals | not_equals | is_empty | is_not_empty
+  value    String?
+  rule     AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+}
+
+model AutomationAction {
+  id     String         @id @default(uuid())
+  ruleId String
+  type   String         // ASSIGN_LEAD | CHANGE_STATUS | CREATE_TASK | CREATE_REMINDER | SEND_NOTIFICATION
+  config Json
+  order  Int            @default(0)
+  rule   AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+}
+
+model AutomationLog {
+  id        String         @id @default(uuid())
+  ruleId    String
+  leadId    String
+  status    String         // SUCCESS | FAILED | SKIPPED
+  details   Json?
+  createdAt DateTime       @default(now())
+  rule      AutomationRule @relation(fields: [ruleId], references: [id])
+  lead      Lead           @relation(fields: [leadId], references: [id])
 }
 
 model Note {
@@ -508,6 +560,30 @@ model CompanySettings {
   defaultTaxRate Float   @default(18)
   defaultNotes  String   @default("")
   updatedAt     DateTime @updatedAt
+}
+
+model WhatsAppMessage {
+  id              String    @id @default(uuid())
+  leadId          String
+  userId          String?
+  phone           String
+  direction       String    @default("OUTBOUND")  // OUTBOUND | INBOUND
+  templateName    String?
+  messageBody     String
+  status          String    @default("SENT")       // SENT | DELIVERED | READ | REPLIED | FAILED
+  watiMessageId   String?
+  replyText       String?
+  providerPayload Json?
+  sentAt          DateTime  @default(now())
+  deliveredAt     DateTime?
+  readAt          DateTime?
+  repliedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  lead            Lead      @relation(fields: [leadId], references: [id])
+  user            User?     @relation(fields: [userId], references: [id])
+
+  @@index([leadId])
+  @@index([watiMessageId])
 }
 
 model SalestrailCall {

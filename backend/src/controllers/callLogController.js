@@ -3,6 +3,7 @@ const logActivity = require("../utils/activityLogger");
 const normalizePhone = require("../utils/normalizePhone");
 const FormData = require("form-data");
 const axios = require("axios");
+const { updateLeadScoreFromCall } = require("../services/leadScoringService");
 
 // Initiate Click2Call via Greeter
 const initiateCall = async (req, res) => {
@@ -42,7 +43,7 @@ const initiateCall = async (req, res) => {
         const formData = new FormData();
         formData.append("user_id", process.env.GREETER_USER_ID);
         formData.append("customer_number", customerNumber);
-        formData.append("agent_number", user.phone);
+        formData.append("agen_number", user.phone);
         formData.append("number", process.env.GREETER_NUMBER);
         formData.append("Customer_CRM_ID", leadId);
 
@@ -309,6 +310,9 @@ const transcribeCall = async (req, res) => {
             }
         });
 
+        // Update lead cold score based on AI analysis
+        const newScore = await updateLeadScoreFromCall(callLog.leadId, result);
+
         // Log activity
         await logActivity({
             leadId: callLog.leadId,
@@ -318,7 +322,8 @@ const transcribeCall = async (req, res) => {
                 callLogId,
                 tone: result.tone,
                 sentiment: result.sentiment,
-                category: result.category
+                category: result.category,
+                newScore,
             }
         });
 
@@ -463,6 +468,9 @@ const uploadAndTranscribe = async (req, res) => {
             }
         });
 
+        // Update lead cold score based on AI analysis
+        const newScore = await updateLeadScoreFromCall(leadId, result);
+
         await logActivity({
             leadId,
             userId,
@@ -473,6 +481,7 @@ const uploadAndTranscribe = async (req, res) => {
                 tone: result.tone,
                 sentiment: result.sentiment,
                 category: result.category,
+                newScore,
             }
         });
 

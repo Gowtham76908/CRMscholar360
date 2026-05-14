@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, UserCog, CheckSquare, Settings, Puzzle, BarChart, Building, MessageSquare, Clock, Calendar, LogOut, Trophy, SearchCheck, Linkedin, KanbanSquare, Zap, Receipt, PhoneCall } from "lucide-react";
+import { LayoutDashboard, Users, UserCog, CheckSquare, Settings, Puzzle, BarChart, Building, MessageSquare, Clock, Calendar, LogOut, Trophy, SearchCheck, Linkedin, KanbanSquare, Zap, Receipt, PhoneCall, Bot } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../lib/utils";
 import { useAuth } from "../context/AuthContext";
@@ -22,6 +22,7 @@ const sidebarItems = [
     { icon: Calendar, label: "Leave", path: "/leave" },
     { icon: Receipt, label: "Invoices & Billing", path: "/invoices", adminOnly: true },
     { icon: PhoneCall, label: "Salestrail Calls",  path: "/salestrail", adminOnly: true },
+    { icon: Bot,    label: "Automations",  path: "/automations",  adminOnly: true },
     { icon: Puzzle, label: "Integrations", path: "/integrations" },
     { icon: Settings, label: "Settings", path: "/settings" },
 ];

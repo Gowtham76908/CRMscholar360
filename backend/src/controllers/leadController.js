@@ -5,6 +5,8 @@ const { createCommission } = require("../services/commissionService");
 const leadService = require("../services/leadService");
 const { getLeadsSchema } = require("../validations/lead.validation");
 const normalizePhone = require("../utils/normalizePhone");
+const { runRulesForLead } = require("../services/automationEngine");
+const { getSuggestionsForLead, dismissSuggestion } = require("../services/followUpSuggestionService");
 
 // Get Leads
 const getLeads = async (req, res) => {
@@ -90,6 +92,9 @@ const createLead = async (req, res) => {
             metadata: { source, score, category }
         });
 
+        // Fire automation rules async — don't block the response
+        runRulesForLead("LEAD_CREATED", newLead).catch(console.error);
+
         res.status(201).json({ message: "Lead created successfully", lead: newLead });
     } catch (error) {
         res.status(500).json({ message: "Error creating lead", error: error.message });
@@ -139,6 +144,12 @@ const updateLead = async (req, res) => {
                 changes: req.body
             }
         });
+
+        // Fire automation rules async — don't block the response
+        if (status && status !== currentLead.status) {
+            runRulesForLead("STATUS_CHANGED", updatedLead, { prevStatus: currentLead.status, newStatus: status }).catch(console.error);
+        }
+        runRulesForLead("LEAD_ASSIGNED", updatedLead).catch(console.error);
 
         // Trigger Commission if status changed to CONVERTED
         if (status === "CONVERTED" && currentLead.status !== "CONVERTED") {
@@ -596,6 +607,28 @@ const getDashboardStats = async (req, res) => {
     }
 };
 
+const getLeadSuggestions = async (req, res) => {
+    try {
+        const suggestions = await getSuggestionsForLead(req.params.id);
+        res.json(suggestions);
+    } catch (error) {
+        console.error("Error fetching suggestions:", error);
+        res.status(500).json({ message: "Error fetching suggestions", error: error.message });
+    }
+};
+
+const dismissLeadSuggestion = async (req, res) => {
+    try {
+        const { key } = req.body;
+        if (!key) return res.status(400).json({ message: "key is required" });
+        await dismissSuggestion(req.params.id, key, req.user.userId);
+        res.json({ dismissed: true });
+    } catch (error) {
+        console.error("Error dismissing suggestion:", error);
+        res.status(500).json({ message: "Error dismissing suggestion", error: error.message });
+    }
+};
+
 module.exports = {
     getLeads,
     getLead,
@@ -607,5 +640,7 @@ module.exports = {
     checkDuplicate,
     mergeLeads,
     getLeadActivities,
-    getDashboardStats
+    getDashboardStats,
+    getLeadSuggestions,
+    dismissLeadSuggestion,
 };

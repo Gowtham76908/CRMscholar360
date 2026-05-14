@@ -11,6 +11,8 @@ import {
 import { Modal } from "../components/Modal";
 import AddTaskForm from "../components/AddTaskForm";
 import LeadSidebar from "../components/lead/LeadSidebar";
+import SmartSuggestions from "../components/lead/SmartSuggestions";
+import WhatsAppModal from "../components/lead/WhatsAppModal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -44,6 +46,10 @@ const ACTION_CONFIG = {
     TASK_COMPLETED: { icon: "✓", color: "text-green-600",  bg: "bg-green-50 border-green-100", label: "Task completed" },
     REMINDER_SET:   { icon: "⏰", color: "text-orange-500", bg: "bg-orange-50 border-orange-100",label: "Reminder set" },
     ASSIGNED:       { icon: "→", color: "text-violet-500", bg: "bg-violet-50 border-violet-100",label: "Assigned" },
+    WHATSAPP_SENT:  { icon: "→", color: "text-emerald-500", bg: "bg-emerald-50 border-emerald-100", label: "WhatsApp sent" },
+    WHATSAPP_REPLY: { icon: "←", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100", label: "WhatsApp reply" },
+    CALL_INITIATED: { icon: "📞", color: "text-green-500",  bg: "bg-green-50 border-green-100",  label: "Call initiated" },
+    CALL_COMPLETED: { icon: "📞", color: "text-green-600",  bg: "bg-green-50 border-green-100",  label: "Call completed" },
     DEFAULT:        { icon: "·", color: "text-gray-400",   bg: "bg-gray-50 border-gray-100",   label: "Activity" },
 };
 
@@ -160,13 +166,22 @@ function TimelineItem({ item }) {
     );
 }
 
-function CallItem({ call }) {
+function CallItem({ call, leadId }) {
     const [expanded, setExpanded] = useState(false);
+    const queryClient = useQueryClient();
     const statusColor = {
         COMPLETED: "bg-green-100 text-green-700",
         MISSED: "bg-red-100 text-red-700",
         INITIATED: "bg-blue-100 text-blue-700",
     }[call.callStatus] ?? "bg-gray-100 text-gray-600";
+
+    const transcribe = useMutation({
+        mutationFn: () => api.post(`/calls/transcribe/${call.id}`),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["lead-calls", leadId] });
+            queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+        },
+    });
 
     return (
         <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -184,6 +199,9 @@ function CallItem({ call }) {
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${statusColor}`}>
                                 {call.callStatus ?? "—"}
                             </span>
+                            {call.isTranscribed && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">AI Analysed</span>
+                            )}
                         </div>
                         <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500">
                             <span className="flex items-center gap-1">
@@ -200,15 +218,43 @@ function CallItem({ call }) {
             {expanded && (
                 <div className="px-4 pb-4 pt-1 border-t border-gray-100 bg-gray-50 space-y-3">
                     {call.recordingUrl && (
-                        <a href={call.recordingUrl} target="_blank" rel="noopener noreferrer"
-                           className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
-                            <Play className="h-3 w-3" /> Play Recording
-                        </a>
+                        <div className="flex items-center gap-3 flex-wrap">
+                            <a href={call.recordingUrl} target="_blank" rel="noopener noreferrer"
+                               className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                                <Play className="h-3 w-3" /> Play Recording
+                            </a>
+                            {!call.isTranscribed && (
+                                <button
+                                    onClick={() => transcribe.mutate()}
+                                    disabled={transcribe.isPending}
+                                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-600 hover:text-violet-800 disabled:opacity-50"
+                                >
+                                    {transcribe.isPending
+                                        ? <><Loader2 className="h-3 w-3 animate-spin" /> Analysing…</>
+                                        : <><FileText className="h-3 w-3" /> Transcribe & Analyse</>}
+                                </button>
+                            )}
+                        </div>
+                    )}
+                    {transcribe.isError && (
+                        <p className="text-xs text-red-500">{transcribe.error?.response?.data?.message ?? "Transcription failed"}</p>
                     )}
                     {call.summary && (
                         <div>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">AI Summary</p>
                             <p className="text-sm text-gray-700 leading-relaxed">{call.summary}</p>
+                        </div>
+                    )}
+                    {call.feedback && (
+                        <div>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Feedback</p>
+                            <p className="text-xs text-gray-600 leading-relaxed">{call.feedback}</p>
+                        </div>
+                    )}
+                    {call.conclusion && (
+                        <div>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Conclusion</p>
+                            <p className="text-xs text-gray-600 leading-relaxed">{call.conclusion}</p>
                         </div>
                     )}
                     {call.plainText && (
@@ -218,10 +264,12 @@ function CallItem({ call }) {
                         </div>
                     )}
                     {call.sentiment && (
-                        <div className="flex gap-4 text-xs">
-                            {call.sentiment && <span className="text-gray-500">Sentiment: <strong className="text-gray-800">{call.sentiment}</strong></span>}
+                        <div className="flex flex-wrap gap-3 text-xs">
+                            <span className="text-gray-500">Sentiment: <strong className="text-gray-800">{call.sentiment}</strong></span>
                             {call.tone && <span className="text-gray-500">Tone: <strong className="text-gray-800">{call.tone}</strong></span>}
                             {call.urgency && <span className="text-gray-500">Urgency: <strong className="text-gray-800">{call.urgency}</strong></span>}
+                            {call.emotion && <span className="text-gray-500">Emotion: <strong className="text-gray-800">{call.emotion}</strong></span>}
+                            {call.callCategory && <span className="text-gray-500">Category: <strong className="text-gray-800">{call.callCategory}</strong></span>}
                         </div>
                     )}
                     {!call.recordingUrl && !call.summary && !call.plainText && (
@@ -307,6 +355,7 @@ export default function LeadDetail() {
     const [activeTab, setActiveTab] = useState("timeline");
     const [noteText, setNoteText] = useState("");
     const [showTaskModal, setShowTaskModal] = useState(false);
+    const [showWaModal, setShowWaModal] = useState(false);
     const noteRef = useRef(null);
 
     // ─── Queries (all parallel) ───────────────────────────────────────────────
@@ -323,13 +372,13 @@ export default function LeadDetail() {
 
     const { data: notes = [], isLoading: notesLoading } = useQuery({
         queryKey: ["lead-notes", id],
-        queryFn: () => api.get(`/notes/leads/${id}/notes`).then(r => r.data),
+        queryFn: () => api.get(`/leads/${id}/notes`).then(r => r.data),
         enabled: !!lead,
     });
 
     const { data: callsData, isLoading: callsLoading } = useQuery({
         queryKey: ["lead-calls", id],
-        queryFn: () => api.get(`/call-logs/${id}`).then(r => r.data),
+        queryFn: () => api.get(`/calls/${id}`).then(r => r.data),
         enabled: !!lead,
     });
 
@@ -345,12 +394,18 @@ export default function LeadDetail() {
         enabled: !!lead,
     });
 
+    const { data: waMessages = [] } = useQuery({
+        queryKey: ["lead-whatsapp", id],
+        queryFn: () => api.get(`/whatsapp/${id}/messages`).then(r => r.data),
+        enabled: !!lead,
+    });
+
     const calls = Array.isArray(callsData) ? callsData : (callsData?.data ?? []);
     const tasks = tasksData?.data ?? [];
 
     // ─── Mutations ────────────────────────────────────────────────────────────
     const addNote = useMutation({
-        mutationFn: (content) => api.post(`/notes/leads/${id}/notes`, { content }),
+        mutationFn: (content) => api.post(`/leads/${id}/notes`, { content }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["lead-notes", id] });
             queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
@@ -364,12 +419,13 @@ export default function LeadDetail() {
         addNote.mutate(noteText.trim());
     };
 
-    // ─── Timeline: merge activities + notes + calls ───────────────────────────
+    // ─── Timeline: merge activities + notes + calls + whatsapp ───────────────
     const timelineGroups = useMemo(() => {
         const items = [
             ...activities.map(a => ({ ...a, _type: "activity", _date: new Date(a.createdAt) })),
             ...notes.map(n => ({ ...n, _type: "note", action: "NOTE_ADDED", _date: new Date(n.createdAt) })),
             ...calls.map(c => ({ ...c, _type: "call", action: "CALL_MADE", _date: new Date(c.createdAt) })),
+            ...waMessages.map(w => ({ ...w, _type: "whatsapp", action: w.direction === "INBOUND" ? "WHATSAPP_REPLY" : "WHATSAPP_SENT", _date: new Date(w.createdAt) })),
         ].sort((a, b) => b._date - a._date);
 
         const groups = new Map();
@@ -383,14 +439,42 @@ export default function LeadDetail() {
 
     // ─── Initiating call via click2call ──────────────────────────────────────
     const initiateCall = useMutation({
-        mutationFn: () => api.post("/call-logs/click2call", {
+        mutationFn: () => api.post("/calls/click2call", {
             leadId: id,
             customerNumber: lead?.phone,
         }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["lead-calls", id] });
         },
+        onError: (err) => {
+            const msg = err?.response?.data?.message || err.message || "Failed to initiate call";
+            alert(`Call failed: ${msg}`);
+        },
     });
+
+    // ─── Suggestion CTA handler ───────────────────────────────────────────────
+    const handleSuggestionAction = (ctaAction, currentLead) => {
+        switch (ctaAction) {
+            case "call":
+                initiateCall.mutate();
+                break;
+            case "whatsapp":
+                if (currentLead?.phone) window.open(`https://wa.me/${currentLead.phone.replace(/\D/g, "")}`, "_blank");
+                break;
+            case "email":
+                if (currentLead?.email) window.open(`mailto:${currentLead.email}`, "_blank");
+                break;
+            case "note":
+                setActiveTab("notes");
+                setTimeout(() => noteRef.current?.focus(), 100);
+                break;
+            case "tasks":
+                setActiveTab("tasks");
+                break;
+            default:
+                break;
+        }
+    };
 
     // ─── Loading / error states ───────────────────────────────────────────────
     if (leadLoading) {
@@ -480,7 +564,7 @@ export default function LeadDetail() {
                 <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
                     {lead.phone && (
                         <button
-                            onClick={() => initiateCall.mutate()}
+                            onClick={() => { console.log("Call button clicked, phone:", lead?.phone); initiateCall.mutate(); }}
                             disabled={initiateCall.isPending || !lead.phone}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50"
                         >
@@ -491,13 +575,12 @@ export default function LeadDetail() {
                         </button>
                     )}
                     {lead.phone && (
-                        <a
-                            href={`https://wa.me/${lead.phone?.replace(/\D/g, "")}`}
-                            target="_blank" rel="noopener noreferrer"
+                        <button
+                            onClick={() => setShowWaModal(true)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
                         >
                             <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
-                        </a>
+                        </button>
                     )}
                     {lead.email && (
                         <a href={`mailto:${lead.email}`}
@@ -521,6 +604,9 @@ export default function LeadDetail() {
                     )}
                 </div>
             </div>
+
+            {/* ── Smart Suggestions ─────────────────────────────────────────── */}
+            <SmartSuggestions leadId={id} lead={lead} onAction={handleSuggestionAction} />
 
             {/* ── Main 2-col layout ──────────────────────────────────────────── */}
             <div className="flex gap-5 items-start">
@@ -593,6 +679,43 @@ export default function LeadDetail() {
                                                                 </div>
                                                             </div>
                                                         </div>
+                                                    ) : item._type === "whatsapp" ? (
+                                                        <div key={item.id} className="flex gap-3">
+                                                            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-xs">
+                                                                💬
+                                                            </div>
+                                                            <div className="flex-1 pb-3 border-b border-gray-100 last:border-0">
+                                                                <div className="flex items-start justify-between mb-1">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <p className="text-sm font-semibold text-gray-800">
+                                                                            {item.direction === "INBOUND" ? "← Received" : "→ Sent"}
+                                                                        </p>
+                                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                                                                            item.status === "READ"      ? "bg-blue-50 text-blue-600" :
+                                                                            item.status === "DELIVERED" ? "bg-emerald-50 text-emerald-600" :
+                                                                            item.status === "REPLIED"   ? "bg-violet-50 text-violet-600" :
+                                                                            item.status === "FAILED"    ? "bg-red-50 text-red-600" :
+                                                                            "bg-gray-50 text-gray-500"
+                                                                        }`}>
+                                                                            {item.status}
+                                                                        </span>
+                                                                    </div>
+                                                                    <span className="text-[11px] text-gray-400 flex-shrink-0 ml-2">{relTime(item.createdAt)}</span>
+                                                                </div>
+                                                                <div className={`inline-block max-w-[85%] text-sm px-3 py-2 rounded-2xl ${
+                                                                    item.direction === "INBOUND"
+                                                                        ? "bg-gray-100 text-gray-800 rounded-tl-sm"
+                                                                        : "bg-emerald-500 text-white rounded-tr-sm"
+                                                                }`}>
+                                                                    {item.messageBody}
+                                                                </div>
+                                                                {item.replyText && item.direction === "OUTBOUND" && (
+                                                                    <div className="mt-1.5 inline-block max-w-[85%] text-sm px-3 py-2 rounded-2xl bg-gray-100 text-gray-800 rounded-tl-sm">
+                                                                        ← {item.replyText}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     ) : (
                                                         <TimelineItem key={item.id} item={item} />
                                                     )
@@ -663,7 +786,7 @@ export default function LeadDetail() {
                                     No call history for this lead.
                                 </div>
                             ) : (
-                                calls.map(call => <CallItem key={call.id} call={call} />)
+                                calls.map(call => <CallItem key={call.id} call={call} leadId={id} />)
                             )}
                         </div>
                     )}
@@ -713,6 +836,14 @@ export default function LeadDetail() {
                     }}
                 />
             </Modal>
+
+            {showWaModal && (
+                <WhatsAppModal
+                    leadId={id}
+                    lead={lead}
+                    onClose={() => setShowWaModal(false)}
+                />
+            )}
         </div>
     );
 }

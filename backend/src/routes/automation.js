@@ -1,0 +1,17 @@
+const express = require("express");
+const router = express.Router();
+const ctrl = require("../controllers/automationController");
+const authMiddleware = require("../middleware/authMiddleware");
+const roleMiddleware = require("../middleware/roleMiddleware");
+
+router.use(authMiddleware);
+router.use(roleMiddleware(["ADMIN", "SUPER_ADMIN"]));
+
+router.get("/",           ctrl.getRules);
+router.post("/",          ctrl.createRule);
+router.patch("/:id",      ctrl.updateRule);
+router.delete("/:id",     ctrl.deleteRule);
+router.patch("/:id/toggle", ctrl.toggleRule);
+router.get("/:id/logs",   ctrl.getRuleLogs);
+
+module.exports = router;

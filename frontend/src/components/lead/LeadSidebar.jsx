@@ -123,12 +123,27 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId 
                     <span className={`text-3xl font-black ${scoreConf.text}`}>{lead.score ?? 0}</span>
                     <span className="text-xs text-gray-400 mb-1">/ 100</span>
                 </div>
-                <div className="w-full bg-white rounded-full h-1.5 border border-gray-200">
+                <div className="w-full bg-white rounded-full h-1.5 border border-gray-200 mb-3">
                     <div
                         className={`h-1.5 rounded-full transition-all ${scoreConf.bar}`}
                         style={{ width: `${Math.min(100, lead.score ?? 0)}%` }}
                     />
                 </div>
+                {lead.scoreExplanation?.factors?.length > 0 && (
+                    <ul className="space-y-1">
+                        {lead.scoreExplanation.factors.map((f, i) => (
+                            <li key={i} className="flex items-center gap-1.5 text-xs text-gray-600">
+                                <span className={`font-bold ${f.direction === "up" ? "text-green-600" : "text-red-500"}`}>
+                                    {f.direction === "up" ? "↑" : "↓"}
+                                </span>
+                                {f.label}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+                {!lead.scoreExplanation?.factors?.length && (
+                    <p className="text-[11px] text-gray-400">Transcribe a call to see score breakdown</p>
+                )}
             </div>
 
             {/* Lead Metadata */}

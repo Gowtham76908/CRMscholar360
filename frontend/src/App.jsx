@@ -28,6 +28,7 @@ import TaskDetail from "./pages/TaskDetail";
 import LeadDetail from "./pages/LeadDetail";
 import InvoiceBilling from "./pages/InvoiceBilling";
 import SalestrailCalls from "./pages/SalestrailCalls";
+import Automations from "./pages/Automations";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -79,6 +80,7 @@ function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/invoices" element={<InvoiceBilling />} />
             <Route path="/salestrail" element={<SalestrailCalls />} />
+            <Route path="/automations" element={<Automations />} />
             <Route path="*" element={<NotFound />} />
           </Route>
 
