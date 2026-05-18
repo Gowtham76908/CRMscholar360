@@ -1,18 +1,24 @@
 import { useState, useMemo, useRef } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+import { LeadDetailSkeleton } from "../components/ui/Skeleton";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext";
 import api from "../api/axios";
 import {
     ArrowLeft, Phone, Mail, MessageSquare, Plus, CheckCircle, Circle,
     Calendar, User, Loader2, PhoneCall, FileText, Activity,
-    ChevronDown, ChevronRight, Play, Clock, AlertCircle,
+    ChevronDown, ChevronRight, Play, Clock, AlertCircle, ChevronLeft,
+    Zap, Users, Save, SlidersHorizontal, Eye, MousePointerClick,
 } from "lucide-react";
 import { Modal } from "../components/Modal";
 import AddTaskForm from "../components/AddTaskForm";
 import LeadSidebar from "../components/lead/LeadSidebar";
 import SmartSuggestions from "../components/lead/SmartSuggestions";
 import WhatsAppModal from "../components/lead/WhatsAppModal";
+import PostCallPanel from "../components/lead/PostCallPanel";
+import ComposeEmailModal from "../components/ComposeEmailModal";
+import { useLeadPresence } from "../hooks/useLeadPresence";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -48,16 +54,19 @@ const ACTION_CONFIG = {
     ASSIGNED:       { icon: "→", color: "text-violet-500", bg: "bg-violet-50 border-violet-100",label: "Assigned" },
     WHATSAPP_SENT:  { icon: "→", color: "text-emerald-500", bg: "bg-emerald-50 border-emerald-100", label: "WhatsApp sent" },
     WHATSAPP_REPLY: { icon: "←", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100", label: "WhatsApp reply" },
+    EMAIL_SENT:     { icon: "✉", color: "text-blue-500",    bg: "bg-blue-50 border-blue-100",       label: "Email sent" },
     CALL_INITIATED: { icon: "📞", color: "text-green-500",  bg: "bg-green-50 border-green-100",  label: "Call initiated" },
     CALL_COMPLETED: { icon: "📞", color: "text-green-600",  bg: "bg-green-50 border-green-100",  label: "Call completed" },
     DEFAULT:        { icon: "·", color: "text-gray-400",   bg: "bg-gray-50 border-gray-100",   label: "Activity" },
 };
 
-const TABS = [
-    { id: "timeline", label: "Timeline",     icon: Activity },
-    { id: "notes",    label: "Notes",        icon: FileText },
-    { id: "calls",    label: "Call History", icon: PhoneCall },
-    { id: "tasks",    label: "Tasks",        icon: CheckCircle },
+const FILTER_PILLS = [
+    { id: "all",      label: "All" },
+    { id: "note",     label: "Notes" },
+    { id: "call",     label: "Calls" },
+    { id: "whatsapp", label: "WhatsApp" },
+    { id: "email",    label: "Email" },
+    { id: "activity", label: "Activity" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -139,8 +148,105 @@ function StatusDropdown({ leadId, currentStatus }) {
     );
 }
 
+const STATUS_PILL = {
+    NEW:       "bg-blue-100 text-blue-700",
+    CONTACTED: "bg-indigo-100 text-indigo-700",
+    FOLLOW_UP: "bg-amber-100 text-amber-700",
+    CONVERTED: "bg-green-100 text-green-700",
+    LOST:      "bg-red-100 text-red-700",
+};
+
 function TimelineItem({ item }) {
     const cfg = ACTION_CONFIG[item.action] ?? ACTION_CONFIG.DEFAULT;
+    const meta = item.metadata ?? {};
+
+    const renderDetail = () => {
+        if (item.action === "STATUS_CHANGED" && meta.newStatus) {
+            return (
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                    {meta.prevStatus && (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_PILL[meta.prevStatus] ?? "bg-gray-100 text-gray-600"}`}>
+                            {meta.prevStatus?.replace("_", " ")}
+                        </span>
+                    )}
+                    <span className="text-[10px] text-gray-400">→</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_PILL[meta.newStatus] ?? "bg-gray-100 text-gray-600"}`}>
+                        {meta.newStatus?.replace("_", " ")}
+                    </span>
+                </div>
+            );
+        }
+        if (["CALL_MADE", "CALL_INITIATED", "CALL_COMPLETED"].includes(item.action)) {
+            const outcomeColor = {
+                CONNECTED: "bg-green-100 text-green-700",
+                NO_ANSWER: "bg-amber-100 text-amber-700",
+                VOICEMAIL: "bg-blue-100 text-blue-700",
+                WRONG_NUM: "bg-red-100 text-red-700",
+            }[meta.outcome] ?? "bg-gray-100 text-gray-600";
+            return (
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    {meta.duration && (
+                        <span className="text-xs text-gray-500 flex items-center gap-1">
+                            <Clock className="h-3 w-3" />{fmtDuration(meta.duration)}
+                        </span>
+                    )}
+                    {meta.outcome && (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${outcomeColor}`}>
+                            {meta.outcome?.replace("_", " ")}
+                        </span>
+                    )}
+                </div>
+            );
+        }
+        if (["WHATSAPP_SENT", "WHATSAPP_REPLY"].includes(item.action) && meta.message) {
+            return (
+                <p className="mt-1.5 text-xs text-gray-600 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1.5 line-clamp-2">
+                    {meta.message}
+                </p>
+            );
+        }
+        if (item._type === "email") {
+            return (
+                <div className="mt-1.5 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-2 space-y-1.5">
+                    <p className="text-xs font-semibold text-blue-800">To: {item.toEmail}</p>
+                    <p className="text-xs font-medium text-gray-700">{item.subject}</p>
+                    <p className="text-xs text-gray-500 line-clamp-2">{item.body}</p>
+                    <div className="flex items-center gap-3 pt-0.5">
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                            item.openedAt ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"
+                        }`}>
+                            <Eye className="h-2.5 w-2.5" />
+                            {item.openedAt
+                                ? `Opened ${relTime(item.openedAt)}`
+                                : "Not opened"}
+                        </span>
+                        {item.clickCount > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                                <MousePointerClick className="h-2.5 w-2.5" />
+                                {item.clickCount} click{item.clickCount !== 1 ? "s" : ""}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+        if (item.action === "NOTE_ADDED" && meta.content) {
+            return (
+                <p className="mt-1.5 text-xs text-gray-600 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 line-clamp-2">
+                    {meta.content}
+                </p>
+            );
+        }
+        if (item.action === "REMINDER_SET" && meta.remindAt) {
+            return (
+                <p className="mt-1 text-xs text-gray-500">
+                    Due {new Date(meta.remindAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                </p>
+            );
+        }
+        return null;
+    };
+
     return (
         <div className="flex gap-3">
             <div className={`flex-shrink-0 w-7 h-7 rounded-full border flex items-center justify-center text-sm ${cfg.bg} ${cfg.color}`}>
@@ -148,16 +254,12 @@ function TimelineItem({ item }) {
             </div>
             <div className="flex-1 min-w-0 pb-4 border-b border-gray-100 last:border-0">
                 <div className="flex items-start justify-between gap-2">
-                    <div>
+                    <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800">{cfg.label}</p>
                         {item.user?.name && (
                             <p className="text-xs text-gray-500">by {item.user.name}</p>
                         )}
-                        {item.metadata?.newStatus && (
-                            <p className="text-xs text-gray-500 mt-0.5">
-                                {item.metadata.prevStatus} → {item.metadata.newStatus}
-                            </p>
-                        )}
+                        {renderDetail()}
                     </div>
                     <span className="text-[11px] text-gray-400 flex-shrink-0">{relTime(item.createdAt)}</span>
                 </div>
@@ -281,7 +383,7 @@ function CallItem({ call, leadId }) {
     );
 }
 
-function TaskRow({ task, leadId }) {
+function TaskRow({ task, leadId, compact = false }) {
     const queryClient = useQueryClient();
     const toggle = useMutation({
         mutationFn: ({ id, status }) => api.patch(`/tasks/${id}/status`, { status }),
@@ -301,6 +403,34 @@ function TaskRow({ task, leadId }) {
     });
 
     const overdue = task.status !== "COMPLETED" && new Date(task.dueDate) < new Date();
+
+    if (compact) {
+        return (
+            <div className="flex items-center gap-2 py-1">
+                <button
+                    onClick={() => toggle.mutate({ id: task.id, status: task.status === "PENDING" ? "COMPLETED" : "PENDING" })}
+                    disabled={toggle.isPending}
+                    className={`flex-shrink-0 transition-transform hover:scale-110 disabled:opacity-50
+                        ${task.status === "COMPLETED" ? "text-green-500" : "text-gray-300 hover:text-indigo-400"}`}
+                >
+                    {toggle.isPending
+                        ? <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                        : task.status === "COMPLETED"
+                            ? <CheckCircle className="h-4 w-4" />
+                            : <Circle className="h-4 w-4" />}
+                </button>
+                <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-medium truncate ${task.status === "COMPLETED" ? "line-through text-gray-400" : overdue ? "text-red-600" : "text-gray-800"}`}>
+                        {task.title}
+                    </p>
+                    <p className={`text-[10px] ${overdue ? "text-red-500 font-semibold" : "text-gray-400"}`}>
+                        {overdue ? "Overdue · " : ""}
+                        {new Date(task.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-all group">
@@ -344,18 +474,118 @@ function TaskRow({ task, leadId }) {
     );
 }
 
+// ─── Custom Fields Panel ──────────────────────────────────────────────────────
+
+function CustomFieldsPanel({ leadId, initialValues }) {
+    const qc = useQueryClient();
+    const [editing, setEditing] = useState(false);
+    const [values, setValues] = useState({});
+
+    const { data: fieldDefs = [] } = useQuery({
+        queryKey: ["custom-fields"],
+        queryFn: () => api.get("/custom-fields").then(r => r.data),
+        staleTime: 5 * 60_000,
+    });
+
+    // Initialise local values when we enter edit mode
+    const handleEdit = () => {
+        setValues(initialValues || {});
+        setEditing(true);
+    };
+
+    const save = useMutation({
+        mutationFn: () => api.patch(`/leads/${leadId}/custom-fields`, { fields: values }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["lead", leadId] });
+            setEditing(false);
+        },
+        onError: () => toast.error("Failed to save custom fields"),
+    });
+
+    if (fieldDefs.length === 0) return null;
+
+    const displayValues = editing ? values : (initialValues || {});
+
+    return (
+        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-1.5">
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-gray-400" />
+                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Custom Fields</h3>
+                </div>
+                {!editing ? (
+                    <button onClick={handleEdit} className="text-xs text-indigo-500 hover:underline font-semibold">Edit</button>
+                ) : (
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setEditing(false)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                        <button
+                            onClick={() => save.mutate()}
+                            disabled={save.isPending}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-2 py-1 rounded-lg disabled:opacity-50"
+                        >
+                            {save.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                            Save
+                        </button>
+                    </div>
+                )}
+            </div>
+            <div className="space-y-2.5">
+                {fieldDefs.map(def => {
+                    const val = displayValues[def.fieldKey] ?? "";
+                    return (
+                        <div key={def.id}>
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">{def.name}</p>
+                            {!editing ? (
+                                <p className="text-sm text-gray-800">{val !== "" && val !== null && val !== undefined ? String(val) : <span className="text-gray-300">—</span>}</p>
+                            ) : def.type === "SELECT" ? (
+                                <select
+                                    className="w-full h-8 px-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                    value={values[def.fieldKey] ?? ""}
+                                    onChange={e => setValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
+                                >
+                                    <option value="">— Select —</option>
+                                    {(def.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                                </select>
+                            ) : def.type === "CHECKBOX" ? (
+                                <input
+                                    type="checkbox"
+                                    checked={!!values[def.fieldKey]}
+                                    onChange={e => setValues(v => ({ ...v, [def.fieldKey]: e.target.checked }))}
+                                    className="accent-indigo-600 h-4 w-4"
+                                />
+                            ) : (
+                                <input
+                                    type={def.type === "NUMBER" ? "number" : def.type === "DATE" ? "date" : "text"}
+                                    className="w-full h-8 px-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                    value={values[def.fieldKey] ?? ""}
+                                    onChange={e => setValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
+                                />
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function LeadDetail() {
     const { id } = useParams();
     const { user } = useAuth();
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(user?.role);
 
-    const [activeTab, setActiveTab] = useState("timeline");
     const [noteText, setNoteText] = useState("");
     const [showTaskModal, setShowTaskModal] = useState(false);
     const [showWaModal, setShowWaModal] = useState(false);
+    const [showPostCall, setShowPostCall] = useState(false);
+    const [showEmailModal, setShowEmailModal] = useState(false);
+    const [lastCallId, setLastCallId] = useState(null);
+    const [timelineFilter, setTimelineFilter] = useState("all");
     const noteRef = useRef(null);
 
     // ─── Queries (all parallel) ───────────────────────────────────────────────
@@ -370,7 +600,7 @@ export default function LeadDetail() {
         enabled: !!lead,
     });
 
-    const { data: notes = [], isLoading: notesLoading } = useQuery({
+    const { data: notes = [] } = useQuery({
         queryKey: ["lead-notes", id],
         queryFn: () => api.get(`/leads/${id}/notes`).then(r => r.data),
         enabled: !!lead,
@@ -394,14 +624,50 @@ export default function LeadDetail() {
         enabled: !!lead,
     });
 
+    const { data: leadNav } = useQuery({
+        queryKey: ["leads-nav"],
+        queryFn: () => api.get("/leads", { params: { limit: 500, fields: "id" } }).then(r => {
+            const list = r.data.data || r.data;
+            return Array.isArray(list) ? list.map(l => l.id) : [];
+        }),
+        staleTime: 60_000,
+    });
+
     const { data: waMessages = [] } = useQuery({
         queryKey: ["lead-whatsapp", id],
         queryFn: () => api.get(`/whatsapp/${id}/messages`).then(r => r.data),
         enabled: !!lead,
     });
 
+    const { data: emailLogs = [] } = useQuery({
+        queryKey: ["lead-emails", id],
+        queryFn: () => api.get(`/leads/${id}/emails`).then(r => r.data),
+        enabled: !!lead,
+    });
+
+    const { data: automationsRaw = [] } = useQuery({
+        queryKey: ["automations-active"],
+        queryFn: () => api.get("/automations").then(r => r.data.data || r.data || []),
+        staleTime: 60_000,
+        retry: false,
+        throwOnError: false,
+        enabled: !!lead,
+    });
+
+    const coViewers = useLeadPresence(id);
+
     const calls = Array.isArray(callsData) ? callsData : (callsData?.data ?? []);
     const tasks = tasksData?.data ?? [];
+    const activeAutomations = Array.isArray(automationsRaw) ? automationsRaw.filter(a => a.active) : [];
+    const navIdx    = leadNav ? leadNav.indexOf(id) : -1;
+    const prevLeadId = navIdx > 0 ? leadNav[navIdx - 1] : null;
+    const nextLeadId = navIdx >= 0 && navIdx < (leadNav?.length ?? 0) - 1 ? leadNav[navIdx + 1] : null;
+
+    // Team activity = activities done by someone other than the current user
+    const teamActivity = useMemo(() =>
+        activities.filter(a => a.user?.id && a.user.id !== user?.id).slice(0, 6),
+        [activities, user]
+    );
 
     // ─── Mutations ────────────────────────────────────────────────────────────
     const addNote = useMutation({
@@ -419,23 +685,26 @@ export default function LeadDetail() {
         addNote.mutate(noteText.trim());
     };
 
-    // ─── Timeline: merge activities + notes + calls + whatsapp ───────────────
+    // ─── Timeline: merge + filter ─────────────────────────────────────────────
     const timelineGroups = useMemo(() => {
-        const items = [
+        const allItems = [
             ...activities.map(a => ({ ...a, _type: "activity", _date: new Date(a.createdAt) })),
             ...notes.map(n => ({ ...n, _type: "note", action: "NOTE_ADDED", _date: new Date(n.createdAt) })),
             ...calls.map(c => ({ ...c, _type: "call", action: "CALL_MADE", _date: new Date(c.createdAt) })),
             ...waMessages.map(w => ({ ...w, _type: "whatsapp", action: w.direction === "INBOUND" ? "WHATSAPP_REPLY" : "WHATSAPP_SENT", _date: new Date(w.createdAt) })),
+            ...emailLogs.map(e => ({ ...e, _type: "email", action: "EMAIL_SENT", _date: new Date(e.createdAt) })),
         ].sort((a, b) => b._date - a._date);
 
+        const filtered = timelineFilter === "all" ? allItems : allItems.filter(i => i._type === timelineFilter);
+
         const groups = new Map();
-        items.forEach(item => {
+        filtered.forEach(item => {
             const key = dayLabel(item._date);
             if (!groups.has(key)) groups.set(key, []);
             groups.get(key).push(item);
         });
         return [...groups.entries()];
-    }, [activities, notes, calls]);
+    }, [activities, notes, calls, waMessages, emailLogs, timelineFilter]);
 
     // ─── Initiating call via click2call ──────────────────────────────────────
     const initiateCall = useMutation({
@@ -443,12 +712,15 @@ export default function LeadDetail() {
             leadId: id,
             customerNumber: lead?.phone,
         }),
-        onSuccess: () => {
+        onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ["lead-calls", id] });
+            const callId = data?.data?.callId ?? data?.data?.id ?? null;
+            setLastCallId(callId);
+            setTimeout(() => setShowPostCall(true), 3000);
         },
         onError: (err) => {
             const msg = err?.response?.data?.message || err.message || "Failed to initiate call";
-            alert(`Call failed: ${msg}`);
+            toast.error(`Call failed: ${msg}`);
         },
     });
 
@@ -459,17 +731,16 @@ export default function LeadDetail() {
                 initiateCall.mutate();
                 break;
             case "whatsapp":
-                if (currentLead?.phone) window.open(`https://wa.me/${currentLead.phone.replace(/\D/g, "")}`, "_blank");
+                if (currentLead?.phone) setShowWaModal(true);
                 break;
             case "email":
                 if (currentLead?.email) window.open(`mailto:${currentLead.email}`, "_blank");
                 break;
             case "note":
-                setActiveTab("notes");
                 setTimeout(() => noteRef.current?.focus(), 100);
                 break;
             case "tasks":
-                setActiveTab("tasks");
+                setShowTaskModal(true);
                 break;
             default:
                 break;
@@ -477,13 +748,7 @@ export default function LeadDetail() {
     };
 
     // ─── Loading / error states ───────────────────────────────────────────────
-    if (leadLoading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="h-7 w-7 animate-spin text-indigo-500" />
-            </div>
-        );
-    }
+    if (leadLoading) return <LeadDetailSkeleton />;
 
     if (leadError || !lead) {
         return (
@@ -495,22 +760,68 @@ export default function LeadDetail() {
         );
     }
 
+    const openTasks = tasks.filter(t => t.status !== "COMPLETED");
+
     return (
         <div className="space-y-5">
-            {/* Back nav */}
-            <Link to="/leads" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors font-medium">
-                <ArrowLeft className="h-4 w-4" /> Leads
-            </Link>
+            {/* Back nav + prev/next */}
+            <div className="flex items-center justify-between">
+                <Link to="/leads" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors font-medium">
+                    <ArrowLeft className="h-4 w-4" /> Leads
+                </Link>
+                {leadNav && leadNav.length > 0 && (
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => prevLeadId && navigate(`/leads/${prevLeadId}`)}
+                            disabled={!prevLeadId}
+                            title="Previous lead"
+                            className="h-7 w-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <span className="text-xs text-gray-400 font-medium px-1">
+                            {navIdx + 1} / {leadNav.length}
+                        </span>
+                        <button
+                            onClick={() => nextLeadId && navigate(`/leads/${nextLeadId}`)}
+                            disabled={!nextLeadId}
+                            title="Next lead"
+                            className="h-7 w-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </button>
+                    </div>
+                )}
+            </div>
 
             {/* ── Lead Header ───────────────────────────────────────────────── */}
             <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
+                {coViewers.length > 0 && (
+                    <div className="flex items-center gap-2 mb-3 px-0.5">
+                        <div className="flex -space-x-1.5">
+                            {coViewers.slice(0, 4).map((v) => (
+                                <div
+                                    key={v.userId}
+                                    title={`${v.userName} is also viewing`}
+                                    style={{ backgroundColor: v.avatarColor }}
+                                    className="h-6 w-6 rounded-full flex items-center justify-center text-[9px] font-black text-white ring-2 ring-white flex-shrink-0"
+                                >
+                                    {v.userName?.slice(0, 2).toUpperCase() ?? "?"}
+                                </div>
+                            ))}
+                        </div>
+                        <span className="text-[11px] text-gray-400">
+                            {coViewers.length === 1
+                                ? `${coViewers[0].userName} is also viewing`
+                                : `${coViewers.length} others viewing`}
+                        </span>
+                    </div>
+                )}
                 <div className="flex items-start gap-4">
-                    {/* Avatar */}
                     <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-sm">
                         <span className="text-lg font-black text-white">{initials(lead.name)}</span>
                     </div>
 
-                    {/* Name + meta */}
                     <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-1">
                             <h1 className="text-xl font-black text-gray-900 truncate">{lead.name}</h1>
@@ -561,39 +872,45 @@ export default function LeadDetail() {
                 </div>
 
                 {/* Quick action bar */}
-                <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
-                    {lead.phone && (
-                        <button
-                            onClick={() => { console.log("Call button clicked, phone:", lead?.phone); initiateCall.mutate(); }}
-                            disabled={initiateCall.isPending || !lead.phone}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50"
-                        >
-                            {initiateCall.isPending
-                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                : <Phone className="h-3.5 w-3.5" />}
-                            Call
-                        </button>
-                    )}
-                    {lead.phone && (
-                        <button
-                            onClick={() => setShowWaModal(true)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
-                        >
-                            <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
-                        </button>
-                    )}
-                    {lead.email && (
-                        <a href={`mailto:${lead.email}`}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all">
-                            <Mail className="h-3.5 w-3.5" /> Email
-                        </a>
-                    )}
+                <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center gap-2">
                     <button
-                        onClick={() => { setActiveTab("notes"); noteRef.current?.focus(); }}
+                        onClick={() => initiateCall.mutate()}
+                        disabled={initiateCall.isPending || !lead.phone}
+                        title={!lead.phone ? "No phone number on record" : "Initiate call"}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:shadow-none disabled:cursor-not-allowed"
+                    >
+                        {initiateCall.isPending
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <Phone className="h-3.5 w-3.5" />}
+                        Call
+                    </button>
+
+                    <button
+                        onClick={() => lead.phone ? setShowWaModal(true) : toast.warning("No phone number on record")}
+                        title={!lead.whatsappOptIn ? "Lead has not opted in to WhatsApp" : "Send WhatsApp message"}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow-sm transition-all relative"
+                    >
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        WhatsApp
+                        {!lead.whatsappOptIn && (
+                            <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-amber-400 border border-white" title="Not opted in" />
+                        )}
+                    </button>
+
+                    <button
+                        onClick={() => setShowEmailModal(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
+                    >
+                        <Mail className="h-3.5 w-3.5" /> Email
+                    </button>
+
+                    <button
+                        onClick={() => setTimeout(() => noteRef.current?.focus(), 100)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
                     >
                         <FileText className="h-3.5 w-3.5" /> Note
                     </button>
+
                     {isAdmin && (
                         <button
                             onClick={() => setShowTaskModal(true)}
@@ -602,37 +919,76 @@ export default function LeadDetail() {
                             <Plus className="h-3.5 w-3.5" /> Task
                         </button>
                     )}
+
+                    <div className="ml-auto flex items-center gap-3 text-[11px] text-gray-400">
+                        {calls.length > 0 && (
+                            <span className="flex items-center gap-1">
+                                <Phone className="h-3 w-3" />
+                                Last call {relTime(calls[0]?.createdAt)}
+                            </span>
+                        )}
+                        {lead.status === "FOLLOW_UP" && (
+                            <span className="flex items-center gap-1 text-amber-600 font-semibold">
+                                <Clock className="h-3 w-3" /> Follow-up needed
+                            </span>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {/* ── Smart Suggestions ─────────────────────────────────────────── */}
-            <SmartSuggestions leadId={id} lead={lead} onAction={handleSuggestionAction} />
+            {/* ── Deal Room split-pane ───────────────────────────────────────── */}
+            <div className="flex flex-col md:flex-row gap-5 items-start">
 
-            {/* ── Main 2-col layout ──────────────────────────────────────────── */}
-            <div className="flex gap-5 items-start">
-                {/* Left: tabbed content */}
-                <div className="flex-1 min-w-0 space-y-4">
-                    {/* Tab bar */}
-                    <div className="flex gap-1 bg-white border border-gray-200 rounded-xl p-1 shadow-sm">
-                        {TABS.map(({ id: tabId, label, icon: Icon }) => (
-                            <button
-                                key={tabId}
-                                onClick={() => setActiveTab(tabId)}
-                                className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all
-                                    ${activeTab === tabId
-                                        ? "bg-indigo-600 text-white shadow-sm"
-                                        : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"}`}
-                            >
-                                <Icon className="h-3.5 w-3.5" />
-                                <span className="hidden sm:inline">{label}</span>
-                            </button>
-                        ))}
-                    </div>
+                {/* ── LEFT: AI Context Bar + Timeline ───────────────────────── */}
+                <div className="flex-1 min-w-0 space-y-4 w-full">
 
-                    {/* ── TIMELINE tab ───────────────────────────────────────── */}
-                    {activeTab === "timeline" && (
-                        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-                            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Activity Timeline</h2>
+                    {/* AI Context Bar */}
+                    <SmartSuggestions leadId={id} lead={lead} onAction={handleSuggestionAction} />
+
+                    {/* Timeline card */}
+                    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+
+                        {/* Inline note compose */}
+                        <div className="p-4 border-b border-gray-100">
+                            <form onSubmit={handleNoteSubmit} className="flex gap-2 items-end">
+                                <textarea
+                                    ref={noteRef}
+                                    value={noteText}
+                                    onChange={e => setNoteText(e.target.value)}
+                                    onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleNoteSubmit(e); }}
+                                    placeholder="Add a note… (Ctrl+Enter to save)"
+                                    rows={2}
+                                    className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400"
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={addNote.isPending || !noteText.trim()}
+                                    className="flex-shrink-0 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-all"
+                                >
+                                    {addNote.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+                                </button>
+                            </form>
+                        </div>
+
+                        {/* Filter pills */}
+                        <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-1.5 flex-wrap">
+                            {FILTER_PILLS.map(f => (
+                                <button
+                                    key={f.id}
+                                    onClick={() => setTimelineFilter(f.id)}
+                                    className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-all ${
+                                        timelineFilter === f.id
+                                            ? "bg-indigo-600 text-white shadow-sm"
+                                            : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                    }`}
+                                >
+                                    {f.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Timeline content */}
+                        <div className="p-5">
                             {timelineGroups.length === 0 ? (
                                 <p className="text-sm text-gray-400 text-center py-8">No activity yet.</p>
                             ) : (
@@ -646,24 +1002,7 @@ export default function LeadDetail() {
                                             <div className="space-y-1">
                                                 {items.map((item) => (
                                                     item._type === "call" ? (
-                                                        <div key={item.id} className="flex gap-3">
-                                                            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-green-50 border border-green-100 flex items-center justify-center text-green-600 text-xs">
-                                                                📞
-                                                            </div>
-                                                            <div className="flex-1 pb-3 border-b border-gray-100 last:border-0">
-                                                                <div className="flex items-start justify-between">
-                                                                    <div>
-                                                                        <p className="text-sm font-semibold text-gray-800">
-                                                                            {item.callType ?? "Call"} · {fmtDuration(item.duration)}
-                                                                        </p>
-                                                                        {item.callStatus && (
-                                                                            <p className="text-xs text-gray-500">{item.callStatus}</p>
-                                                                        )}
-                                                                    </div>
-                                                                    <span className="text-[11px] text-gray-400">{relTime(item.createdAt)}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
+                                                        <CallItem key={item.id} call={item} leadId={id} />
                                                     ) : item._type === "note" ? (
                                                         <div key={item.id} className="flex gap-3">
                                                             <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-xs">
@@ -673,7 +1012,7 @@ export default function LeadDetail() {
                                                                 <div className="flex items-start justify-between">
                                                                     <div className="flex-1 min-w-0">
                                                                         <p className="text-sm font-semibold text-gray-800 mb-0.5">Note</p>
-                                                                        <p className="text-sm text-gray-600 line-clamp-2">{item.content}</p>
+                                                                        <p className="text-sm text-gray-600 line-clamp-3">{item.content}</p>
                                                                     </div>
                                                                     <span className="text-[11px] text-gray-400 flex-shrink-0 ml-2">{relTime(item.createdAt)}</span>
                                                                 </div>
@@ -726,103 +1065,111 @@ export default function LeadDetail() {
                                 </div>
                             )}
                         </div>
-                    )}
-
-                    {/* ── NOTES tab ──────────────────────────────────────────── */}
-                    {activeTab === "notes" && (
-                        <div className="space-y-3">
-                            {/* Inline add note */}
-                            <form onSubmit={handleNoteSubmit} className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-3">
-                                <textarea
-                                    ref={noteRef}
-                                    value={noteText}
-                                    onChange={e => setNoteText(e.target.value)}
-                                    onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleNoteSubmit(e); }}
-                                    placeholder="Add a note… (Ctrl+Enter to save)"
-                                    rows={3}
-                                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400"
-                                />
-                                <div className="flex justify-end">
-                                    <button
-                                        type="submit"
-                                        disabled={addNote.isPending || !noteText.trim()}
-                                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-all"
-                                    >
-                                        {addNote.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                                        Save Note
-                                    </button>
-                                </div>
-                            </form>
-
-                            {/* Notes list */}
-                            {notesLoading ? (
-                                <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
-                            ) : notes.length === 0 ? (
-                                <div className="text-center py-10 text-gray-400 text-sm bg-white border border-gray-200 rounded-xl">
-                                    No notes yet. Add one above.
-                                </div>
-                            ) : (
-                                notes.map(note => (
-                                    <div key={note.id} className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
-                                        <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{note.content}</p>
-                                        <p className="text-[11px] text-gray-400 mt-2">
-                                            {new Date(note.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                                            {" · "}
-                                            {new Date(note.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                                        </p>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    )}
-
-                    {/* ── CALLS tab ──────────────────────────────────────────── */}
-                    {activeTab === "calls" && (
-                        <div className="space-y-2.5">
-                            {callsLoading ? (
-                                <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
-                            ) : calls.length === 0 ? (
-                                <div className="text-center py-10 text-gray-400 text-sm bg-white border border-gray-200 rounded-xl">
-                                    No call history for this lead.
-                                </div>
-                            ) : (
-                                calls.map(call => <CallItem key={call.id} call={call} leadId={id} />)
-                            )}
-                        </div>
-                    )}
-
-                    {/* ── TASKS tab ──────────────────────────────────────────── */}
-                    {activeTab === "tasks" && (
-                        <div className="space-y-2.5">
-                            {isAdmin && (
-                                <button
-                                    onClick={() => setShowTaskModal(true)}
-                                    className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-gray-300 hover:border-indigo-400 hover:text-indigo-600 text-gray-500 rounded-xl text-sm font-semibold transition-all"
-                                >
-                                    <Plus className="h-4 w-4" /> Add Task
-                                </button>
-                            )}
-                            {tasksLoading ? (
-                                <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
-                            ) : tasks.length === 0 ? (
-                                <div className="text-center py-8 text-gray-400 text-sm bg-white border border-gray-200 rounded-xl">
-                                    No tasks linked to this lead.
-                                </div>
-                            ) : (
-                                tasks.map(task => <TaskRow key={task.id} task={task} leadId={id} />)
-                            )}
-                        </div>
-                    )}
+                    </div>
                 </div>
 
-                {/* Right: sticky sidebar */}
-                <div className="w-72 flex-shrink-0 sticky top-6">
+                {/* ── RIGHT: scrollable panel ────────────────────────────────── */}
+                <div className="w-full md:w-72 flex-shrink-0 md:sticky md:top-6 md:max-h-[calc(100vh-6rem)] md:overflow-y-auto space-y-4 pb-4">
+
+                    {/* Existing lead sidebar (contact, score, details, assigned, reminders, stats) */}
                     <LeadSidebar
                         lead={lead}
                         reminders={reminders}
                         remindersLoading={remindersLoading}
                         leadId={id}
                     />
+
+                    {/* ── Custom Fields ───────────────────────────────────────── */}
+                    <CustomFieldsPanel leadId={id} initialValues={lead.customFields} />
+
+                    {/* ── Open Tasks ──────────────────────────────────────────── */}
+                    <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+                                Tasks {openTasks.length > 0 && <span className="text-indigo-600">({openTasks.length})</span>}
+                            </h3>
+                            {isAdmin && (
+                                <button
+                                    onClick={() => setShowTaskModal(true)}
+                                    className="text-indigo-600 hover:text-indigo-800 transition-colors"
+                                    title="Add task"
+                                >
+                                    <Plus className="h-3.5 w-3.5" />
+                                </button>
+                            )}
+                        </div>
+                        {tasksLoading ? (
+                            <div className="flex justify-center py-2"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /></div>
+                        ) : openTasks.length === 0 ? (
+                            <p className="text-xs text-gray-400 text-center py-2">No open tasks</p>
+                        ) : (
+                            <div className="divide-y divide-gray-100">
+                                {openTasks.slice(0, 5).map(task => (
+                                    <TaskRow key={task.id} task={task} leadId={id} compact />
+                                ))}
+                            </div>
+                        )}
+                        {openTasks.length > 5 && (
+                            <p className="text-[10px] text-gray-400 text-center mt-2">+{openTasks.length - 5} more tasks</p>
+                        )}
+                    </div>
+
+                    {/* ── Related Team Activity ────────────────────────────────── */}
+                    {teamActivity.length > 0 && (
+                        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                            <div className="flex items-center gap-1.5 mb-3">
+                                <Users className="h-3.5 w-3.5 text-gray-400" />
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Team Activity</h3>
+                            </div>
+                            <div className="space-y-3">
+                                {teamActivity.map(a => {
+                                    const cfg = ACTION_CONFIG[a.action] ?? ACTION_CONFIG.DEFAULT;
+                                    return (
+                                        <div key={a.id} className="flex items-start gap-2">
+                                            <div className="h-5 w-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                <span className="text-[9px] font-bold text-indigo-600">
+                                                    {a.user?.name?.charAt(0).toUpperCase()}
+                                                </span>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs text-gray-700 leading-snug">
+                                                    <span className="font-semibold">{a.user?.name}</span>
+                                                    {" "}{cfg.label.toLowerCase()}
+                                                </p>
+                                                <p className="text-[10px] text-gray-400">{relTime(a.createdAt)}</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Active Automations ───────────────────────────────────── */}
+                    {activeAutomations.length > 0 && (
+                        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                            <div className="flex items-center gap-1.5 mb-3">
+                                <Zap className="h-3.5 w-3.5 text-violet-500" />
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Active Automations</h3>
+                            </div>
+                            <div className="space-y-2">
+                                {activeAutomations.slice(0, 4).map(auto => (
+                                    <div key={auto.id} className="flex items-center gap-2">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                                        <p className="text-xs text-gray-700 truncate flex-1">{auto.name}</p>
+                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 flex-shrink-0">
+                                            ON
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                            {activeAutomations.length > 4 && (
+                                <Link to="/automations" className="text-[10px] text-indigo-600 hover:underline mt-2 block">
+                                    +{activeAutomations.length - 4} more
+                                </Link>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -842,6 +1189,21 @@ export default function LeadDetail() {
                     leadId={id}
                     lead={lead}
                     onClose={() => setShowWaModal(false)}
+                />
+            )}
+
+            <PostCallPanel
+                open={showPostCall}
+                leadId={id}
+                lead={lead}
+                onClose={() => setShowPostCall(false)}
+            />
+
+            {showEmailModal && (
+                <ComposeEmailModal
+                    leadId={id}
+                    defaultTo={lead?.email || ""}
+                    onClose={() => setShowEmailModal(false)}
                 />
             )}
         </div>

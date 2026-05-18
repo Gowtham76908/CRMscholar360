@@ -25,6 +25,7 @@ import "stream-chat-react/dist/css/v2/index.css";
 
 import { useAuth } from "../context/AuthContext";
 import api from "../api/axios";
+import { toast } from "sonner";
 import { Loader2, Video, Search, Plus, X, User, UserPlus, Users, Check, CheckCheck } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -231,7 +232,7 @@ const Messages = () => {
 
         } catch (error) {
             console.error("Failed to start chat:", error);
-            alert("Could not start chat. Please try again.");
+            toast.error("Could not start chat. Please try again.");
         }
     };
 
@@ -642,8 +643,8 @@ const CreateGroupView = ({ onClose, client, users, currentUser, setActiveChannel
     const [groupName, setGroupName] = useState("");
 
     const handleCreate = async () => {
-        if (!groupName) return alert("Please enter a group name");
-        if (selectedUsers.length === 0) return alert("Select at least one member");
+        if (!groupName) { toast.warning("Please enter a group name"); return; }
+        if (selectedUsers.length === 0) { toast.warning("Select at least one member"); return; }
 
         try {
             // Step 1: Sync all selected users to Stream Chat first
@@ -674,7 +675,7 @@ const CreateGroupView = ({ onClose, client, users, currentUser, setActiveChannel
             onClose();
         } catch (error) {
             console.error("Error creating group:", error);
-            alert(`Failed to create group: ${error.message || "Please try again."}`);
+            toast.error(`Failed to create group: ${error.message || "Please try again."}`);
         }
     };
 
@@ -743,10 +744,10 @@ const AddMemberModal = ({ channel, onClose, allUsers, currentUser }) => {
             console.log("Adding member to channel:", userId);
             await channel.addMembers([userId]);
 
-            alert("Member added successfully!");
+            toast.success("Member added successfully!");
         } catch (error) {
             console.error("Failed to add member:", error);
-            alert(`Failed to add member: ${error.response?.data?.message || error.message}`);
+            toast.error(`Failed to add member: ${error.response?.data?.message || error.message}`);
         } finally {
             setLoading(false);
         }
@@ -819,10 +820,10 @@ const MemberListModal = ({ channel, onClose, currentUser }) => {
         setLoading(true);
         try {
             await channel.removeMembers([userId]);
-            alert("Member removed successfully!");
+            toast.success("Member removed successfully!");
         } catch (error) {
             console.error("Failed to remove member:", error);
-            alert("Failed to remove member. Please try again.");
+            toast.error("Failed to remove member. Please try again.");
         } finally {
             setLoading(false);
         }

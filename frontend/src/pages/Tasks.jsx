@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
+import { toast } from "sonner";
 import { Loader2, CheckCircle, Circle, Plus, Calendar, User } from "lucide-react";
 import { Modal } from "../components/Modal";
 import AddTaskForm from "../components/AddTaskForm";
@@ -64,7 +65,7 @@ const Tasks = () => {
         },
         onError: (err, _vars, ctx) => {
             if (ctx?.prev) ctx.prev.forEach(([key, val]) => queryClient.setQueryData(key, val));
-            alert(err.response?.data?.message || "Failed to update task status");
+            toast.error(err.response?.data?.message || "Failed to update task status");
         },
         onSettled: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }),
     });
@@ -178,10 +179,14 @@ const Tasks = () => {
                                         {task.assignedTo?.name || "Unassigned"}
                                     </div>
                                     {task.lead && (
-                                        <div className="flex items-center gap-1.5">
+                                        <Link
+                                            to={`/leads/${task.lead.id}`}
+                                            onClick={e => e.stopPropagation()}
+                                            className="flex items-center gap-1.5 hover:underline"
+                                        >
                                             <span className="text-gray-400">Lead:</span>
                                             <span className="text-indigo-600">{task.lead.name}</span>
-                                        </div>
+                                        </Link>
                                     )}
                                     {task.files?.length > 0 && (
                                         <div className="flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md border border-indigo-100">

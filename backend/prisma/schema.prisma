@@ -42,6 +42,7 @@ model User {
   sessions       Session[]
   tasks          Task[]
   invoices       Invoice[]       @relation("CreatedInvoices")
+  sentEmails     EmailLog[]      @relation("SentEmails")
   departmentRel  Department?     @relation(fields: [departmentId], references: [id])
   workspace      Workspace?      @relation(fields: [workspaceId], references: [id])
   statusLogs     UserStatusLog[]
@@ -82,6 +83,7 @@ model Lead {
   jobTitle        String?
   company         String?
   biodata         String?
+  customFields    Json?
   activities      Activity[]
   callLogs        CallLog[]
   salestrailCalls SalestrailCall[]
@@ -94,6 +96,7 @@ model Lead {
   whatsappCampaignRecipients WhatsAppCampaignRecipient[]
   whatsappOptIn   Boolean   @default(false)
   whatsappOptInAt DateTime?
+  emails          EmailLog[]
 
   @@index([phoneNormalized])
 }
@@ -137,8 +140,11 @@ model AutomationLog {
   status    String         // SUCCESS | FAILED | SKIPPED
   details   Json?
   createdAt DateTime       @default(now())
-  rule      AutomationRule @relation(fields: [ruleId], references: [id])
-  lead      Lead           @relation(fields: [leadId], references: [id])
+  rule      AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  lead      Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([ruleId])
 }
 
 model Note {
@@ -146,7 +152,9 @@ model Note {
   leadId    String?
   content   String
   createdAt DateTime @default(now())
-  lead      Lead?    @relation(fields: [leadId], references: [id])
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
 }
 
 model Sprint {
@@ -230,8 +238,11 @@ model Activity {
   action    String
   metadata  Json?
   createdAt DateTime @default(now())
-  lead      Lead?    @relation(fields: [leadId], references: [id])
-  user      User?    @relation(fields: [userId], references: [id])
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([userId])
 }
 
 model Reminder {
@@ -285,7 +296,7 @@ model CallLog {
   conclusion    String?
   isTranscribed Boolean   @default(false)
   transcribedAt DateTime?
-  lead          Lead      @relation(fields: [leadId], references: [id])
+  lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
 }
 
 model Session {
@@ -559,7 +570,41 @@ model CompanySettings {
   branch        String   @default("Thiruvottriyur")
   defaultTaxRate Float   @default(18)
   defaultNotes  String   @default("")
+  smtpHost      String?
+  smtpPort      Int?
+  smtpUser      String?
+  smtpPass      String?
+  smtpFrom      String?
+  smtpSecure    Boolean  @default(false)
   updatedAt     DateTime @updatedAt
+}
+
+model EmailLog {
+  id            String    @id @default(uuid())
+  leadId        String
+  subject       String
+  body          String
+  toEmail       String
+  sentById      String
+  openedAt      DateTime?
+  clickCount    Int       @default(0)
+  lastClickedAt DateTime?
+  createdAt     DateTime  @default(now())
+  lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  sentBy        User      @relation("SentEmails", fields: [sentById], references: [id])
+
+  @@index([leadId])
+}
+
+model CustomFieldDef {
+  id        String   @id @default(uuid())
+  name      String
+  fieldKey  String   @unique
+  type      String   @default("TEXT")
+  options   Json?
+  required  Boolean  @default(false)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
 }
 
 model WhatsAppMessage {
@@ -579,11 +624,68 @@ model WhatsAppMessage {
   readAt          DateTime?
   repliedAt       DateTime?
   createdAt       DateTime  @default(now())
-  lead            Lead      @relation(fields: [leadId], references: [id])
-  user            User?     @relation(fields: [userId], references: [id])
+  lead              Lead      @relation(fields: [leadId], references: [id])
+  user              User?     @relation(fields: [userId], references: [id])
+  campaignRecipient WhatsAppCampaignRecipient?
 
   @@index([leadId])
   @@index([watiMessageId])
+}
+
+model WhatsAppCampaign {
+  id             String    @id @default(uuid())
+  name           String
+  templateName   String
+  parameters     Json
+  status         String    @default("DRAFT")
+  totalCount     Int       @default(0)
+  sentCount      Int       @default(0)
+  deliveredCount Int       @default(0)
+  readCount      Int       @default(0)
+  repliedCount   Int       @default(0)
+  failedCount    Int       @default(0)
+  createdAt      DateTime  @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdById    String
+  createdBy      User      @relation(fields: [createdById], references: [id])
+  recipients     WhatsAppCampaignRecipient[]
+
+  @@index([createdById])
+}
+
+model WhatsAppCampaignRecipient {
+  id         String    @id @default(uuid())
+  campaignId String
+  leadId     String
+  phone      String
+  status     String    @default("QUEUED")
+  messageId  String?   @unique
+  failReason String?
+  sentAt     DateTime?
+  repliedAt  DateTime?
+  replyText  String?
+  campaign   WhatsAppCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead       Lead             @relation(fields: [leadId], references: [id])
+  message    WhatsAppMessage? @relation(fields: [messageId], references: [id])
+
+  @@index([campaignId])
+  @@index([leadId])
+  @@index([phone])
+}
+
+model WhatsAppAutoReply {
+  id            String   @id @default(uuid())
+  name          String
+  active        Boolean  @default(true)
+  triggerType   String
+  keyword       String?
+  timeoutHours  Int?
+  replyTemplate String
+  replyParams   Json     @default("[]")
+  createdAt     DateTime @default(now())
+  createdById   String
+  createdBy     User     @relation(fields: [createdById], references: [id])
 }
 
 model SalestrailCall {

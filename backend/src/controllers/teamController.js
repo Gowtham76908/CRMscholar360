@@ -1,5 +1,6 @@
 const prisma = require("../utils/prisma");
 const bcrypt = require("bcrypt");
+const { upsertUserToStream } = require("./chatController");
 
 // Create User (Super Admin only)
 const createUser = async (req, res) => {
@@ -47,6 +48,11 @@ const createUser = async (req, res) => {
         });
 
         const { password: _, ...userWithoutPassword } = newUser;
+
+        // Sync to Stream Chat so the new user appears in chat search immediately
+        upsertUserToStream(newUser).catch(err =>
+            console.error("[Chat sync] Failed to sync new user to Stream:", err.message)
+        );
 
         res.status(201).json({ message: "User created successfully", user: userWithoutPassword });
     } catch (error) {

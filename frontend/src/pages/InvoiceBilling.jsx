@@ -1,10 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import Dialog from "../components/ui/Dialog";
 import {
     Plus, X, IndianRupee, TrendingUp, TrendingDown, Clock, CheckCircle,
     AlertCircle, FileText, Mail, Pencil, Receipt, BarChart3, Banknote,
     RefreshCw, Send, Eye, Trash2, Building2, Save, ChevronRight, Minus,
-    Info, Hash, ChevronLeft, Users,
+    Info, Hash, ChevronLeft, Users, Download,
 } from "lucide-react";
 import api from "../api/axios";
 
@@ -665,6 +667,7 @@ const AddPaymentModal = ({ invoice, onClose }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 const InvoiceDetail = ({ invoice, onClose, onSendEmail, onPayment, onEdit, company }) => {
     const qc = useQueryClient();
+    const printRef = useRef(null);
     const { data: detail, isLoading } = useQuery({
         queryKey: ["invoice", invoice.id],
         queryFn: () => api.get(`/invoices/${invoice.id}`).then((r) => r.data),
@@ -674,6 +677,115 @@ const InvoiceDetail = ({ invoice, onClose, onSendEmail, onPayment, onEdit, compa
         mutationFn: (pid) => api.delete(`/invoices/${invoice.id}/payments/${pid}`),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ["invoice", invoice.id] }); qc.invalidateQueries({ queryKey: ["invoices"] }); },
     });
+
+    const handlePrint = () => {
+        const content = printRef.current?.innerHTML;
+        if (!content) return;
+        const win = window.open("", "_blank", "width=900,height=700");
+        win.document.write(`<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8" />
+<title>Invoice ${inv.invoiceNumber}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; color: #111; background: #fff; padding: 32px; }
+  .inv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .inv-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
+  .inv-box-blue { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px; }
+  .label { font-size: 9px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .name { font-size: 13px; font-weight: 700; color: #111; }
+  .sub { font-size: 10px; color: #6b7280; margin-top: 2px; }
+  .header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid #e5e7eb; padding-bottom: 16px; }
+  .inv-number { font-size: 18px; font-weight: 800; color: #111; }
+  .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; border: 1px solid; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th { background: #f3f4f6; padding: 8px 10px; font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; }
+  th:nth-child(n+3), td:nth-child(n+3) { text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; font-size: 11px; color: #374151; }
+  .totals { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .total-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; }
+  .total-row { display: flex; justify-content: space-between; font-size: 11px; color: #6b7280; padding: 3px 0; }
+  .total-final { display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; border-top: 1px solid #d1d5db; padding-top: 6px; margin-top: 4px; }
+  .bank-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; margin-top: 16px; }
+  .bank-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 10px; color: #6b7280; }
+  .notes { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px; margin-top: 12px; font-size: 11px; color: #92400e; }
+  @media print { body { padding: 16px; } }
+</style>
+</head><body>
+<div class="header-row">
+  <div>
+    <div class="inv-number">${inv.invoiceNumber}</div>
+    <div style="margin-top:4px;font-size:11px;color:#6b7280;">${inv.invoiceType === "TAX_INVOICE" ? "Tax Invoice" : "Proforma Invoice"} &nbsp;·&nbsp; ${fmtDate(inv.date || inv.createdAt)}</div>
+  </div>
+  <div style="text-align:right">
+    <div style="font-size:14px;font-weight:800;color:#111;">${company?.companyName || ""}</div>
+    ${company?.gstin ? `<div style="font-size:10px;color:#6b7280;">GSTIN: ${company.gstin}</div>` : ""}
+    ${company?.address ? `<div style="font-size:10px;color:#6b7280;">${company.address}, ${company.city} ${company.pincode}</div>` : ""}
+  </div>
+</div>
+<div class="inv-grid">
+  <div class="inv-box">
+    <div class="label">Bill To</div>
+    <div class="name">${inv.clientName || ""}</div>
+    ${inv.clientGstin ? `<div class="sub">GSTIN: ${inv.clientGstin}</div>` : ""}
+    ${inv.clientAddress ? `<div class="sub">${inv.clientAddress}</div>` : ""}
+    ${inv.clientPhone ? `<div class="sub">${inv.clientPhone}</div>` : ""}
+    ${inv.clientEmail ? `<div class="sub">${inv.clientEmail}</div>` : ""}
+  </div>
+  <div class="inv-box">
+    <div class="label">Invoice Details</div>
+    ${inv.poNumber ? `<div class="sub">PO: ${inv.poNumber}</div>` : ""}
+    ${inv.dueDate ? `<div class="sub">Due: ${fmtDate(inv.dueDate)}</div>` : ""}
+    <div class="sub">Status: ${inv.status}</div>
+  </div>
+</div>
+<table>
+  <thead><tr><th>#</th><th>Description</th><th>Price</th><th>Qty</th><th>Taxable</th><th>Tax</th><th>Amount</th></tr></thead>
+  <tbody>
+    ${(inv.items || []).map((item, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${item.description}</td>
+      <td>₹${fmt(item.price)}</td>
+      <td>${item.quantity}</td>
+      <td>₹${fmt(item.taxableValue)}</td>
+      <td>₹${fmt(item.amount - item.taxableValue)} (${item.taxRate}%)</td>
+      <td><strong>₹${fmt(item.amount)}</strong></td>
+    </tr>`).join("")}
+  </tbody>
+</table>
+<div class="totals">
+  <div class="total-box">
+    <div class="label">Tax Breakdown</div>
+    <div class="total-row"><span>Taxable Amount</span><span>₹${fmt(inv.subtotal)}</span></div>
+    ${inv.cgst > 0 ? `<div class="total-row"><span>CGST</span><span>₹${fmt(inv.cgst)}</span></div><div class="total-row"><span>SGST</span><span>₹${fmt(inv.sgst)}</span></div>` : ""}
+    ${inv.igst > 0 ? `<div class="total-row"><span>IGST</span><span>₹${fmt(inv.igst)}</span></div>` : ""}
+    <div class="total-final" style="color:#4338ca"><span>Total</span><span>₹${fmt(inv.total)}</span></div>
+  </div>
+  <div class="total-box">
+    <div class="label">Payment Summary</div>
+    <div class="total-row"><span>Invoice Total</span><span>₹${fmt(inv.total)}</span></div>
+    <div class="total-row" style="color:#059669"><span>Amount Received</span><span>₹${fmt(inv.totalPaid || 0)}</span></div>
+    <div class="total-final" style="color:#d97706"><span>Balance Due</span><span>₹${fmt(inv.balance ?? (inv.total - (inv.totalPaid || 0)))}</span></div>
+  </div>
+</div>
+${(company?.bankName || company?.accountNo) ? `
+<div class="bank-box">
+  <div class="label">Bank Details</div>
+  <div class="bank-grid">
+    ${company.bankName ? `<span>Bank: <strong>${company.bankName}</strong></span>` : ""}
+    ${company.accountNo ? `<span>A/C: <strong>${company.accountNo}</strong></span>` : ""}
+    ${company.ifsc ? `<span>IFSC: <strong>${company.ifsc}</strong></span>` : ""}
+    ${company.branch ? `<span>Branch: <strong>${company.branch}</strong></span>` : ""}
+  </div>
+</div>` : ""}
+${inv.notes ? `<div class="notes"><strong>Note: </strong>${inv.notes}</div>` : ""}
+</body></html>`);
+        win.document.close();
+        win.focus();
+        setTimeout(() => { win.print(); win.close(); }, 400);
+    };
 
     return (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-3">
@@ -811,6 +923,9 @@ const InvoiceDetail = ({ invoice, onClose, onSendEmail, onPayment, onEdit, compa
                 <div className="px-5 py-3.5 border-t border-gray-100 flex items-center justify-between bg-gray-50 shrink-0">
                     <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-600">Close</button>
                     <div className="flex gap-2">
+                        <button onClick={handlePrint} className="flex items-center gap-1.5 h-8 px-3.5 text-xs font-semibold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                            <Download className="h-3.5 w-3.5" /> Download PDF
+                        </button>
                         <button onClick={() => { onClose(); onEdit(invoice); }} className="flex items-center gap-1.5 h-8 px-3.5 text-xs font-semibold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
                             <Pencil className="h-3.5 w-3.5" /> Edit
                         </button>
@@ -1162,7 +1277,7 @@ const ClientDetail = ({ client, company, onBack, onNewInvoice, onView, onEdit, o
                                                         { icon: Mail,    title: "Email",   cls: "hover:text-blue-600 hover:bg-blue-50",       action: () => onSendEmail(inv) },
                                                         inv.status !== "PAID" && { icon: Banknote, title: "Payment", cls: "hover:text-emerald-600 hover:bg-emerald-50", action: () => onPayment(inv) },
                                                         { icon: Pencil,  title: "Edit",    cls: "hover:text-amber-600 hover:bg-amber-50",     action: () => onEdit(inv) },
-                                                        { icon: Trash2,  title: "Delete",  cls: "hover:text-red-500 hover:bg-red-50",         action: () => window.confirm(`Delete ${inv.invoiceNumber}?`) && onDelete(inv.id) },
+                                                        { icon: Trash2,  title: "Delete",  cls: "hover:text-red-500 hover:bg-red-50",         action: () => onDelete(inv) },
                                                     ].filter(Boolean).map(({ icon: Icon, title, cls, action }) => (
                                                         <button key={title} onClick={action} title={title} className={`p-1.5 rounded text-gray-300 transition-colors ${cls}`}>
                                                             <Icon className="h-3.5 w-3.5" />
@@ -1280,6 +1395,7 @@ export default function InvoiceBilling() {
     const [payInv, setPayInv]             = useState(null);
     const [viewInv, setViewInv]           = useState(null);
     const [showSettings, setShowSettings] = useState(false);
+    const [confirmDeleteInv, setConfirmDeleteInv] = useState(null);
     const [filterStatus, setFilterStatus] = useState("");
     const [filterType, setFilterType]     = useState("");
     const [search, setSearch]             = useState("");
@@ -1431,7 +1547,7 @@ export default function InvoiceBilling() {
                             onEdit={setEditInv}
                             onSendEmail={setEmailInv}
                             onPayment={setPayInv}
-                            onDelete={(id) => deleteMut.mutate(id)}
+                            onDelete={(inv) => setConfirmDeleteInv(inv)}
                           />
                         : <ClientList
                             invoices={invoices}
@@ -1504,7 +1620,7 @@ export default function InvoiceBilling() {
                                                         { icon: Mail,    title: "Email",   cls: "hover:text-blue-600 hover:bg-blue-50",       action: () => setEmailInv(inv) },
                                                         inv.status !== "PAID" && { icon: Banknote, title: "Payment", cls: "hover:text-emerald-600 hover:bg-emerald-50", action: () => setPayInv(inv) },
                                                         { icon: Pencil,  title: "Edit",    cls: "hover:text-amber-600 hover:bg-amber-50",     action: () => setEditInv(inv) },
-                                                        { icon: Trash2,  title: "Delete",  cls: "hover:text-red-500 hover:bg-red-50",         action: () => window.confirm(`Delete ${inv.invoiceNumber}?`) && deleteMut.mutate(inv.id) },
+                                                        { icon: Trash2,  title: "Delete",  cls: "hover:text-red-500 hover:bg-red-50",         action: () => setConfirmDeleteInv(inv) },
                                                     ].filter(Boolean).map(({ icon: Icon, title, cls, action }) => (
                                                         <button key={title} onClick={action} title={title} className={`p-1.5 rounded text-gray-300 transition-colors ${cls}`}>
                                                             <Icon className="h-3.5 w-3.5" />
@@ -1539,6 +1655,17 @@ export default function InvoiceBilling() {
                 />
             )}
             {showSettings && <CompanySettingsModal initialData={company} onClose={() => setShowSettings(false)} />}
+
+            <Dialog
+                open={!!confirmDeleteInv}
+                variant="danger"
+                title={`Delete invoice ${confirmDeleteInv?.invoiceNumber}?`}
+                description="This will permanently delete the invoice and cannot be undone."
+                confirmLabel="Delete"
+                loading={deleteMut.isPending}
+                onConfirm={() => { deleteMut.mutate(confirmDeleteInv.id); setConfirmDeleteInv(null); }}
+                onCancel={() => setConfirmDeleteInv(null)}
+            />
         </div>
     );
 }

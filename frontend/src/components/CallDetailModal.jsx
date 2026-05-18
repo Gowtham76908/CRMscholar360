@@ -6,6 +6,7 @@ import {
     Upload, CheckCircle
 } from "lucide-react";
 import api from "../api/axios";
+import { toast } from "sonner";
 
 const BADGE_COLORS = {
     Good: "bg-green-100 text-green-800",
@@ -101,7 +102,7 @@ const CallDetailModal = ({ lead, callLogs: propCallLogs, onClose, onUpdate }) =>
 
     const handleTranscribe = async (callLog) => {
         if (!callLog.recordingUrl) {
-            alert("No recording available for this call.");
+            toast.warning("No recording available for this call.");
             return;
         }
 
@@ -115,7 +116,7 @@ const CallDetailModal = ({ lead, callLogs: propCallLogs, onClose, onUpdate }) =>
             await fetchCallLogs();
             if (onUpdate) onUpdate();
         } catch (error) {
-            alert(error.response?.data?.message || "Transcription failed");
+            toast.error(error.response?.data?.message || "Transcription failed");
         } finally {
             setTranscribingId(null);
         }
@@ -142,7 +143,7 @@ const CallDetailModal = ({ lead, callLogs: propCallLogs, onClose, onUpdate }) =>
             await fetchCallLogs();
             if (onUpdate) onUpdate();
         } catch (error) {
-            alert(error.response?.data?.message || "Failed to upload recording");
+            toast.error(error.response?.data?.message || "Failed to upload recording");
         } finally {
             setIsUploading(false);
         }

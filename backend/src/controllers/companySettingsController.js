@@ -1,4 +1,5 @@
 const prisma = require("../utils/prisma");
+const { createTransporter } = require("../services/emailService");
 
 const DEFAULT_SETTINGS = {
     companyName: "HEXITE TECHNOLOGIES PRIVATE LIMITED",
@@ -49,4 +50,24 @@ const updateSettings = async (req, res) => {
     }
 };
 
-module.exports = { getSettings, updateSettings };
+const testSmtp = async (req, res) => {
+    try {
+        const { smtpHost, smtpPort, smtpUser, smtpPass, smtpSecure, smtpFrom, testTo } = req.body;
+        if (!smtpHost || !smtpUser || !smtpPass) {
+            return res.status(400).json({ message: "smtpHost, smtpUser, and smtpPass are required" });
+        }
+        const transporter = createTransporter({ smtpHost, smtpPort, smtpUser, smtpPass, smtpSecure });
+        await transporter.verify();
+        await transporter.sendMail({
+            from: `"CRM Test" <${smtpUser}>`,
+            to: testTo || smtpUser,
+            subject: "SMTP Test — CRM Connection Successful",
+            text: "Your SMTP settings are working correctly.",
+        });
+        res.json({ message: "Test email sent successfully" });
+    } catch (error) {
+        res.status(400).json({ message: "SMTP test failed", error: error.message });
+    }
+};
+
+module.exports = { getSettings, updateSettings, testSmtp };

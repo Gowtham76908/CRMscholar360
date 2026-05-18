@@ -1,236 +1,208 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
-import { Loader2, Trash2, Power, UserPlus, Shield, ToggleLeft, ToggleRight, Edit } from "lucide-react";
+import { Loader2, Trash2, Power, UserPlus, Shield, ToggleLeft, ToggleRight, Edit, Mail, Building } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { toast } from "sonner";
+import Dialog from "../components/ui/Dialog";
 import { Modal } from "../components/Modal";
 import AddUserForm from "../components/AddUserForm";
 import EditUserForm from "../components/EditUserForm";
+import { cn } from "../lib/utils";
+
+const ROLE_STYLES = {
+    SUPER_ADMIN: "bg-indigo-100 text-indigo-700",
+    ADMIN:       "bg-violet-100 text-violet-700",
+    EMPLOYEE:    "bg-gray-100 text-gray-600",
+};
 
 const Team = () => {
     const { user: currentUser } = useAuth();
     const queryClient = useQueryClient();
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
-
-    // Fetch Team
+    const [confirmDeleteId, setConfirmDeleteId] = useState(null);
     const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(currentUser?.role);
 
     const { data: team, isLoading, error: teamError } = useQuery({
         queryKey: ["team"],
-        queryFn: async () => {
-            const res = await api.get("/team");
-            return res.data;
-        },
+        queryFn: () => api.get("/team").then(r => r.data),
         enabled: isAdmin,
     });
 
-    // Toggle Access Mutation (Active/Inactive)
     const toggleAccessMutation = useMutation({
-        mutationFn: async (userId) => {
-            return await api.patch(`/team/${userId}/toggle`);
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["team"] });
-        },
-        onError: (err) => alert(err.response?.data?.message || "Failed to toggle access"),
+        mutationFn: (userId) => api.patch(`/team/${userId}/toggle`),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["team"] }),
+        onError: (err) => toast.error(err.response?.data?.message || "Failed to toggle access"),
     });
 
-    // Update Role Mutation
     const roleMutation = useMutation({
-        mutationFn: async ({ userId, role }) => {
-            return await api.patch(`/team/${userId}`, { role });
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["team"] });
-        },
-        onError: (err) => alert(err.response?.data?.message || "Failed to update role"),
+        mutationFn: ({ userId, role }) => api.patch(`/team/${userId}`, { role }),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["team"] }),
+        onError: (err) => toast.error(err.response?.data?.message || "Failed to update role"),
     });
 
-    // Delete User Mutation
     const deleteMutation = useMutation({
-        mutationFn: async (userId) => {
-            return await api.delete(`/team/${userId}`);
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["team"] });
-        },
-        onError: (err) => alert(err.response?.data?.message || "Failed to delete user"),
+        mutationFn: (userId) => api.delete(`/team/${userId}`),
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["team"] }); setConfirmDeleteId(null); },
+        onError: (err) => toast.error(err.response?.data?.message || "Failed to delete user"),
     });
 
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+    if (!isAdmin) return (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
+                <Shield className="h-7 w-7 text-gray-400" />
             </div>
-        );
-    }
+            <h2 className="text-lg font-bold text-gray-900">Access Denied</h2>
+            <p className="text-sm text-gray-500 mt-1">Only Admins can manage the team.</p>
+        </div>
+    );
 
-    if (teamError) {
-        return (
-            <div className="text-center py-20">
-                <p className="text-red-600 font-semibold">Failed to load team.</p>
-                <p className="text-gray-500 text-sm mt-1">{teamError.response?.data?.message || teamError.message}</p>
-            </div>
-        );
-    }
+    if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-indigo-500" /></div>;
+    if (teamError) return <div className="text-center py-20 text-red-500">{teamError.response?.data?.message || "Failed to load team."}</div>;
 
-    if (!isAdmin) {
-        return (
-            <div className="text-center py-20">
-                <Shield className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h2 className="text-xl font-bold text-gray-900">Access Denied</h2>
-                <p className="text-gray-500 mt-2">Only Admins can manage the team.</p>
-            </div>
-        );
-    }
+    const active = team?.filter(m => m.isActive).length ?? 0;
+    const admins = team?.filter(m => ["ADMIN","SUPER_ADMIN"].includes(m.role)).length ?? 0;
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Team Management</h1>
-                    <p className="text-sm text-gray-500">Manage access and roles</p>
+                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Team</h1>
+                    <p className="text-sm text-gray-500">{team?.length ?? 0} members · {active} active · {admins} admins</p>
                 </div>
                 <button
                     onClick={() => setIsAddModalOpen(true)}
-                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors"
                 >
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Add User
+                    <UserPlus className="h-4 w-4" />
+                    Add Member
                 </button>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Admin Access</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role Status</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Login Access</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {team?.map((member) => (
-                            <tr key={member.id}>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="flex items-center">
-                                        <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs mr-3">
-                                            {member.name[0]}
-                                        </div>
-                                        <div>
-                                            <div className="text-sm font-medium text-gray-900">{member.name}</div>
-                                            <div className="text-xs text-gray-500">{member.email}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {member.role === "SUPER_ADMIN" ? (
-                                        <span className="text-xs font-bold text-indigo-800 bg-indigo-100 px-2 py-1 rounded-full">SUPER ADMIN</span>
-                                    ) : currentUser.role === "SUPER_ADMIN" ? (
-                                        <button
-                                            onClick={() => roleMutation.mutate({
-                                                userId: member.id,
-                                                role: member.role === "ADMIN" ? "EMPLOYEE" : "ADMIN"
-                                            })}
-                                            className="flex items-center gap-2 text-gray-600 hover:text-indigo-600 transition-colors"
-                                            title="Toggle Admin Role"
-                                        >
-                                            {member.role === "ADMIN" ? (
-                                                <ToggleRight className="h-8 w-8 text-indigo-600" />
-                                            ) : (
-                                                <ToggleLeft className="h-8 w-8 text-gray-400" />
-                                            )}
-                                        </button>
-                                    ) : (
-                                        <span className="text-xs text-gray-500">
-                                            {member.role === "ADMIN" ? "Has Access" : "No Access"}
-                                        </span>
-                                    )}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <span className={`capitalize font-medium ${member.role === 'ADMIN' ? 'text-indigo-600' : 'text-gray-500'}`}>
-                                        {member.role.toLowerCase().replace("_", " ")}
+            {/* Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                {team?.map((member) => (
+                    <div
+                        key={member.id}
+                        className={cn(
+                            "bg-white rounded-2xl border shadow-sm flex flex-col transition-all hover:shadow-md",
+                            member.isActive ? "border-gray-200" : "border-gray-100 opacity-60"
+                        )}
+                    >
+                        {/* Card top */}
+                        <div className="p-4 flex items-center gap-3">
+                            {/* Avatar */}
+                            <div className="relative flex-shrink-0">
+                                <div className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-white font-bold text-base">
+                                    {member.name[0].toUpperCase()}
+                                </div>
+                                <span className={cn(
+                                    "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white",
+                                    member.isActive ? "bg-emerald-400" : "bg-gray-300"
+                                )} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-gray-900 truncate text-sm">{member.name}</p>
+                                <div className="flex items-center gap-1 mt-0.5">
+                                    <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", ROLE_STYLES[member.role] ?? ROLE_STYLES.EMPLOYEE)}>
+                                        {member.role.replace("_", " ")}
                                     </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {member.department || "-"}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                                        ${member.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                        {member.isActive ? "Active" : "Inactive"}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    {/* Actions for SUPER_ADMIN or ADMIN (with some restrictions?) */}
-                                    <div className="flex justify-end gap-3">
-                                        {currentUser.role === "SUPER_ADMIN" && (
-                                            <button
-                                                onClick={() => setEditingUser(member)}
-                                                className="text-gray-400 hover:text-indigo-600"
-                                                title="Edit Details"
-                                            >
-                                                <Edit className="h-4 w-4" />
-                                            </button>
-                                        )}
+                                </div>
+                            </div>
+                        </div>
 
-                                        {member.role !== "SUPER_ADMIN" && (
-                                            <>
-                                                <button
-                                                    onClick={() => toggleAccessMutation.mutate(member.id)}
-                                                    className={`text-gray-400 hover:text-gray-600 ${member.isActive ? 'text-green-600' : 'text-red-500'}`}
-                                                    title={member.isActive ? "Deactivate" : "Activate"}
-                                                >
-                                                    <Power className="h-4 w-4" />
-                                                </button>
-                                                {currentUser.role === "SUPER_ADMIN" && (
-                                                    <button
-                                                        onClick={() => {
-                                                            if (window.confirm("Are you sure you want to delete this user?")) {
-                                                                deleteMutation.mutate(member.id)
-                                                            }
-                                                        }}
-                                                        className="text-gray-400 hover:text-red-600"
-                                                        title="Delete"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </button>
-                                                )}
-                                            </>
+                        {/* Details */}
+                        <div className="px-4 pb-3 space-y-1.5 border-t border-gray-100 pt-3">
+                            <div className="flex items-center gap-2 text-xs text-gray-500 truncate">
+                                <Mail className="h-3.5 w-3.5 text-gray-300 flex-shrink-0" />
+                                <span className="truncate">{member.email}</span>
+                            </div>
+                            {member.department && (
+                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                    <Building className="h-3.5 w-3.5 text-gray-300 flex-shrink-0" />
+                                    <span>{member.department}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer actions */}
+                        {member.role !== "SUPER_ADMIN" && (
+                            <div className="px-4 pb-4 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+                                {/* Admin toggle — super admin only */}
+                                {currentUser.role === "SUPER_ADMIN" ? (
+                                    <button
+                                        onClick={() => roleMutation.mutate({ userId: member.id, role: member.role === "ADMIN" ? "EMPLOYEE" : "ADMIN" })}
+                                        title="Toggle Admin"
+                                        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-indigo-600 transition-colors"
+                                    >
+                                        {member.role === "ADMIN"
+                                            ? <ToggleRight className="h-5 w-5 text-indigo-500" />
+                                            : <ToggleLeft className="h-5 w-5 text-gray-300" />
+                                        }
+                                        <span>{member.role === "ADMIN" ? "Admin" : "Employee"}</span>
+                                    </button>
+                                ) : (
+                                    <span className="text-xs text-gray-400">{member.role === "ADMIN" ? "Has admin access" : "Standard access"}</span>
+                                )}
+
+                                <div className="flex items-center gap-1.5">
+                                    {currentUser.role === "SUPER_ADMIN" && (
+                                        <button
+                                            onClick={() => setEditingUser(member)}
+                                            className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                            title="Edit"
+                                        >
+                                            <Edit className="h-3.5 w-3.5" />
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => toggleAccessMutation.mutate(member.id)}
+                                        className={cn(
+                                            "p-1.5 rounded-lg transition-colors",
+                                            member.isActive
+                                                ? "text-emerald-500 hover:text-gray-400 hover:bg-gray-50"
+                                                : "text-gray-300 hover:text-emerald-500 hover:bg-emerald-50"
                                         )}
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                                        title={member.isActive ? "Deactivate" : "Activate"}
+                                    >
+                                        <Power className="h-3.5 w-3.5" />
+                                    </button>
+                                    {currentUser.role === "SUPER_ADMIN" && (
+                                        <button
+                                            onClick={() => setConfirmDeleteId(member.id)}
+                                            className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                            title="Delete"
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                ))}
             </div>
 
-            <Modal
-                isOpen={isAddModalOpen}
-                onClose={() => setIsAddModalOpen(false)}
-                title="Add New Team Member"
-            >
+            <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add Team Member">
                 <AddUserForm onClose={() => setIsAddModalOpen(false)} />
             </Modal>
 
-            {/* Edit User Modal */}
-            <Modal
-                isOpen={!!editingUser}
-                onClose={() => setEditingUser(null)}
-                title="Edit Team Member"
-            >
-                {editingUser && (
-                    <EditUserForm
-                        user={editingUser}
-                        onClose={() => setEditingUser(null)}
-                    />
-                )}
+            <Modal isOpen={!!editingUser} onClose={() => setEditingUser(null)} title="Edit Team Member">
+                {editingUser && <EditUserForm user={editingUser} onClose={() => setEditingUser(null)} />}
             </Modal>
+
+            <Dialog
+                open={!!confirmDeleteId}
+                variant="danger"
+                title="Delete team member?"
+                description="This will permanently remove the user and cannot be undone."
+                confirmLabel="Delete"
+                loading={deleteMutation.isPending}
+                onConfirm={() => deleteMutation.mutate(confirmDeleteId)}
+                onCancel={() => setConfirmDeleteId(null)}
+            />
         </div>
     );
 };

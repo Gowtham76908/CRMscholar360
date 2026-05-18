@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
+import { toast } from "sonner";
 import { Calendar, User, X, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 
 const Leave = () => {
@@ -60,26 +61,23 @@ const Leave = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 p-6">
-            <div className="max-w-7xl mx-auto space-y-6">
+        <div className="space-y-6">
                 {/* Header */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                            Leave Management
-                        </h1>
-                        <p className="text-gray-500 mt-1">Manage your leave applications</p>
+                        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Leave Management</h1>
+                        <p className="text-sm text-gray-500">Manage your leave applications</p>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="flex gap-2">
                         <button
                             onClick={() => setShowApplyModal("LEAVE")}
-                            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-semibold hover:shadow-lg transition active:scale-95"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors"
                         >
                             Apply for Leave
                         </button>
                         <button
                             onClick={() => setShowApplyModal("WFH")}
-                            className="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-semibold hover:shadow-lg transition active:scale-95"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors"
                         >
                             Apply WFH
                         </button>
@@ -87,23 +85,18 @@ const Leave = () => {
                 </div>
 
                 {/* Stats Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500">
-                        <p className="text-gray-500 text-sm font-medium">Total Applied</p>
-                        <p className="text-3xl font-bold text-gray-900 mt-1">{stats?.totalApplied || 0}</p>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
-                        <p className="text-gray-500 text-sm font-medium">Approved</p>
-                        <p className="text-3xl font-bold text-green-600 mt-1">{stats?.approved || 0}</p>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500">
-                        <p className="text-gray-500 text-sm font-medium">Pending</p>
-                        <p className="text-3xl font-bold text-yellow-600 mt-1">{stats?.pending || 0}</p>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500">
-                        <p className="text-gray-500 text-sm font-medium">Days Taken</p>
-                        <p className="text-3xl font-bold text-blue-600 mt-1">{stats?.totalDaysTaken || 0}</p>
-                    </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {[
+                        { label: "Total Applied", value: stats?.totalApplied || 0, color: "bg-indigo-50 text-indigo-600" },
+                        { label: "Approved",      value: stats?.approved || 0,     color: "bg-emerald-50 text-emerald-600" },
+                        { label: "Pending",       value: stats?.pending || 0,      color: "bg-amber-50 text-amber-600" },
+                        { label: "Days Taken",    value: stats?.totalDaysTaken || 0, color: "bg-violet-50 text-violet-600" },
+                    ].map(({ label, value, color }) => (
+                        <div key={label} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+                            <p className="text-xs font-medium text-gray-500">{label}</p>
+                            <p className={`text-2xl font-bold mt-1 ${color.split(" ")[1]}`}>{value}</p>
+                        </div>
+                    ))}
                 </div>
 
                 {/* Pending Approvals (Admin Only) */}
@@ -204,7 +197,6 @@ const Leave = () => {
                         }}
                     />
                 )}
-            </div>
         </div>
     );
 };
@@ -232,11 +224,11 @@ const ApplyLeaveModal = ({ onClose, onSuccess, leaveType = "LEAVE" }) => {
     const applyMutation = useMutation({
         mutationFn: (data) => api.post("/leave/apply", data),
         onSuccess: () => {
-            alert(`${isWFH ? "WFH" : "Leave"} application submitted successfully!`);
+            toast.success(`${isWFH ? "WFH" : "Leave"} application submitted successfully!`);
             onSuccess();
         },
         onError: (error) => {
-            alert(error.response?.data?.message || `Failed to apply for ${isWFH ? "WFH" : "leave"}`);
+            toast.error(error.response?.data?.message || `Failed to apply for ${isWFH ? "WFH" : "leave"}`);
         }
     });
 
@@ -253,7 +245,7 @@ const ApplyLeaveModal = ({ onClose, onSuccess, leaveType = "LEAVE" }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
         if (formData.approverIds.length === 0) {
-            alert("Please select at least one manager");
+            toast.warning("Please select at least one manager");
             return;
         }
         applyMutation.mutate(formData);
@@ -431,7 +423,7 @@ const PendingLeaveCard = ({ leave, onUpdate }) => {
     const approveMutation = useMutation({
         mutationFn: (data) => api.post(`/leave/approve/${leave.id}`, data),
         onSuccess: () => {
-            alert("Leave approved");
+            toast.success("Leave approved");
             onUpdate();
             setShowComments(false);
         }
@@ -440,7 +432,7 @@ const PendingLeaveCard = ({ leave, onUpdate }) => {
     const rejectMutation = useMutation({
         mutationFn: (data) => api.post(`/leave/reject/${leave.id}`, data),
         onSuccess: () => {
-            alert("Leave rejected");
+            toast.success("Leave rejected");
             onUpdate();
             setShowComments(false);
         }

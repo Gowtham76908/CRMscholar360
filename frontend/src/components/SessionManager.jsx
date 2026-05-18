@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Monitor, Smartphone, LogOut, Shield } from "lucide-react";
+import { Loader2, Monitor, LogOut, Shield } from "lucide-react";
 import api from "../api/axios";
+import { toast } from "sonner";
+import Dialog from "./ui/Dialog";
 
 const SessionManager = () => {
     const queryClient = useQueryClient();
@@ -19,17 +22,17 @@ const SessionManager = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["sessions"] });
-            alert("User logged out from all devices.");
+            toast.success("User logged out from all devices.");
         },
         onError: () => {
-            alert("Failed to force logout.");
+            toast.error("Failed to force logout.");
         }
     });
 
+    const [confirmUserId, setConfirmUserId] = useState(null);
+
     const handleForceLogout = (userId) => {
-        if (confirm("Are you sure? This will log the user out of all active sessions.")) {
-            logoutMutation.mutate(userId);
-        }
+        setConfirmUserId(userId);
     };
 
     return (
@@ -98,6 +101,17 @@ const SessionManager = () => {
                     </table>
                 </div>
             )}
+
+            <Dialog
+                open={!!confirmUserId}
+                variant="danger"
+                title="Force Logout User?"
+                description="This will immediately end all active sessions for this user across all devices."
+                confirmLabel="Force Logout"
+                loading={logoutMutation.isPending}
+                onConfirm={() => { logoutMutation.mutate(confirmUserId); setConfirmUserId(null); }}
+                onCancel={() => setConfirmUserId(null)}
+            />
         </div>
     );
 };

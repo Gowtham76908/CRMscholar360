@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const leadController = require("../controllers/leadController");
+const customFieldController = require("../controllers/customFieldController");
+const emailController = require("../controllers/emailController");
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
 const bulkController = require("../controllers/bulkController");
@@ -18,10 +20,12 @@ router.patch("/bulk-update", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(
 router.patch("/bulk-assign", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(bulkAssignSchema), bulkController.bulkAssignLeads);
 
 // Get Lead Stats for Dashboard
-router.get("/stats", leadController.getDashboardStats);
+router.get("/stats",       leadController.getDashboardStats);
+router.get("/team-stats",  leadController.getTeamStats);
+router.get("/duplicates",  roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEAD"]), leadController.getDuplicates);
 
-// Export Leads
-router.get("/export", leadController.exportLeads);
+// Export Leads (admin/team_lead only — prevents bulk data leakage)
+router.get("/export", roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEAD"]), leadController.exportLeads);
 
 // Import Leads from CSV (Admin only)
 router.post("/import", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), csvUpload.single("csv"), leadController.importLeads);
@@ -57,5 +61,15 @@ router.patch("/:id/status", validate(updateLeadSchema), leadController.updateLea
 // Update entire Lead
 router.put("/:id", validate(updateLeadSchema), leadController.updateLead);
 router.patch("/:id", validate(updateLeadSchema), leadController.updateLead);
+
+// Email
+router.post("/:id/emails", emailController.sendEmail);
+router.get("/:id/emails",  emailController.getLeadEmails);
+
+// Custom field values for a specific lead
+router.patch("/:id/custom-fields", (req, res) => {
+    req.params.leadId = req.params.id;
+    customFieldController.saveLeadCustomFields(req, res);
+});
 
 module.exports = router;

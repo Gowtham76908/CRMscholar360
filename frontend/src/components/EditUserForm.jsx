@@ -5,6 +5,7 @@ import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import api from "../api/axios";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
+import { toast } from "sonner";
 
 const editUserSchema = z.object({
     name: z.string().min(2, "Name is required"),
@@ -55,11 +56,11 @@ const EditUserForm = ({ user, onClose }) => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["team"] });
+            toast.success("User updated successfully");
             onClose();
-            // alert("User updated successfully");
         },
         onError: (error) => {
-            alert(error.response?.data?.message || "Failed to update user");
+            toast.error(error.response?.data?.message || "Failed to update user");
         },
     });
 

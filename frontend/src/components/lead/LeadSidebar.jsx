@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../../api/axios";
+import { toast } from "sonner";
 import {
-    Phone, Mail, Building2, Briefcase, Linkedin, User,
-    Bell, BellOff, Clock, ChevronDown, ChevronUp, Plus, Loader2
+    Phone, Mail, Building2, Briefcase, Linkedin,
+    Bell, Plus, Loader2, MessageCircle, CheckCircle, XCircle,
+    ChevronDown, Sparkles,
 } from "lucide-react";
 
 const SCORE_CONFIG = (score) => {
@@ -43,8 +45,21 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId 
     const [showReminderForm, setShowReminderForm] = useState(false);
     const [reminderMsg, setReminderMsg] = useState("");
     const [reminderAt, setReminderAt] = useState("");
+    const [scoreExpanded, setScoreExpanded] = useState(false);
 
     const scoreConf = SCORE_CONFIG(lead.score ?? 0);
+
+    const optInMutation = useMutation({
+        mutationFn: (value) => api.patch(`/leads/${leadId}`, {
+            whatsappOptIn: value,
+            whatsappOptInAt: value ? new Date().toISOString() : null,
+        }),
+        onSuccess: (_, value) => {
+            queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+            toast.success(value ? "WhatsApp opt-in enabled" : "WhatsApp opt-in removed");
+        },
+        onError: () => toast.error("Failed to update WhatsApp opt-in"),
+    });
 
     const addReminder = useMutation({
         mutationFn: (data) => api.post("/reminders", data),
@@ -79,6 +94,34 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId 
                             </a>
                         </li>
                     )}
+
+                    {/* WhatsApp Opt-in Toggle */}
+                    <li className="flex items-center justify-between gap-2.5 py-1 border-t border-gray-100 pt-2.5">
+                        <div className="flex items-center gap-2 text-sm">
+                            <MessageCircle className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                            <span className="text-gray-700 font-medium">WhatsApp</span>
+                        </div>
+                        <button
+                            onClick={() => optInMutation.mutate(!lead.whatsappOptIn)}
+                            disabled={optInMutation.isPending}
+                            title={lead.whatsappOptIn ? "Click to remove consent" : "Click to give consent"}
+                            className="flex items-center gap-1.5 text-xs font-semibold transition-colors disabled:opacity-50"
+                        >
+                            {optInMutation.isPending ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+                            ) : lead.whatsappOptIn ? (
+                                <>
+                                    <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                                    <span className="text-green-600">Opted in</span>
+                                </>
+                            ) : (
+                                <>
+                                    <XCircle className="h-3.5 w-3.5 text-gray-400" />
+                                    <span className="text-gray-400">Not opted in</span>
+                                </>
+                            )}
+                        </button>
+                    </li>
                     {lead.email && (
                         <li className="flex items-center gap-2.5 text-sm">
                             <Mail className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
@@ -129,20 +172,31 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId 
                         style={{ width: `${Math.min(100, lead.score ?? 0)}%` }}
                     />
                 </div>
-                {lead.scoreExplanation?.factors?.length > 0 && (
-                    <ul className="space-y-1">
-                        {lead.scoreExplanation.factors.map((f, i) => (
-                            <li key={i} className="flex items-center gap-1.5 text-xs text-gray-600">
-                                <span className={`font-bold ${f.direction === "up" ? "text-green-600" : "text-red-500"}`}>
-                                    {f.direction === "up" ? "↑" : "↓"}
-                                </span>
-                                {f.label}
-                            </li>
-                        ))}
-                    </ul>
-                )}
-                {!lead.scoreExplanation?.factors?.length && (
-                    <p className="text-[11px] text-gray-400">Transcribe a call to see score breakdown</p>
+                {lead.scoreExplanation?.factors?.length > 0 ? (
+                    <>
+                        <button
+                            onClick={() => setScoreExpanded(v => !v)}
+                            className="flex items-center gap-1 text-[11px] font-semibold text-gray-500 hover:text-gray-700 transition-colors mt-1"
+                        >
+                            <Sparkles className="h-3 w-3 text-violet-400" />
+                            Why this score?
+                            <ChevronDown className={`h-3 w-3 ml-auto transition-transform ${scoreExpanded ? "rotate-180" : ""}`} />
+                        </button>
+                        {scoreExpanded && (
+                            <ul className="mt-2 space-y-1 bg-white/60 rounded-lg p-2 border border-white">
+                                {lead.scoreExplanation.factors.map((f, i) => (
+                                    <li key={i} className="flex items-center gap-1.5 text-xs text-gray-700">
+                                        <span className={`font-bold shrink-0 ${f.direction === "up" ? "text-green-600" : "text-red-500"}`}>
+                                            {f.direction === "up" ? "↑" : "↓"}
+                                        </span>
+                                        {f.label}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </>
+                ) : (
+                    <p className="text-[11px] text-gray-400 mt-1">Transcribe a call to see score breakdown</p>
                 )}
             </div>
 

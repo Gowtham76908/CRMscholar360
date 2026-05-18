@@ -1,13 +1,40 @@
-import { Outlet, Navigate } from "react-router-dom";
-import Sidebar from "../components/Sidebar";
-import Navbar from "../components/Navbar";
-import { useAuth } from "../context/AuthContext";
-import { useState } from "react";
+import { Outlet, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useState, useCallback, useMemo } from "react";
 import { Loader2 } from "lucide-react";
+import { Toaster } from "sonner";
+import { useAuth } from "../context/AuthContext";
+import NavigationRail, { getModeFromPath } from "../components/nav/NavigationRail";
+import ContextPanel from "../components/nav/ContextPanel";
+import MobileNav from "../components/nav/MobileNav";
+import Navbar from "../components/Navbar";
+import CommandPalette from "../components/CommandPalette";
 
 export default function AppLayout() {
     const { isAuthenticated, loading } = useAuth();
-    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const location = useLocation();
+    const navigate  = useNavigate();
+
+    const [panelOpen, setPanelOpen] = useState(() =>
+        localStorage.getItem("nav-panel-open") !== "false"
+    );
+
+    const activeMode = useMemo(() => getModeFromPath(location.pathname), [location.pathname]);
+
+    const handleModeClick = useCallback((modeId, defaultPath) => {
+        if (modeId === activeMode) {
+            // Second click on same mode → toggle panel
+            setPanelOpen(v => {
+                const next = !v;
+                localStorage.setItem("nav-panel-open", String(next));
+                return next;
+            });
+        } else {
+            // Different mode → navigate to its default path + open panel
+            navigate(defaultPath);
+            setPanelOpen(true);
+            localStorage.setItem("nav-panel-open", "true");
+        }
+    }, [activeMode, navigate]);
 
     if (loading) {
         return (
@@ -21,21 +48,42 @@ export default function AppLayout() {
         return <Navigate to="/login" replace />;
     }
 
+    // Zone 3 left margin: 56px rail + 240px panel (when open)
+    const mainLeft = panelOpen ? 296 : 56;
+
     return (
         <div className="min-h-screen bg-gray-50 flex">
-            {/* Sidebar Desktop */}
-            <Sidebar />
+            {/* Zone 1 — Navigation Rail (56px) */}
+            <NavigationRail
+                panelOpen={panelOpen}
+                onModeClick={handleModeClick}
+            />
 
-            <div className="flex-1 flex flex-col md:ml-64 transition-all duration-300">
-                <Navbar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+            {/* Zone 2 — Context Panel (240px) */}
+            <ContextPanel activeMode={activeMode} open={panelOpen} onClose={() => setPanelOpen(false)} />
 
-                <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
+            {/* Zone 3 — Main Workspace */}
+            <div
+                className="flex-1 flex flex-col transition-all duration-300 min-w-0"
+                style={{ marginLeft: mainLeft }}
+            >
+                <Navbar onMenuClick={() => handleModeClick(activeMode, location.pathname)} />
+
+                <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-20 md:pb-8 overflow-auto">
                     <Outlet />
                 </main>
             </div>
 
-            {/* Mobile Sidebar Overlay (Simple implementation) */}
-            {/* In a real app we'd use a Drawer component or Sheet */}
+            {/* Mobile bottom navigation */}
+            <MobileNav onModeClick={handleModeClick} />
+
+            <CommandPalette />
+            <Toaster
+                position="bottom-right"
+                richColors
+                closeButton
+                toastOptions={{ duration: 4000 }}
+            />
         </div>
     );
 }

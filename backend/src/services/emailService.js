@@ -1,19 +1,25 @@
 const nodemailer = require("nodemailer");
 
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || "587"),
-    secure: process.env.SMTP_SECURE === "true",
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
-});
+// Build a transporter from DB company settings; falls back to env vars if not configured
+const createTransporter = (settings) => {
+    const host   = settings?.smtpHost || process.env.SMTP_HOST;
+    const port   = settings?.smtpPort || parseInt(process.env.SMTP_PORT || "587");
+    const user   = settings?.smtpUser || process.env.SMTP_USER;
+    const pass   = settings?.smtpPass || process.env.SMTP_PASS;
+    const secure = settings?.smtpSecure ?? (process.env.SMTP_SECURE === "true");
+    return nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
+};
 
-const sendEmail = async ({ to, subject, text, html, attachments }) => {
+// Lazy default transporter (used by invoice/reminder/welcome emails)
+const getDefaultTransporter = () => createTransporter(null);
+
+const sendEmail = async ({ to, subject, text, html, attachments, settings }) => {
     try {
+        const transporter = settings ? createTransporter(settings) : getDefaultTransporter();
+        const fromName = settings?.smtpFrom || process.env.SMTP_FROM || "CRM";
+        const fromAddr = settings?.smtpUser || process.env.SMTP_USER || process.env.SMTP_FROM;
         await transporter.sendMail({
-            from: `"ZenXAI CRM" <${process.env.SMTP_FROM}>`,
+            from: `"${fromName}" <${fromAddr}>`,
             to,
             subject,
             text,
@@ -175,9 +181,15 @@ const sendInvoiceEmail = async ({ to, invoice, items, company }) => {
     return await sendEmail({ to, subject, html, text: `Invoice #${invoice.invoiceNumber} - Total: ₹${Number(invoice.total).toFixed(2)}` });
 };
 
+const sendLeadEmail = async ({ to, subject, body, html, settings }) => {
+    return sendEmail({ to, subject, text: body, html: html ?? body.replace(/\n/g, "<br>"), settings });
+};
+
 module.exports = {
     sendEmail,
     sendWelcomeEmail,
     sendReminderEmail,
     sendInvoiceEmail,
+    sendLeadEmail,
+    createTransporter,
 };

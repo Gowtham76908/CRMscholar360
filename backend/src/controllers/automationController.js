@@ -57,7 +57,6 @@ const updateRule = async (req, res) => {
         const existing = await prisma.automationRule.findUnique({ where: { id } });
         if (!existing) return res.status(404).json({ message: "Rule not found" });
 
-        // Replace conditions and actions wholesale when provided
         const updateData = {
             ...(name        !== undefined && { name }),
             ...(description !== undefined && { description }),
@@ -66,20 +65,22 @@ const updateRule = async (req, res) => {
             ...(triggerConfig !== undefined && { triggerConfig }),
         };
 
-        if (conditions !== undefined) {
-            await prisma.automationCondition.deleteMany({ where: { ruleId: id } });
-            updateData.conditions = { create: conditions };
-        }
-
-        if (actions !== undefined) {
-            await prisma.automationAction.deleteMany({ where: { ruleId: id } });
-            updateData.actions = { create: actions.map((a, i) => ({ ...a, order: i })) };
-        }
-
-        const updated = await prisma.automationRule.update({
-            where: { id },
-            data: updateData,
-            include: ruleInclude
+        // Replace conditions and actions inside a transaction so a mid-flight failure
+        // never leaves the rule in a partially-deleted state.
+        const updated = await prisma.$transaction(async (tx) => {
+            if (conditions !== undefined) {
+                await tx.automationCondition.deleteMany({ where: { ruleId: id } });
+                updateData.conditions = { create: conditions };
+            }
+            if (actions !== undefined) {
+                await tx.automationAction.deleteMany({ where: { ruleId: id } });
+                updateData.actions = { create: actions.map((a, i) => ({ ...a, order: i })) };
+            }
+            return tx.automationRule.update({
+                where: { id },
+                data: updateData,
+                include: ruleInclude,
+            });
         });
 
         res.json(updated);

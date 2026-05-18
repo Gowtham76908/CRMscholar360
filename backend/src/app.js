@@ -56,8 +56,10 @@ const forgotPasswordLimiter = rateLimit({
     max: 5,
     keyGenerator: (req) => {
         const email = (req.body?.email ?? "").toLowerCase().trim();
-        return email ? `${req.ip}:${email}` : req.ip;
+        const ip = (req.ip ?? "").replace(/^::ffff:/, ""); // normalise IPv4-mapped IPv6
+        return email ? `${ip}:${email}` : ip;
     },
+    validate: { keyGeneratorIpFallback: false }, // we normalise IPv6 manually above
     message: { error: "Too many reset requests. Please wait 15 minutes before trying again." },
     standardHeaders: true,
     legacyHeaders: false,
@@ -69,10 +71,11 @@ const forgotPasswordEmailLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 5,
     keyGenerator: (req) => (req.body?.email ?? "unknown").toLowerCase().trim(),
+    validate: { ip: false },
     message: { error: "Too many reset requests for this email. Please wait 15 minutes." },
     standardHeaders: true,
     legacyHeaders: false,
-    skip: (req) => !(req.body?.email), // no email in body → skip email limiter, IP limiter still fires
+    skip: (req) => !(req.body?.email),
 });
 
 app.use("/api/auth/forgot-password", forgotPasswordLimiter, forgotPasswordEmailLimiter);
@@ -126,6 +129,11 @@ app.use("/api/company-settings", require("./routes/companySettings"));
 app.use("/api/notifications",   require("./routes/notification"));
 app.use("/api/automations",     require("./routes/automation"));
 app.use("/api/whatsapp",        require("./routes/whatsapp"));
+app.use("/api/ai",              require("./routes/ai"));
+app.use("/api/custom-fields",   require("./routes/customField"));
+app.use("/api/facebook",        require("./routes/facebook"));
+// Public — no auth middleware (email clients load pixel without session)
+app.use("/api/email-track",     require("./routes/emailTrack"));
 
 // Global error handler — must be last middleware
 app.use((err, req, res, next) => {

@@ -29,6 +29,11 @@ import LeadDetail from "./pages/LeadDetail";
 import InvoiceBilling from "./pages/InvoiceBilling";
 import SalestrailCalls from "./pages/SalestrailCalls";
 import Automations from "./pages/Automations";
+import Inbox from "./pages/Inbox";
+import WhatsAppCampaigns from "./pages/WhatsAppCampaigns";
+import WhatsAppCampaignDetail from "./pages/WhatsAppCampaignDetail";
+import WhatsAppAutoReplies from "./pages/WhatsAppAutoReplies";
+import Duplicates from "./pages/Duplicates";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -67,6 +72,7 @@ function App() {
             <Route path="/leads" element={<Leads />} />
             <Route path="/leads/:id" element={<LeadDetail />} />
             <Route path="/team" element={<Team />} />
+            <Route path="/inbox" element={<Inbox />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/tasks/:id" element={<TaskDetail />} />
             <Route path="/integrations" element={<Integrations />} />
@@ -81,6 +87,10 @@ function App() {
             <Route path="/invoices" element={<InvoiceBilling />} />
             <Route path="/salestrail" element={<SalestrailCalls />} />
             <Route path="/automations" element={<Automations />} />
+            <Route path="/whatsapp/campaigns" element={<WhatsAppCampaigns />} />
+            <Route path="/whatsapp/campaigns/:id" element={<WhatsAppCampaignDetail />} />
+            <Route path="/whatsapp/auto-replies" element={<WhatsAppAutoReplies />} />
+            <Route path="/duplicates" element={<Duplicates />} />
             <Route path="*" element={<NotFound />} />
           </Route>
 

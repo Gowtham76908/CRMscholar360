@@ -149,7 +149,11 @@ const updateLead = async (req, res) => {
         if (status && status !== currentLead.status) {
             runRulesForLead("STATUS_CHANGED", updatedLead, { prevStatus: currentLead.status, newStatus: status }).catch(console.error);
         }
-        runRulesForLead("LEAD_ASSIGNED", updatedLead).catch(console.error);
+        // Only fire LEAD_ASSIGNED when the assignee actually changed
+        const incomingAssignee = req.body.assignedToId;
+        if (incomingAssignee && incomingAssignee !== currentLead.assignedToId) {
+            runRulesForLead("LEAD_ASSIGNED", updatedLead).catch(console.error);
+        }
 
         // Trigger Commission if status changed to CONVERTED
         if (status === "CONVERTED" && currentLead.status !== "CONVERTED") {
@@ -588,22 +592,130 @@ const getDashboardStats = async (req, res) => {
         const leadWhere = role === "EMPLOYEE" ? { assignedToId: userId } : {};
         const taskWhere = role === "EMPLOYEE" ? { assignedToId: userId, status: "PENDING" } : { status: "PENDING" };
 
-        const [totalLeads, newLeadsToday, convertedLeads, pendingTasks] = await prisma.$transaction([
+        const [total, newLeadsToday, converted, followUp, pendingTasks] = await prisma.$transaction([
             prisma.lead.count({ where: leadWhere }),
             prisma.lead.count({ where: { ...leadWhere, createdAt: { gte: today } } }),
             prisma.lead.count({ where: { ...leadWhere, status: "CONVERTED" } }),
+            prisma.lead.count({ where: { ...leadWhere, status: "FOLLOW_UP" } }),
             prisma.task.count({ where: taskWhere })
         ]);
 
         res.json({
-            totalLeads,
+            total,
             newLeadsToday,
-            convertedLeads,
+            converted,
+            followUp,
             pendingTasks,
-            conversionRate: totalLeads > 0 ? Math.round((convertedLeads / totalLeads) * 100) : 0
+            conversionRate: total > 0 ? Math.round((converted / total) * 100) : 0
         });
     } catch (error) {
         res.status(500).json({ message: "Error fetching dashboard stats", error: error.message });
+    }
+};
+
+// GET /leads/duplicates — find groups of leads sharing the same phone or email
+const getDuplicates = async (req, res) => {
+    try {
+        const leads = await prisma.lead.findMany({
+            where: {
+                OR: [
+                    { phoneNormalized: { not: null } },
+                    { email: { not: null } },
+                ],
+            },
+            include: { assignedTo: { select: { id: true, name: true } } },
+            orderBy: { createdAt: "asc" },
+        });
+
+        const phoneMap = new Map();
+        const emailMap = new Map();
+
+        for (const lead of leads) {
+            if (lead.phoneNormalized) {
+                if (!phoneMap.has(lead.phoneNormalized)) phoneMap.set(lead.phoneNormalized, []);
+                phoneMap.get(lead.phoneNormalized).push(lead);
+            }
+            if (lead.email) {
+                const key = lead.email.toLowerCase().trim();
+                if (!emailMap.has(key)) emailMap.set(key, []);
+                emailMap.get(key).push(lead);
+            }
+        }
+
+        const groups = [];
+        const seenIds = new Set();
+
+        for (const [phone, groupLeads] of phoneMap) {
+            if (groupLeads.length < 2) continue;
+            groups.push({ type: "phone", value: phone, leads: groupLeads });
+            groupLeads.forEach(l => seenIds.add(l.id));
+        }
+
+        for (const [email, groupLeads] of emailMap) {
+            if (groupLeads.length < 2) continue;
+            // Only emit if at least one lead isn't already covered by a phone group
+            const hasNew = groupLeads.some(l => !seenIds.has(l.id));
+            if (!hasNew) continue;
+            groups.push({ type: "email", value: email, leads: groupLeads });
+        }
+
+        res.json({ groups, total: groups.length });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching duplicates", error: error.message });
+    }
+};
+
+// GET /leads/team-stats — per-member conversion stats (admin / team lead only)
+const getTeamStats = async (req, res) => {
+    try {
+        const { role } = req.user;
+        if (!["ADMIN", "SUPER_ADMIN", "TEAM_LEAD"].includes(role)) {
+            return res.status(403).json({ message: "Forbidden" });
+        }
+
+        const [users, grouped] = await Promise.all([
+            prisma.user.findMany({
+                where: { isActive: true },
+                select: { id: true, name: true, role: true },
+            }),
+            prisma.lead.groupBy({
+                by: ["assignedToId", "status"],
+                where: { assignedToId: { not: null } },
+                _count: { id: true },
+            }),
+        ]);
+
+        const statsMap = new Map();
+        for (const row of grouped) {
+            if (!row.assignedToId) continue;
+            if (!statsMap.has(row.assignedToId)) {
+                statsMap.set(row.assignedToId, { total: 0, converted: 0, followUp: 0, contacted: 0, lost: 0 });
+            }
+            const s = statsMap.get(row.assignedToId);
+            s.total      += row._count.id;
+            if (row.status === "CONVERTED")  s.converted  = row._count.id;
+            if (row.status === "FOLLOW_UP")  s.followUp   = row._count.id;
+            if (row.status === "CONTACTED")  s.contacted  = row._count.id;
+            if (row.status === "LOST")       s.lost       = row._count.id;
+        }
+
+        const result = users
+            .filter(u => statsMap.has(u.id))
+            .map(u => {
+                const s = statsMap.get(u.id);
+                return {
+                    userId: u.id,
+                    name:   u.name,
+                    role:   u.role,
+                    ...s,
+                    conversionRate: s.total > 0 ? Math.round((s.converted / s.total) * 100) : 0,
+                };
+            })
+            .sort((a, b) => b.converted - a.converted || b.total - a.total);
+
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching team stats", error: error.message });
     }
 };
 
@@ -641,6 +753,8 @@ module.exports = {
     mergeLeads,
     getLeadActivities,
     getDashboardStats,
+    getDuplicates,
+    getTeamStats,
     getLeadSuggestions,
     dismissLeadSuggestion,
 };

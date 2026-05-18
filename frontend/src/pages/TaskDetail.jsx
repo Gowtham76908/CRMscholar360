@@ -219,7 +219,7 @@ const TaskDetail = () => {
                                         </div>
                                     </div>
                                     <Link 
-                                        to={`/leads`} 
+                                        to={`/leads/${task.lead.id}`}
                                         className="mt-4 flex items-center justify-center gap-2 w-full py-2 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
                                     >
                                         View Lead Profile

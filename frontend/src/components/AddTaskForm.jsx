@@ -6,6 +6,7 @@ import api from "../api/axios";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import FileDropzone from "./FileDropzone";
+import { toast } from "sonner";
 
 const taskSchema = z.object({
     title: z.string().min(2, "Title is required"),
@@ -58,7 +59,7 @@ const AddTaskForm = ({ onClose, leadId: initialLeadId }) => {
             onClose();
         },
         onError: (error) => {
-            alert(error.response?.data?.message || "Failed to create task");
+            toast.error(error.response?.data?.message || "Failed to create task");
         }
     });
 
@@ -86,7 +87,7 @@ const AddTaskForm = ({ onClose, leadId: initialLeadId }) => {
             });
         } catch (error) {
             console.error("Submission error:", error);
-            alert("Error uploading files. Please try again.");
+            toast.error("Error uploading files. Please try again.");
         } finally {
             setIsUploading(false);
         }

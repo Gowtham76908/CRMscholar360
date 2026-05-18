@@ -2,6 +2,7 @@ const prisma = require("../utils/prisma");
 const logActivity = require("../utils/activityLogger");
 const normalizePhone = require("../utils/normalizePhone");
 const { getTemplates, sendTemplateMessage } = require("../services/whatsappService");
+const { processInboundReply } = require("../services/whatsappAutoReplyService");
 
 // GET /api/whatsapp/templates
 const listTemplates = async (req, res) => {
@@ -102,6 +103,10 @@ const watiWebhook = async (req, res) => {
             const now = new Date();
             const dateField = { DELIVERED: "deliveredAt", READ: "readAt" }[status];
 
+            const updatedMsgs = await prisma.whatsAppMessage.findMany({
+                where: { watiMessageId },
+                select: { id: true },
+            });
             await prisma.whatsAppMessage.updateMany({
                 where: { watiMessageId },
                 data: {
@@ -110,6 +115,23 @@ const watiWebhook = async (req, res) => {
                     providerPayload: payload,
                 },
             });
+
+            // Sync campaign recipient status
+            if (updatedMsgs.length > 0 && (status === "DELIVERED" || status === "READ")) {
+                const msgIds = updatedMsgs.map(m => m.id);
+                const recipients = await prisma.whatsAppCampaignRecipient.findMany({
+                    where: { messageId: { in: msgIds } },
+                    select: { id: true, campaignId: true },
+                });
+                for (const r of recipients) {
+                    await prisma.whatsAppCampaignRecipient.update({ where: { id: r.id }, data: { status } });
+                    const countField = status === "DELIVERED" ? "deliveredCount" : "readCount";
+                    await prisma.whatsAppCampaign.update({
+                        where: { id: r.campaignId },
+                        data: { [countField]: { increment: 1 } },
+                    });
+                }
+            }
         } else if (eventType === "message" || payload.waId) {
             // Inbound reply from lead
             const phone = normalizePhone(payload.waId ?? payload.from ?? "");
@@ -123,16 +145,14 @@ const watiWebhook = async (req, res) => {
                 });
 
                 if (original) {
+                    const now = new Date();
+
                     await prisma.whatsAppMessage.update({
                         where: { id: original.id },
-                        data: {
-                            status: "REPLIED",
-                            replyText,
-                            repliedAt: new Date(),
-                        },
+                        data: { status: "REPLIED", replyText, repliedAt: now },
                     });
 
-                    // Also create an INBOUND record for the timeline
+                    // Create INBOUND record for the timeline
                     await prisma.whatsAppMessage.create({
                         data: {
                             leadId: original.leadId,
@@ -144,11 +164,31 @@ const watiWebhook = async (req, res) => {
                         },
                     });
 
+                    // Update campaign recipient if this message belongs to a campaign
+                    const recipient = await prisma.whatsAppCampaignRecipient.findFirst({
+                        where: { messageId: original.id },
+                    });
+                    if (recipient) {
+                        await prisma.whatsAppCampaignRecipient.update({
+                            where: { id: recipient.id },
+                            data: { status: "REPLIED", replyText, repliedAt: now },
+                        });
+                        await prisma.whatsAppCampaign.update({
+                            where: { id: recipient.campaignId },
+                            data: { repliedCount: { increment: 1 } },
+                        });
+                    }
+
                     await logActivity({
                         leadId: original.leadId,
                         action: "WHATSAPP_REPLY",
                         metadata: { replyText, phone },
                     });
+
+                    // Trigger keyword auto-reply rules
+                    processInboundReply(original.leadId, phone, replyText).catch(err =>
+                        console.error("[AutoReply] processInboundReply error:", err.message)
+                    );
                 }
             }
         }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
     Plus, Loader2, Play, CheckCircle, Trash2, X,
     ChevronRight, Calendar, Target, ArrowRight,
@@ -120,7 +121,7 @@ const BacklogRow = ({ task, sprintId, onEdit, onDelete, sprints }) => {
             queryClient.invalidateQueries({ queryKey: ["sprints"] });
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
         },
-        onError: (e) => alert(e.response?.data?.message || "Failed to add task to sprint"),
+        onError: (e) => toast.error(e.response?.data?.message || "Failed to add task to sprint"),
     });
 
     const removeFromSprintMutation = useMutation({
@@ -130,7 +131,7 @@ const BacklogRow = ({ task, sprintId, onEdit, onDelete, sprints }) => {
             queryClient.invalidateQueries({ queryKey: ["sprints"] });
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
         },
-        onError: (e) => alert(e.response?.data?.message || "Failed to remove task from sprint"),
+        onError: (e) => toast.error(e.response?.data?.message || "Failed to remove task from sprint"),
     });
 
     const plannable = sprints.filter(s => s.status !== "COMPLETED");
@@ -337,7 +338,7 @@ const Sprints = () => {
     const startMutation = useMutation({
         mutationFn: (id) => api.post(`/sprints/${id}/start`),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sprints"] }),
-        onError: (e) => alert(e.response?.data?.message || "Failed to start sprint"),
+        onError: (e) => toast.error(e.response?.data?.message || "Failed to start sprint"),
     });
 
     const completeMutation = useMutation({
@@ -347,7 +348,7 @@ const Sprints = () => {
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
             queryClient.invalidateQueries({ queryKey: ["backlog"] });
         },
-        onError: (e) => alert(e.response?.data?.message || "Failed to complete sprint"),
+        onError: (e) => toast.error(e.response?.data?.message || "Failed to complete sprint"),
     });
 
     const deleteMutation = useMutation({
@@ -356,7 +357,7 @@ const Sprints = () => {
             queryClient.invalidateQueries({ queryKey: ["sprints"] });
             queryClient.invalidateQueries({ queryKey: ["backlog"] });
         },
-        onError: (e) => alert(e.response?.data?.message || "Failed to delete sprint"),
+        onError: (e) => toast.error(e.response?.data?.message || "Failed to delete sprint"),
     });
 
     const deleteTaskMutation = useMutation({
@@ -365,7 +366,7 @@ const Sprints = () => {
             queryClient.invalidateQueries({ queryKey: ["backlog"] });
             queryClient.invalidateQueries({ queryKey: ["sprints"] });
         },
-        onError: (e) => alert(e.response?.data?.message || "Failed to delete task"),
+        onError: (e) => toast.error(e.response?.data?.message || "Failed to delete task"),
     });
 
     // ── Summary stats ─────────────────────────────────────────────────────────

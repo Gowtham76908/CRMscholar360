@@ -4,29 +4,38 @@ const { runStatusAutomation } = require("./services/automationService");
 const autoCheckout = require("./jobs/autoCheckout");
 const autoBreakOffline = require("./jobs/autoBreakOffline");
 const { notifyLeaderboardWinner, notifyTasksDueSoon, notifyOverdueTasks } = require("./services/notificationService");
+const { runNoReplyTimeoutCheck } = require("./services/whatsappAutoReplyService");
 
 const startScheduler = () => {
     console.log("[Scheduler] Starting background jobs...");
 
     // Check Reminders every 5 minutes
     cron.schedule("*/5 * * * *", () => {
-        processReminders();
+        processReminders().catch(err =>
+            console.error("[Scheduler] processReminders failed:", err)
+        );
     });
 
     // Auto-offline users who've been on break for more than 1 hour (runs every 5 minutes)
     cron.schedule("*/5 * * * *", () => {
-        autoBreakOffline();
+        autoBreakOffline().catch(err =>
+            console.error("[Scheduler] autoBreakOffline failed:", err)
+        );
     });
 
     // Run Status Automation every day at midnight
     cron.schedule("0 0 * * *", () => {
-        runStatusAutomation();
+        runStatusAutomation().catch(err =>
+            console.error("[Scheduler] runStatusAutomation failed:", err)
+        );
     });
 
     // Auto-checkout at 10:00 PM IST daily
     cron.schedule("0 22 * * *", () => {
         console.log("[Scheduler] Running auto-checkout job...");
-        autoCheckout();
+        autoCheckout().catch(err =>
+            console.error("[Scheduler] autoCheckout failed:", err)
+        );
     }, {
         timezone: "Asia/Kolkata"
     });
@@ -46,6 +55,14 @@ const startScheduler = () => {
             console.error("[Scheduler] Overdue task notification failed:", err)
         );
     }, { timezone: "Asia/Kolkata" });
+
+    // WhatsApp No-Reply timeout follow-ups — runs every hour
+    cron.schedule("0 * * * *", () => {
+        console.log("[Scheduler] Running WhatsApp no-reply timeout check...");
+        runNoReplyTimeoutCheck().catch(err =>
+            console.error("[Scheduler] WhatsApp no-reply timeout check failed:", err)
+        );
+    });
 
     // Notify the previous month's leaderboard #1 winner on the 2nd of every month at 9 AM IST
     // (Backup for the winner if they didn't log in on the 1st)

@@ -291,5 +291,6 @@ module.exports = {
     getUsersForChat,
     startDirectChat,
     syncUserToStream,
-    syncAllUsers
+    syncAllUsers,
+    upsertUserToStream,
 };

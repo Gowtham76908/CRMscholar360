@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
     Plus, Loader2, Filter, ChevronDown, X, Send,
     Calendar, Clock, Tag, User, Link2, Trash2, Edit3,
@@ -110,7 +111,7 @@ const TaskDrawer = ({ task, onClose, onEdit, onDelete }) => {
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
             setComment("");
         },
-        onError: (e) => alert(e.response?.data?.message || "Failed to add comment"),
+        onError: (e) => toast.error(e.response?.data?.message || "Failed to add comment"),
     });
 
     const deleteCommentMutation = useMutation({
@@ -119,7 +120,7 @@ const TaskDrawer = ({ task, onClose, onEdit, onDelete }) => {
             queryClient.invalidateQueries({ queryKey: ["tasks"] });
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
         },
-        onError: (e) => alert(e.response?.data?.message || "Failed to delete comment"),
+        onError: (e) => toast.error(e.response?.data?.message || "Failed to delete comment"),
     });
 
     const pm = PRIORITY_META[task.priority] || PRIORITY_META.MEDIUM;
@@ -326,7 +327,7 @@ const Kanban = () => {
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
             setDrawerTask(null);
         },
-        onError: (e) => alert(e.response?.data?.message || "Failed to delete task"),
+        onError: (e) => toast.error(e.response?.data?.message || "Failed to delete task"),
     });
 
     // ── Drag & Drop ───────────────────────────────────────────────────────────

@@ -1,31 +1,33 @@
 import { useState } from "react";
-import { AlertTriangle, ArrowRight, Check } from "lucide-react";
+import { AlertTriangle, Check } from "lucide-react";
 import api from "../api/axios";
+import { toast } from "sonner";
+import Dialog from "./ui/Dialog";
 
 const MergeLeadModal = ({ leads, onClose, onSuccess }) => {
     if (!leads || leads.length < 2) return null;
 
     const [primaryId, setPrimaryId] = useState(leads[0].id);
     const [loading, setLoading] = useState(false);
+    const [confirmOpen, setConfirmOpen] = useState(false);
 
     const secondaryId = leads.find(l => l.id !== primaryId).id;
-    const primaryLead = leads.find(l => l.id === primaryId);
-    const secondaryLead = leads.find(l => l.id === secondaryId);
 
     const handleMerge = async () => {
-        if (!confirm("Are you sure? This action cannot be undone.")) return;
         setLoading(true);
         try {
             await api.post("/leads/merge", {
                 primaryLeadId: primaryId,
-                secondaryLeadId: secondaryId
+                secondaryLeadId: secondaryId,
             });
+            toast.success("Leads merged successfully");
             onSuccess();
             onClose();
         } catch (error) {
-            alert("Merge failed: " + error.response?.data?.message || error.message);
+            toast.error("Merge failed: " + (error.response?.data?.message || error.message));
         } finally {
             setLoading(false);
+            setConfirmOpen(false);
         }
     };
 
@@ -73,7 +75,7 @@ const MergeLeadModal = ({ leads, onClose, onSuccess }) => {
             <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
                 <button
                     type="button"
-                    onClick={handleMerge}
+                    onClick={() => setConfirmOpen(true)}
                     disabled={loading}
                     className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
                 >
@@ -87,6 +89,17 @@ const MergeLeadModal = ({ leads, onClose, onSuccess }) => {
                     Cancel
                 </button>
             </div>
+
+            <Dialog
+                open={confirmOpen}
+                variant="warning"
+                title="Merge these leads?"
+                description="Activities, notes, and tasks from the secondary lead will be moved to the primary lead. This cannot be undone."
+                confirmLabel="Merge"
+                loading={loading}
+                onConfirm={handleMerge}
+                onCancel={() => setConfirmOpen(false)}
+            />
         </div>
     );
 };

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import { Clock, CheckCircle, XCircle, Calendar, MapPin, Loader2, ChevronLeft, ChevronRight, Users, Briefcase } from "lucide-react";
@@ -258,14 +259,14 @@ const CheckInPanel = () => {
             queryClient.invalidateQueries({ queryKey: ["attendance-today"] });
             queryClient.invalidateQueries({ queryKey: ["attendance-history"] });
             queryClient.invalidateQueries({ queryKey: ["attendance-stats"] });
-            alert("Checked in successfully!");
+            toast.success("Checked in successfully!");
         },
         onError: (error) => {
             const d = error.response?.data;
             if (d?.code === "LATE_CHECK_IN") {
-                alert(`❌ ${d.message}\n\nDeadline: ${d.deadline}\nPlease contact HR for assistance.`);
+                toast.error(`Late check-in: ${d.message}. Deadline was ${d.deadline}. Contact HR for assistance.`);
             } else {
-                alert(d?.message || "Failed to check in");
+                toast.error(d?.message || "Failed to check in");
             }
         }
     });
@@ -276,10 +277,10 @@ const CheckInPanel = () => {
             queryClient.invalidateQueries({ queryKey: ["attendance-today"] });
             queryClient.invalidateQueries({ queryKey: ["attendance-history"] });
             queryClient.invalidateQueries({ queryKey: ["attendance-stats"] });
-            alert("Checked out successfully!");
+            toast.success("Checked out successfully!");
         },
         onError: (error) => {
-            alert(error.response?.data?.message || "Failed to check out");
+            toast.error(error.response?.data?.message || "Failed to check out");
         }
     });
 
@@ -560,7 +561,7 @@ const AdminReportsPanel = () => {
             queryClient.invalidateQueries({ queryKey: ["admin-monthly-report"] });
             queryClient.invalidateQueries({ queryKey: ["employee-attendance"] });
         },
-        onError: (err) => alert(err.response?.data?.message || "Failed to update status")
+        onError: (err) => toast.error(err.response?.data?.message || "Failed to update status")
     });
 
     const handleUpdateStatus = (userId, date, status) => {
@@ -838,10 +839,13 @@ const Attendance = () => {
     const [activeTab, setActiveTab] = useState("dashboard"); // dashboard, logs, reports
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-6">
-            <div className="max-w-7xl mx-auto space-y-6">
-                
-                {/* Unified Tab Switcher */}
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Attendance</h1>
+                    <p className="text-sm text-gray-500">Track check-ins, logs, and team reports</p>
+                </div>
+                {/* Tab Switcher */}
                 <div className="flex flex-wrap gap-2 bg-white rounded-xl shadow-sm p-1.5 border border-gray-100 w-fit">
                     <button
                         onClick={() => setActiveTab("dashboard")}
@@ -867,12 +871,12 @@ const Attendance = () => {
                         </button>
                     )}
                 </div>
+            </div>
 
-                <div className="transition-all duration-300">
-                    {activeTab === "dashboard" && <CheckInPanel />}
-                    {activeTab === "logs" && <MyLogsPanel />}
-                    {activeTab === "reports" && isAdmin && <AdminReportsPanel />}
-                </div>
+            <div className="transition-all duration-300">
+                {activeTab === "dashboard" && <CheckInPanel />}
+                {activeTab === "logs" && <MyLogsPanel />}
+                {activeTab === "reports" && isAdmin && <AdminReportsPanel />}
             </div>
         </div>
     );
