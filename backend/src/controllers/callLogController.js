@@ -4,6 +4,7 @@ const normalizePhone = require("../utils/normalizePhone");
 const FormData = require("form-data");
 const axios = require("axios");
 const { updateLeadScoreFromCall } = require("../services/leadScoringService");
+const { runRulesForLead } = require("../services/automationEngine");
 
 // Initiate Click2Call via Greeter
 const initiateCall = async (req, res) => {
@@ -152,6 +153,13 @@ const greeterWebhook = async (req, res) => {
                     hasRecording: !!callRecording
                 }
             });
+
+            // Fire MISSED_CALL automation rules if the call was not answered
+            const missedStatuses = ["MISSED", "NO_ANSWER", "BUSY", "UNANSWERED"];
+            if (missedStatuses.includes((callStatus || "").toUpperCase())) {
+                const lead = await prisma.lead.findUnique({ where: { id: callLog.leadId } });
+                if (lead) runRulesForLead("MISSED_CALL", lead).catch(console.error);
+            }
         } else {
             // Create a new call log if no matching one found
             // Try to find lead by customer number

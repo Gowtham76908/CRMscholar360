@@ -132,6 +132,7 @@ app.use("/api/whatsapp",        require("./routes/whatsapp"));
 app.use("/api/ai",              require("./routes/ai"));
 app.use("/api/custom-fields",   require("./routes/customField"));
 app.use("/api/facebook",        require("./routes/facebook"));
+app.use("/api/integration-hub", require("./routes/integrationHub"));
 // Public — no auth middleware (email clients load pixel without session)
 app.use("/api/email-track",     require("./routes/emailTrack"));
 

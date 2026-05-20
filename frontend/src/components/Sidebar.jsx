@@ -1,7 +1,7 @@
 import {
     LayoutDashboard, Users, UserCog, CheckSquare, Settings, Puzzle, BarChart,
-    Building, MessageSquare, Clock, Calendar, LogOut, Trophy, SearchCheck,
-    Linkedin, KanbanSquare, Zap, Receipt, PhoneCall, Bot, Send, Search,
+    Building, MessageSquare, Clock, Calendar, LogOut, SearchCheck,
+    Linkedin, Receipt, PhoneCall, Bot, Send, Search,
     Inbox, ChevronLeft, ChevronRight, GitMerge,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
@@ -13,10 +13,8 @@ const NAV_GROUPS = [
     {
         label: "Workspace",
         items: [
-            { icon: LayoutDashboard, label: "Dashboard",    path: "/dashboard" },
-            { icon: Users,           label: "Leads",        path: "/leads" },
-            { icon: KanbanSquare,    label: "Kanban Board", path: "/kanban" },
-            { icon: Zap,             label: "Sprints",      path: "/sprints" },
+            { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+            { icon: Users,           label: "Leads",     path: "/leads" },
         ],
     },
     {
@@ -33,9 +31,8 @@ const NAV_GROUPS = [
         label: "Intelligence",
         adminOnly: true,
         items: [
-            { icon: BarChart,  label: "Reports",      path: "/reports",      adminOnly: true },
-            { icon: Trophy,    label: "Leaderboard",  path: "/leaderboard" },
-            { icon: Bot,       label: "Automations",  path: "/automations",  adminOnly: true },
+            { icon: BarChart, label: "Reports",     path: "/reports",     adminOnly: true },
+            { icon: Bot,      label: "Automations", path: "/automations", adminOnly: true },
         ],
     },
     {
@@ -121,7 +118,7 @@ const Sidebar = ({ collapsed = false, onToggle }) => {
                                                     ? "justify-center p-2.5 mx-0"
                                                     : "px-3 py-2 text-sm font-medium",
                                                 isActive
-                                                    ? "bg-indigo-50 text-indigo-700"
+                                                    ? "bg-orange-50 text-orange-700"
                                                     : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                                             )}
                                         >
@@ -129,7 +126,7 @@ const Sidebar = ({ collapsed = false, onToggle }) => {
                                                 className={cn(
                                                     "transition-colors shrink-0",
                                                     collapsed ? "h-5 w-5" : "mr-3 h-4 w-4",
-                                                    isActive ? "text-indigo-600" : "text-gray-400 group-hover:text-gray-500"
+                                                    isActive ? "text-orange-600" : "text-gray-400 group-hover:text-gray-500"
                                                 )}
                                             />
                                             {!collapsed && item.label}
@@ -149,7 +146,7 @@ const Sidebar = ({ collapsed = false, onToggle }) => {
                     onClick={onToggle}
                     title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                     className={cn(
-                        "flex items-center gap-2 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors",
+                        "flex items-center gap-2 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition-colors",
                         collapsed ? "w-full justify-center p-2.5" : "w-full px-3 py-2 text-xs"
                     )}
                 >
@@ -167,7 +164,7 @@ const Sidebar = ({ collapsed = false, onToggle }) => {
                                 const e = new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true });
                                 window.dispatchEvent(e);
                             }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-400 border border-gray-200 rounded-lg hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-400 border border-gray-200 rounded-lg hover:border-orange-300 hover:text-orange-600 hover:bg-orange-50 transition-colors"
                         >
                             <Search className="h-3.5 w-3.5" />
                             <span className="flex-1 text-left">Search & navigate</span>

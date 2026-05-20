@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Building2, Phone, Mail, Globe, MapPin, Star, Loader2, CheckSquare, Square, Users, ArrowRight, X } from "lucide-react";
+import { Search, Building2, Phone, Mail, Globe, MapPin, Star, Loader2, CheckSquare, Square, Users, ArrowRight, X, CheckCircle2 } from "lucide-react";
 import api from "../api/axios";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -11,6 +11,7 @@ const SearchLeads = () => {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState([]);
     const [selected, setSelected] = useState(new Set());
+    const [importedIds, setImportedIds] = useState(new Set());
     const [loading, setLoading] = useState(false);
     const [importing, setImporting] = useState(false);
     const [error, setError] = useState("");
@@ -25,6 +26,7 @@ const SearchLeads = () => {
         setError("");
         setResults([]);
         setSelected(new Set());
+        setImportedIds(new Set());
         setImportResult(null);
         setHasSearched(true);
 
@@ -75,8 +77,8 @@ const SearchLeads = () => {
         try {
             const res = await api.post("/search-leads/import", { leads: leadsToImport });
             setImportResult({ success: true, ...res.data });
+            setImportedIds(prev => new Set([...prev, ...selected]));
             setSelected(new Set());
-            // Invalidate leads cache so leads page refreshes
             queryClient.invalidateQueries({ queryKey: ["leads"] });
         } catch (err) {
             setImportResult({
@@ -88,7 +90,7 @@ const SearchLeads = () => {
         }
     };
 
-    const validResults = results.filter((r) => r.phone);
+    const validResults = results.filter((r) => r.phone && !importedIds.has(r.id));
     const allSelected = validResults.length > 0 && selected.size === validResults.length;
 
     return (
@@ -247,7 +249,8 @@ const SearchLeads = () => {
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {results.map((lead) => {
-                                    const isSelectable = !!lead.phone;
+                                    const isImported = importedIds.has(lead.id);
+                                    const isSelectable = !!lead.phone && !isImported;
                                     const isChecked = selected.has(lead.id);
 
                                     return (
@@ -255,14 +258,18 @@ const SearchLeads = () => {
                                             key={lead.id}
                                             onClick={() => isSelectable && toggleSelect(lead.id)}
                                             className={`transition-colors ${
-                                                isSelectable
-                                                    ? "cursor-pointer hover:bg-indigo-50"
-                                                    : "opacity-50 cursor-not-allowed"
+                                                isImported
+                                                    ? "bg-green-50 cursor-default"
+                                                    : isSelectable
+                                                        ? "cursor-pointer hover:bg-indigo-50"
+                                                        : "opacity-50 cursor-not-allowed"
                                             } ${isChecked ? "bg-indigo-50" : ""}`}
                                         >
-                                            {/* Checkbox */}
+                                            {/* Checkbox / Added badge */}
                                             <td className="px-4 py-3">
-                                                {isSelectable ? (
+                                                {isImported ? (
+                                                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                                ) : isSelectable ? (
                                                     isChecked ? (
                                                         <CheckSquare className="h-4 w-4 text-indigo-600" />
                                                     ) : (
@@ -280,7 +287,12 @@ const SearchLeads = () => {
                                                         <Building2 className="h-4 w-4 text-indigo-600" />
                                                     </div>
                                                     <div>
-                                                        <p className="font-medium text-gray-900">{lead.name}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-medium text-gray-900">{lead.name}</p>
+                                                            {isImported && (
+                                                                <span className="text-xs font-medium text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">Added</span>
+                                                            )}
+                                                        </div>
                                                         {lead.category && (
                                                             <p className="text-xs text-gray-400">{lead.category}</p>
                                                         )}

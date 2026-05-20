@@ -1,1 +1,49 @@
 @import "tailwindcss";
+
+/* ── Brand: remap indigo → orange so all existing indigo-* classes go orange ── */
+@theme {
+  /* indigo scale → orange scale */
+  --color-indigo-50:  #fff7ed;
+  --color-indigo-100: #ffedd5;
+  --color-indigo-200: #fed7aa;
+  --color-indigo-300: #fdba74;
+  --color-indigo-400: #fb923c;
+  --color-indigo-500: #f97316;
+  --color-indigo-600: #ea580c;
+  --color-indigo-700: #c2410c;
+  --color-indigo-800: #9a3412;
+  --color-indigo-900: #7c2d12;
+
+  /* brand aliases */
+  --color-brand-orange:      #F97316;
+  --color-brand-orange-light:#FB923C;
+  --color-brand-orange-soft: #FED7AA;
+  --color-brand-orange-bg:   #FFF7ED;
+  --color-brand-text:        #18181B;
+  --color-brand-muted:       #71717A;
+  --color-brand-border:      #E4E4E7;
+}
+
+/* ── Global focus rings (exclude buttons/roles that manage their own ring) ───── */
+*:focus-visible:not(button):not([role="button"]):not(a) {
+  outline: 2px solid #F97316;
+  outline-offset: 2px;
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────────── */
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px);  opacity: 1;    }
+  50%       { transform: translateY(-8px); opacity: 0.92; }
+}
+@keyframes float-slower {
+  0%, 100% { transform: translateY(0px);   opacity: 0.95; }
+  50%       { transform: translateY(-12px); opacity: 0.85; }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+.animate-float-slow   { animation: float-slow   4s ease-in-out infinite; }
+.animate-float-slower { animation: float-slower 6s ease-in-out infinite; }
+.animate-fade-up      { animation: fade-up 0.5s ease both; }

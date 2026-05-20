@@ -26,257 +26,334 @@ import "stream-chat-react/dist/css/v2/index.css";
 import { useAuth } from "../context/AuthContext";
 import api from "../api/axios";
 import { toast } from "sonner";
-import { Loader2, Video, Search, Plus, X, User, UserPlus, Users, Check, CheckCheck } from "lucide-react";
+import {
+    Loader2, Video, Search, Plus, X, User, UserPlus, Users,
+    Check, CheckCheck, MessageSquare, Hash, AtSign, Sparkles,
+    Phone, RefreshCw,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
-// Custom Empty State for when no chat is selected
+// ── helpers ───────────────────────────────────────────────────────────────────
+const avatarUrl = (name, img) =>
+    img || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || "U")}&background=FED7AA&color=F97316`;
+
+const statusDot = (status) => {
+    const map = { ONLINE: "bg-green-500", BREAK: "bg-yellow-400", OFFLINE: "bg-gray-300" };
+    return map[status] || map.OFFLINE;
+};
+
+// ── Empty State ───────────────────────────────────────────────────────────────
 const EmptyState = () => (
-    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 text-center">
-        <div className="bg-indigo-100 p-4 rounded-full mb-4">
-            <User className="h-12 w-12 text-indigo-600" />
+    <div className="flex-1 flex flex-col items-center justify-center p-10 bg-[#FAFAFA] text-center select-none">
+        <div className="h-20 w-20 rounded-3xl bg-[#FFF7ED] border-2 border-[#FED7AA] flex items-center justify-center mb-5 shadow-sm">
+            <MessageSquare className="h-9 w-9 text-[#F97316]" />
         </div>
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">Select a Conversation</h3>
-        <p className="text-gray-500 max-w-sm">
-            Choose a contact from the sidebar or start a new chat to begin messaging.
+        <h3 className="text-lg font-bold text-[#18181B] mb-1.5">Select a Conversation</h3>
+        <p className="text-sm text-[#71717A] max-w-xs leading-relaxed">
+            Pick a team channel or direct message from the sidebar to start chatting.
         </p>
     </div>
 );
 
-// WhatsApp-style Message Status Ticks
+// ── Read receipts / status ────────────────────────────────────────────────────
 const CustomMessageStatus = ({ message }) => {
     const { client } = useChatContext();
     if (!message || !client) return null;
-    
-    // Only show ticks for my own messages
-    const isMe = message.user?.id === client.userID;
-    if (!isMe) return null;
-
-    const status = message.status;
-    // In Stream, message.read_by is an array of users who have read the message
-    const readBy = message.read_by || [];
-    const isRead = readBy.length > 0;
-
-    if (status === 'sending') {
-        return <span className="text-[10px] text-gray-400 ml-1 opacity-50 italic">sending...</span>;
-    }
-
-    if (isRead) {
-        return <CheckCheck className="h-3.5 w-3.5 text-blue-500 ml-1 inline-block" strokeWidth={3} title="Read" />;
-    }
-
-    if (status === 'received') {
-        return <CheckCheck className="h-3.5 w-3.5 text-gray-400 ml-1 inline-block" strokeWidth={3} title="Delivered" />;
-    }
-
-    return <Check className="h-3.5 w-3.5 text-gray-400 ml-1 inline-block" strokeWidth={3} title="Sent" />;
+    if (message.user?.id !== client.userID) return null;
+    const isRead = (message.read_by || []).length > 0;
+    if (message.status === "sending")
+        return <span className="text-[10px] text-[#71717A] ml-1 italic">sending…</span>;
+    if (isRead)
+        return <CheckCheck className="h-3 w-3 text-[#F97316] ml-1 inline-block" strokeWidth={3} title="Read" />;
+    if (message.status === "received")
+        return <CheckCheck className="h-3 w-3 text-[#71717A] ml-1 inline-block" strokeWidth={3} title="Delivered" />;
+    return <Check className="h-3 w-3 text-[#71717A] ml-1 inline-block" strokeWidth={3} title="Sent" />;
 };
 
-// WhatsApp-style Custom Message component
-const CustomMessage = (props) => {
-    return (
-        <MessageSimple 
-            {...props} 
-            MessageStatus={CustomMessageStatus}
-        />
-    );
-};
+const CustomMessage = (props) => <MessageSimple {...props} MessageStatus={CustomMessageStatus} />;
 
-// WhatsApp-style Typing Indicator
+// ── Typing indicator ──────────────────────────────────────────────────────────
 const CustomTypingIndicator = () => {
     const { typing } = useChannelStateContext();
     const { client } = useChatContext();
-
     if (!typing || !client) return null;
-
-    const typingUsers = Object.values(typing)
+    const names = Object.values(typing)
         .filter(t => t.user?.id !== client.userID)
-        .map(t => t.user?.name || "Someone");
-
-    if (typingUsers.length === 0) return null;
-
+        .map(t => t.user?.name?.split(" ")[0] || "Someone");
+    if (!names.length) return null;
     return (
-        <div className="px-4 py-1.5 bg-white/95 backdrop-blur-sm text-[11px] text-indigo-600 font-bold italic animate-pulse border-t border-indigo-50 flex items-center gap-2">
-            <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '200ms' }}></span>
-                <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '400ms' }}></span>
-            </div>
-            <span>
-                {typingUsers.length === 1 
-                    ? `${typingUsers[0]} is typing...` 
-                    : `${typingUsers.join(", ")} are typing...`}
+        <div className="px-4 py-2 bg-white text-[11px] text-[#F97316] font-semibold italic flex items-center gap-2 border-t border-[#E4E4E7]">
+            <span className="flex gap-0.5">
+                {[0, 150, 300].map(d => (
+                    <span key={d} className="w-1.5 h-1.5 bg-[#F97316] rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                ))}
             </span>
+            <span>{names.length === 1 ? `${names[0]} is typing…` : `${names.join(", ")} are typing…`}</span>
         </div>
     );
 };
 
+// ── Channel preview ───────────────────────────────────────────────────────────
+const CustomChannelPreview = ({ channel, active, onSelect, latestMessage, unread }) => {
+    const { user } = useAuth();
+    const members = Object.values(channel.state.members).filter(m => m.user?.id !== user?.id);
+    const name    = channel.data.name || members.map(m => m.user?.name).join(", ") || "Chat";
+    const img     = channel.data.image || members[0]?.user?.image;
+    const otherUser = channel.type === "messaging" ? members[0]?.user : null;
+    const status  = otherUser?.online_status || "OFFLINE";
+    const time    = latestMessage?.created_at
+        ? new Date(latestMessage.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : "";
+    const preview = latestMessage?.text || "No messages yet";
+    const isGroup = channel.type === "team";
+
+    return (
+        <button
+            onClick={onSelect}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl mx-1 transition-all text-left ${
+                active ? "bg-[#FFF7ED] shadow-sm" : "hover:bg-[#FAFAFA]"
+            }`}
+        >
+            <div className="relative shrink-0">
+                {isGroup ? (
+                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-sm font-bold ${
+                        active ? "bg-[#F97316] text-white" : "bg-[#FED7AA] text-[#F97316]"
+                    }`}>
+                        <Hash className="h-4 w-4" />
+                    </div>
+                ) : (
+                    <img src={avatarUrl(name, img)} alt={name}
+                        className="h-10 w-10 rounded-xl object-cover border border-[#E4E4E7]" />
+                )}
+                {!isGroup && (
+                    <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white ${statusDot(status)}`} />
+                )}
+            </div>
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                    <span className={`text-sm font-semibold truncate ${active ? "text-[#F97316]" : "text-[#18181B]"}`}>{name}</span>
+                    <span className="text-[10px] text-[#71717A] shrink-0 ml-1">{time}</span>
+                </div>
+                <div className="flex items-center justify-between mt-0.5">
+                    <span className={`text-xs truncate ${unread > 0 ? "font-semibold text-[#18181B]" : "text-[#71717A]"}`}>{preview}</span>
+                    {unread > 0 && (
+                        <span className="ml-1 h-4 min-w-4 px-1 shrink-0 bg-[#F97316] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                            {unread > 9 ? "9+" : unread}
+                        </span>
+                    )}
+                </div>
+            </div>
+        </button>
+    );
+};
+
+// ── Channel header ────────────────────────────────────────────────────────────
+const CustomChannelHeader = ({ onCall, onAddMember, onShowMembers }) => {
+    const { channel } = useChatContext();
+    const { user } = useAuth();
+    const members = Object.values(channel?.state?.members || {}).filter(m => m.user?.id !== user?.id);
+    const name    = channel?.data?.name || members.map(m => m.user?.name).join(", ") || "Chat";
+    const isTeam  = channel?.type === "team";
+    const memberCount = Object.values(channel?.state?.members || {}).length;
+    const otherUser   = !isTeam ? members[0]?.user : null;
+    const status      = otherUser?.online_status || "OFFLINE";
+    const statusLabel = { ONLINE: "Online", BREAK: "On Break", OFFLINE: "Offline" }[status] || "Offline";
+    const statusColor = { ONLINE: "text-green-600", BREAK: "text-yellow-600", OFFLINE: "text-[#71717A]" }[status] || "text-[#71717A]";
+
+    return (
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#E4E4E7] bg-white shrink-0">
+            <div className="flex items-center gap-3">
+                {isTeam ? (
+                    <div className="h-9 w-9 rounded-xl bg-[#FFF7ED] border border-[#FED7AA] flex items-center justify-center">
+                        <Hash className="h-4 w-4 text-[#F97316]" />
+                    </div>
+                ) : (
+                    <div className="relative">
+                        <img src={avatarUrl(name, otherUser?.image)} alt={name}
+                            className="h-9 w-9 rounded-xl object-cover border border-[#E4E4E7]" />
+                        <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${statusDot(status)}`} />
+                    </div>
+                )}
+                <div>
+                    <p className="font-bold text-[#18181B] text-sm leading-tight">{name}</p>
+                    <p className={`text-[11px] font-medium ${isTeam ? "text-[#71717A]" : statusColor}`}>
+                        {isTeam ? `${memberCount} member${memberCount !== 1 ? "s" : ""}` : statusLabel}
+                    </p>
+                </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+                {isTeam && (
+                    <>
+                        <button onClick={onShowMembers}
+                            className="p-2 rounded-xl text-[#71717A] hover:text-[#F97316] hover:bg-[#FFF7ED] transition-colors" title="Members">
+                            <Users className="h-4 w-4" />
+                        </button>
+                        <button onClick={onAddMember}
+                            className="p-2 rounded-xl text-[#71717A] hover:text-[#F97316] hover:bg-[#FFF7ED] transition-colors" title="Add member">
+                            <UserPlus className="h-4 w-4" />
+                        </button>
+                    </>
+                )}
+                <button onClick={() => onCall?.(channel?.id)}
+                    className="p-2 rounded-xl bg-[#F97316] text-white hover:bg-[#FB923C] transition-colors shadow-sm" title="Video call">
+                    <Video className="h-4 w-4" />
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 const Messages = () => {
     const { user } = useAuth();
-    const [chatClient, setChatClient] = useState(null);
-    const [videoClient, setVideoClient] = useState(null);
-    const [isCreating, setIsCreating] = useState(false);
-    const [activeCall, setActiveCall] = useState(null);
-    const [userSearchTerm, setUserSearchTerm] = useState("");
+    const [chatClient,    setChatClient]    = useState(null);
+    const [videoClient,   setVideoClient]   = useState(null);
+    const [isCreating,    setIsCreating]    = useState(false);
+    const [activeCall,    setActiveCall]    = useState(null);
+    const [userSearch,    setUserSearch]    = useState("");
     const [activeChannel, setActiveChannel] = useState(null);
-    const [initError, setInitError] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading,       setLoading]       = useState(true);
+    const [initError,     setInitError]     = useState(null);
     const [showAddMember, setShowAddMember] = useState(false);
-    const [showMemberList, setShowMemberList] = useState(false);
-    const [showMessageInfo, setShowMessageInfo] = useState(false);
-    const [selectedMessage, setSelectedMessage] = useState(null);
+    const [showMembers,   setShowMembers]   = useState(false);
+    const [seeding,       setSeeding]       = useState(false);
 
-    // Fetch users for search
     const { data: allUsers } = useQuery({
         queryKey: ["chatUsers"],
-        queryFn: async () => (await api.get("/chat/users")).data,
-        enabled: !!user
+        queryFn:  () => api.get("/chat/users").then(r => r.data),
+        enabled:  !!user,
     });
 
-    // Initialize Clients
     useEffect(() => {
-        let _chatClient;
-        let _videoClient;
-        let isViewMounted = true;
-
+        let _chat, _video, mounted = true;
         const init = async () => {
             setLoading(true);
             setInitError(null);
-            console.log("Starting Stream initialization...");
-            
             try {
-                const response = await api.post("/chat/token");
-                const { token, apiKey, user: streamUser } = response.data;
-
-                if (!isViewMounted) return;
-
+                const { data } = await api.post("/chat/token");
+                const { token, apiKey, user: su } = data;
+                if (!mounted) return;
                 const client = StreamChat.getInstance(apiKey);
-                
-                // Only connect if not already connected to the same user
-                if (client.userID !== streamUser.id) {
-                    await client.connectUser(streamUser, token);
-                }
-                
-                _chatClient = client;
-
-                const vClient = new StreamVideoClient({ apiKey, user: streamUser, token });
-                _videoClient = vClient;
-
-                if (isViewMounted) {
-                    setChatClient(client);
-                    setVideoClient(vClient);
-                    setLoading(false);
-                }
-            } catch (error) {
-                console.error("Stream init error:", error);
-                if (isViewMounted) {
-                    setInitError("Failed to connect to chat server. Please check your connection.");
-                    setLoading(false);
-                }
+                if (client.userID !== su.id) await client.connectUser(su, token);
+                _chat  = client;
+                _video = new StreamVideoClient({ apiKey, user: su, token });
+                if (mounted) { setChatClient(client); setVideoClient(_video); setLoading(false); }
+            } catch (e) {
+                console.error(e);
+                if (mounted) { setInitError("Failed to connect to chat server."); setLoading(false); }
             }
         };
-
-        if (user) {
-            init();
-        } else {
-            setLoading(false);
-        }
-
+        if (user) init();
+        else setLoading(false);
         return () => {
-            isViewMounted = false;
-            if (_chatClient) _chatClient.disconnectUser().catch(console.error);
-            if (_videoClient) _videoClient.disconnectUser().catch(console.error);
+            mounted = false;
+            _chat?.disconnectUser().catch(() => {});
+            _video?.disconnectUser().catch(() => {});
         };
     }, [user]);
 
-    if (loading) {
-        return (
-            <div className="flex-1 flex flex-col items-center justify-center p-20 bg-white">
-                <Loader2 className="animate-spin h-10 w-10 text-indigo-600 mb-4" />
-                <p className="text-gray-500 font-medium animate-pulse">Connecting to chat...</p>
-            </div>
-        );
-    }
-
-    if (initError) {
-        return (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-white">
-                <div className="bg-red-50 p-4 rounded-full mb-4">
-                    <X className="h-10 w-10 text-red-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Connection Error</h3>
-                <p className="text-gray-500 max-w-xs mb-6">{initError}</p>
-                <button 
-                    onClick={() => window.location.reload()}
-                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-                >
-                    Retry Connection
-                </button>
-            </div>
-        );
-    }
-
-    if (!chatClient || !videoClient) return null;
-
-    const startDirectChat = async (otherUserId) => {
+    const startDM = async (targetId) => {
         try {
-            // Call backend to sync users and create channel
-            const response = await api.post("/chat/start", { targetUserId: otherUserId });
-            const { cid } = response.data;
-
-            // We can now access the channel locally since backend created it
-            const channel = chatClient.channel("messaging", cid.split(":")[1]);
-            await channel.watch(); // Watch ensures we have latest state
-
-            setActiveChannel(channel);
-            setUserSearchTerm(""); // Clear search
-
-        } catch (error) {
-            console.error("Failed to start chat:", error);
+            const { data } = await api.post("/chat/start", { targetUserId: targetId });
+            const ch = chatClient.channel("messaging", data.cid.split(":")[1]);
+            await ch.watch();
+            setActiveChannel(ch);
+            setUserSearch("");
+        } catch {
             toast.error("Could not start chat. Please try again.");
         }
     };
 
-    const filteredUsers = allUsers?.filter(u =>
-        u.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-        u.email?.toLowerCase().includes(userSearchTerm.toLowerCase())
-    ) || [];
+    const seedData = async () => {
+        setSeeding(true);
+        try {
+            await api.post("/chat/seed");
+            toast.success("Demo data seeded! Refresh channels.");
+        } catch {
+            toast.error("Seed failed — check backend logs.");
+        } finally {
+            setSeeding(false);
+        }
+    };
+
+    const filteredUsers = (allUsers || []).filter(u =>
+        u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+        u.email?.toLowerCase().includes(userSearch.toLowerCase())
+    );
+
+    // ── Loading ──
+    if (loading) return (
+        <div className="flex-1 flex flex-col items-center justify-center h-full bg-[#FAFAFA]">
+            <div className="h-12 w-12 rounded-2xl bg-[#FFF7ED] border border-[#FED7AA] flex items-center justify-center mb-4">
+                <Loader2 className="h-6 w-6 animate-spin text-[#F97316]" />
+            </div>
+            <p className="text-sm font-medium text-[#71717A]">Connecting to chat…</p>
+        </div>
+    );
+
+    if (initError) return (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#FAFAFA]">
+            <div className="h-14 w-14 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mb-4">
+                <X className="h-7 w-7 text-red-500" />
+            </div>
+            <h3 className="text-base font-bold text-[#18181B] mb-1">Connection Error</h3>
+            <p className="text-sm text-[#71717A] max-w-xs mb-5">{initError}</p>
+            <button onClick={() => window.location.reload()}
+                className="px-5 py-2 bg-[#F97316] text-white rounded-xl hover:bg-[#FB923C] transition-colors font-medium text-sm">
+                Retry
+            </button>
+        </div>
+    );
+
+    if (!chatClient || !videoClient) return null;
 
     return (
-        <div className="h-[calc(100vh-4rem)] bg-white shadow-xl rounded-xl overflow-hidden border border-gray-200">
-            {/* Unified Chat Provider */}
+        <div className="h-[calc(100vh-4rem)] bg-white rounded-2xl overflow-hidden border border-[#E4E4E7] shadow-sm flex">
             <Chat client={chatClient} theme="messaging light">
                 {activeCall ? (
                     <VideoCallComponent client={videoClient} callId={activeCall} onLeave={() => setActiveCall(null)} />
                 ) : (
                     <div className="flex w-full h-full">
-                        {/* Sidebar */}
-                        <div className="w-80 flex-shrink-0 border-r border-gray-200 flex flex-col bg-gray-50/50">
-                            {/* Header */}
-                            <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-white sticky top-0 z-10">
-                                <h2 className="font-bold text-xl text-gray-800 tracking-tight">Messages</h2>
-                                <button
-                                    onClick={() => setIsCreating(true)}
-                                    className="p-2 hover:bg-indigo-50 rounded-full text-indigo-600 transition-colors"
-                                    title="New Group"
-                                >
-                                    <Plus className="h-5 w-5" />
-                                </button>
+
+                        {/* ── Sidebar ─────────────────────────────────────────── */}
+                        <div className="w-72 shrink-0 border-r border-[#E4E4E7] flex flex-col bg-white">
+                            {/* Sidebar header */}
+                            <div className="flex items-center justify-between px-4 py-4 border-b border-[#E4E4E7]">
+                                <div className="flex items-center gap-2">
+                                    <div className="h-7 w-7 rounded-lg bg-[#FFF7ED] flex items-center justify-center">
+                                        <MessageSquare className="h-3.5 w-3.5 text-[#F97316]" />
+                                    </div>
+                                    <span className="font-bold text-[#18181B] text-sm">Messages</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <button onClick={seedData} disabled={seeding}
+                                        title="Seed demo data"
+                                        className="p-1.5 rounded-lg text-[#71717A] hover:text-[#F97316] hover:bg-[#FFF7ED] transition-colors disabled:opacity-50">
+                                        <RefreshCw className={`h-3.5 w-3.5 ${seeding ? "animate-spin" : ""}`} />
+                                    </button>
+                                    <button onClick={() => setIsCreating(v => !v)}
+                                        className="p-1.5 rounded-lg text-[#71717A] hover:text-[#F97316] hover:bg-[#FFF7ED] transition-colors"
+                                        title="New group">
+                                        <Plus className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
                             </div>
 
-                            {/* User Search Bar */}
-                            <div className="p-3 bg-white border-b border-gray-100">
+                            {/* Search */}
+                            <div className="px-3 py-2.5 border-b border-[#E4E4E7]">
                                 <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#71717A]" />
                                     <input
                                         type="text"
-                                        placeholder="Search contacts..."
-                                        className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                                        value={userSearchTerm}
-                                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                                        placeholder="Search contacts…"
+                                        value={userSearch}
+                                        onChange={e => setUserSearch(e.target.value)}
+                                        className="w-full pl-8 pr-3 py-2 text-sm bg-[#FAFAFA] border border-[#E4E4E7] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F97316] focus:border-[#F97316] placeholder:text-[#71717A]"
                                     />
                                 </div>
                             </div>
 
+                            {/* Create group panel */}
                             {isCreating && (
                                 <CreateGroupView
                                     onClose={() => setIsCreating(false)}
@@ -287,36 +364,35 @@ const Messages = () => {
                                 />
                             )}
 
-                            {/* Search Results OR Channel List */}
-                            <div className="flex-1 overflow-y-auto custom-scrollbar">
-                                {userSearchTerm ? (
-                                    <div className="p-2 space-y-1">
-                                        <h3 className="px-2 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Contacts</h3>
-                                        {filteredUsers.length === 0 && <p className="px-4 py-2 text-sm text-gray-400 text-center">No users found</p>}
-                                        {filteredUsers.map(u => (
-                                            <button
-                                                key={u.id}
-                                                onClick={() => startDirectChat(u.id)}
-                                                className="w-full flex items-center p-2.5 hover:bg-white hover:shadow-sm rounded-lg transition-all text-left group"
-                                            >
-                                                <div className="relative">
-                                                    <img src={u.image} alt={u.name} className="h-10 w-10 rounded-full border border-gray-100 object-cover" />
-                                                    <div className="absolute bottom-0 right-0 h-2.5 w-2.5 bg-green-500 border-2 border-white rounded-full"></div>
-                                                </div>
-                                                <div className="ml-3">
-                                                    <div className="text-sm font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">{u.name}</div>
-                                                    <div className="text-xs text-gray-500">{u.role}</div>
-                                                </div>
-                                            </button>
-                                        ))}
+                            {/* Channel lists */}
+                            <div className="flex-1 overflow-y-auto py-2 space-y-1">
+                                {userSearch ? (
+                                    <div className="px-2">
+                                        <p className="px-2 py-1.5 text-[10px] font-bold text-[#71717A] uppercase tracking-widest">Contacts</p>
+                                        {filteredUsers.length === 0
+                                            ? <p className="px-3 py-4 text-sm text-[#71717A] text-center">No users found</p>
+                                            : filteredUsers.map(u => (
+                                                <button key={u.id} onClick={() => startDM(u.id)}
+                                                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#FFF7ED] transition-colors text-left">
+                                                    <div className="relative">
+                                                        <img src={avatarUrl(u.name, u.image)} alt={u.name}
+                                                            className="h-9 w-9 rounded-xl object-cover border border-[#E4E4E7]" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-[#18181B]">{u.name}</p>
+                                                        <p className="text-xs text-[#71717A]">{u.jobTitle || u.role}</p>
+                                                    </div>
+                                                </button>
+                                            ))
+                                        }
                                     </div>
                                 ) : (
-                                    <div className="flex flex-col">
-                                        {/* Groups Section */}
-                                        <div className="pt-2">
-                                            <div className="px-4 py-2 flex items-center justify-between text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                                <span>Teams / Groups</span>
-                                                <span className="bg-gray-200 text-gray-600 px-1.5 rounded-full text-[10px]">beta</span>
+                                    <>
+                                        {/* Teams / Groups */}
+                                        <div className="px-2">
+                                            <div className="flex items-center justify-between px-2 py-1.5">
+                                                <span className="text-[10px] font-bold text-[#71717A] uppercase tracking-widest">Teams / Groups</span>
+                                                <span className="text-[9px] font-bold text-[#F97316] bg-[#FFF7ED] border border-[#FED7AA] px-1.5 py-0.5 rounded-full">BETA</span>
                                             </div>
                                             <ChannelList
                                                 filters={{ type: "team", members: { $in: [user.id] } }}
@@ -324,8 +400,12 @@ const Messages = () => {
                                                 options={{ limit: 10 }}
                                                 showChannelSearch={false}
                                                 setActiveChannelOnMount={false}
-                                                EmptyStateIndicator={() => <div className="px-4 py-2 text-sm text-gray-400 italic">No groups yet</div>}
-                                                Preview={(props) => (
+                                                EmptyStateIndicator={() => (
+                                                    <div className="px-3 py-3 text-xs text-[#71717A] italic flex items-center gap-2">
+                                                        <Hash className="h-3 w-3" /> No groups yet
+                                                    </div>
+                                                )}
+                                                Preview={props => (
                                                     <CustomChannelPreview
                                                         {...props}
                                                         onSelect={() => {
@@ -338,21 +418,23 @@ const Messages = () => {
                                             />
                                         </div>
 
-                                        {/* Direct Messages Section */}
-                                        <div className="pt-2">
-                                            <h3 className="px-4 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Direct Messages</h3>
+                                        {/* Direct Messages */}
+                                        <div className="px-2">
+                                            <div className="flex items-center gap-2 px-2 py-1.5 mt-2">
+                                                <span className="text-[10px] font-bold text-[#71717A] uppercase tracking-widest">Direct Messages</span>
+                                            </div>
                                             <ChannelList
-                                                filters={{
-                                                    type: "messaging",
-                                                    members: { $in: [user.id] },
-                                                    name: { $exists: false }
-                                                }}
+                                                filters={{ type: "messaging", members: { $in: [user.id] }, name: { $exists: false } }}
                                                 sort={{ last_message_at: -1 }}
                                                 options={{ limit: 20 }}
                                                 showChannelSearch={false}
                                                 setActiveChannelOnMount={false}
-                                                EmptyStateIndicator={() => <div className="px-4 py-2 text-sm text-gray-400 italic">No direct messages</div>}
-                                                Preview={(props) => (
+                                                EmptyStateIndicator={() => (
+                                                    <div className="px-3 py-3 text-xs text-[#71717A] italic flex items-center gap-2">
+                                                        <AtSign className="h-3 w-3" /> No direct messages
+                                                    </div>
+                                                )}
+                                                Preview={props => (
                                                     <CustomChannelPreview
                                                         {...props}
                                                         onSelect={() => {
@@ -364,14 +446,22 @@ const Messages = () => {
                                                 )}
                                             />
                                         </div>
-                                    </div>
+                                    </>
                                 )}
+                            </div>
+
+                            {/* Bottom: AI hint */}
+                            <div className="px-3 py-3 border-t border-[#E4E4E7]">
+                                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#FFF7ED] border border-[#FED7AA]">
+                                    <Sparkles className="h-3.5 w-3.5 text-[#F97316] shrink-0" />
+                                    <span className="text-[11px] text-[#71717A] leading-tight">AI summarize, task creation and lead linking coming soon</span>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Chat Window */}
-                        <div className="flex-1 flex flex-col bg-white min-w-0 relative">
-                            <Channel 
+                        {/* ── Chat area ───────────────────────────────────────── */}
+                        <div className="flex-1 flex flex-col bg-white min-w-0">
+                            <Channel
                                 channel={activeChannel}
                                 Message={CustomMessage}
                                 TypingIndicator={CustomTypingIndicator}
@@ -380,28 +470,17 @@ const Messages = () => {
                                     {activeChannel ? (
                                         <>
                                             <CustomChannelHeader
-                                                onCall={(id) => setActiveCall(id)}
+                                                onCall={id => setActiveCall(id)}
                                                 onAddMember={() => setShowAddMember(true)}
-                                                onShowMembers={() => setShowMemberList(true)}
+                                                onShowMembers={() => setShowMembers(true)}
                                             />
                                             <MessageList
-                                                messageActions={['react', 'reply', 'edit', 'delete', 'flag', 'pin']}
-                                                enableReactionClick={true}
-                                                threadList={true}
-                                                customMessageActions={{
-                                                    'Message Info': (message) => {
-                                                        // Only show in group chats
-                                                        if (activeChannel?.type === 'team') {
-                                                            setSelectedMessage(message);
-                                                            setShowMessageInfo(true);
-                                                        }
-                                                    }
-                                                }}
+                                                messageActions={["react", "reply", "edit", "delete", "flag", "pin"]}
+                                                enableReactionClick
+                                                threadList
                                             />
-                                            {/* Explicitly enable file uploads and focus */}
                                             <MessageInput focus />
 
-                                            {/* Member Management Modals */}
                                             {showAddMember && (
                                                 <AddMemberModal
                                                     channel={activeChannel}
@@ -410,21 +489,11 @@ const Messages = () => {
                                                     currentUser={user}
                                                 />
                                             )}
-                                            {showMemberList && (
+                                            {showMembers && (
                                                 <MemberListModal
                                                     channel={activeChannel}
-                                                    onClose={() => setShowMemberList(false)}
+                                                    onClose={() => setShowMembers(false)}
                                                     currentUser={user}
-                                                />
-                                            )}
-                                            {showMessageInfo && selectedMessage && (
-                                                <MessageInfoModal
-                                                    message={selectedMessage}
-                                                    channel={activeChannel}
-                                                    onClose={() => {
-                                                        setShowMessageInfo(false);
-                                                        setSelectedMessage(null);
-                                                    }}
                                                 />
                                             )}
                                         </>
@@ -442,188 +511,227 @@ const Messages = () => {
     );
 };
 
-// Custom Channel Preview for the List
-const CustomChannelPreview = ({ channel, active, onSelect, latestMessage }) => {
-    const { user } = useAuth();
-    const members = Object.values(channel.state.members).filter(m => m.user?.id !== user?.id);
-    const displayImage = channel.data.image || members[0]?.user?.image;
-    const displayName = channel.data.name || members.map(m => m.user?.name).join(", ");
+// ── Create Group panel ────────────────────────────────────────────────────────
+const CreateGroupView = ({ onClose, client, users, currentUser, setActiveChannel }) => {
+    const [selected, setSelected] = useState([]);
+    const [name, setName]         = useState("");
+    const [search, setSearch]     = useState("");
 
-    // Format date
-    const lastMessageDate = latestMessage?.created_at ? new Date(latestMessage.created_at) : new Date(channel.data.created_at);
-    const timeString = lastMessageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const toggle = id => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
 
-    return (
-        <button
-            onClick={onSelect}
-            className={`w-full flex items-center p-3 border-b border-gray-50 transition-colors ${active ? "bg-indigo-50 border-l-4 border-l-indigo-600" : "hover:bg-gray-50 border-l-4 border-l-transparent"}`}
-        >
-            <div className={`relative ${active ? "ring-2 ring-indigo-200 rounded-full" : ""}`}>
-                <img src={displayImage || "https://ui-avatars.com/api/?name=" + displayName} alt={displayName} className="h-12 w-12 rounded-full object-cover" />
-                {/* Online status indicator could go here */}
-            </div>
-            <div className="ml-3 flex-1 overflow-hidden text-left">
-                <div className="flex justify-between items-baseline">
-                    <span className={`text-sm font-semibold truncate ${active ? "text-indigo-900" : "text-gray-900"}`}>{displayName}</span>
-                    <span className="text-xs text-gray-400 flex-shrink-0">{timeString}</span>
-                </div>
-                <div className={`text-xs truncate mt-0.5 ${latestMessage?.status === 'unread' ? "font-bold text-gray-900" : "text-gray-500"}`}>
-                    {latestMessage?.text || "No messages yet"}
-                </div>
-            </div>
-        </button>
+    const create = async () => {
+        if (!name.trim()) { toast.warning("Enter a group name"); return; }
+        if (!selected.length) { toast.warning("Select at least one member"); return; }
+        try {
+            for (const uid of selected) {
+                await api.post("/chat/sync-user", { userId: uid }).catch(() => {});
+            }
+            const ch = client.channel("team", `group-${Date.now()}`, {
+                name, members: [currentUser.id, ...selected], created_by_id: currentUser.id,
+            });
+            await ch.create();
+            setActiveChannel(ch);
+            onClose();
+        } catch (e) {
+            toast.error(`Failed to create group: ${e.message}`);
+        }
+    };
+
+    const visible = (users || []).filter(u =>
+        u.name.toLowerCase().includes(search.toLowerCase())
     );
-};
-
-
-// Custom Header with Video Call Button
-const CustomChannelHeader = ({ onCall, onAddMember, onShowMembers }) => {
-    const { channel, client } = useChatContext();
-    const { user } = useAuth();
-
-    // Derive all display variables from channel state
-    const members = Object.values(channel?.state?.members || {}).filter(m => m.user?.id !== user?.id);
-    const displayName = channel?.data?.name || members.map(m => m.user?.name).join(", ") || "Chat";
-    const isTeamChannel = channel?.type === 'team';
-    const isAdmin = channel?.data?.created_by_id === user?.id;
-    const totalMemberCount = Object.values(channel?.state?.members || {}).length;
-    const memberSubtext = isTeamChannel
-        ? `${totalMemberCount} member${totalMemberCount !== 1 ? 's' : ''}`
-        : members[0]?.user?.name || "";
-
-    const startCall = () => {
-        if (!channel?.id) {
-            console.error('Channel not available');
-            return;
-        }
-        const callId = channel.id;
-        onCall(callId);
-    };
-
-    // Calculate display status for DMs
-    const isDM = channel?.type === 'messaging';
-    const otherMember = members[0]?.user;
-    const onlineStatus = otherMember?.online_status || (otherMember?.online ? 'ONLINE' : 'OFFLINE');
-
-    const getStatusUI = () => {
-        if (!isDM || !otherMember) return null;
-        switch (onlineStatus) {
-            case 'ONLINE':
-                return { text: 'Online', color: 'bg-green-500', textColor: 'text-green-600' };
-            case 'BREAK':
-                return { text: 'On Break', color: 'bg-yellow-500', textColor: 'text-yellow-600' };
-            default:
-                return { text: 'Offline', color: 'bg-gray-400', textColor: 'text-gray-400' };
-        }
-    };
-
-    const statusUI = getStatusUI();
 
     return (
-        <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-white/80 backdrop-blur-sm z-10">
-            <div className="flex items-center gap-3">
-                <div className="relative">
-                    <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-lg">
-                        {displayName[0]?.toUpperCase()}
-                    </div>
-                    {statusUI && (
-                        <div className={`absolute bottom-0 right-0 h-3 w-3 ${statusUI.color} border-2 border-white rounded-full shadow-sm`}></div>
-                    )}
-                </div>
-                <div>
-                    <div className="font-bold text-gray-900 leading-tight">
-                        {displayName}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        {statusUI ? (
-                            <span className={`text-[11px] font-semibold ${statusUI.textColor} uppercase tracking-wider`}>
-                                {statusUI.text}
-                            </span>
-                        ) : (
-                            <div className="text-xs text-gray-500 cursor-pointer hover:text-indigo-600" onClick={onShowMembers}>
-                                {memberSubtext}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-                {isTeamChannel && onShowMembers && (
-                    <button
-                        onClick={onShowMembers}
-                        className="p-2.5 bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 hover:shadow-md transition-all active:scale-95"
-                        title="View Members"
-                    >
-                        <Users className="h-5 w-5" />
-                    </button>
-                )}
-                {isTeamChannel && onAddMember && (
-                    <button
-                        onClick={onAddMember}
-                        className="p-2.5 bg-green-600 text-white rounded-full hover:bg-green-700 hover:shadow-md transition-all active:scale-95"
-                        title={`Add Member ${isAdmin ? '(Admin)' : '(Testing)'}`}
-                    >
-                        <UserPlus className="h-5 w-5" />
-                    </button>
-                )}
-                <button
-                    onClick={startCall}
-                    className="p-2.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 hover:shadow-md transition-all active:scale-95"
-                    title="Start Video Call"
-                >
-                    <Video className="h-5 w-5" />
+        <div className="border-b border-[#E4E4E7] bg-[#FFF7ED] p-4 space-y-3">
+            <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#18181B] uppercase tracking-wide">New Group</span>
+                <button onClick={onClose} className="text-[#71717A] hover:text-[#18181B]">
+                    <X className="h-4 w-4" />
                 </button>
             </div>
+            <input
+                placeholder="Group name…"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-[#E4E4E7] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F97316] bg-white"
+            />
+            <input
+                placeholder="Search members…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-[#E4E4E7] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F97316] bg-white"
+            />
+            <div className="max-h-36 overflow-y-auto space-y-1 bg-white rounded-xl border border-[#E4E4E7] p-1">
+                {visible.map(u => (
+                    <button key={u.id} onClick={() => toggle(u.id)}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                            selected.includes(u.id) ? "bg-[#FFF7ED] text-[#F97316]" : "hover:bg-[#FAFAFA] text-[#18181B]"
+                        }`}>
+                        <div className="h-6 w-6 rounded-lg bg-[#FED7AA] text-[#F97316] flex items-center justify-center text-[10px] font-bold shrink-0">
+                            {u.name[0]}
+                        </div>
+                        <span className="flex-1 text-left truncate">{u.name}</span>
+                        {selected.includes(u.id) && <Check className="h-3.5 w-3.5 text-[#F97316]" />}
+                    </button>
+                ))}
+            </div>
+            {selected.length > 0 && (
+                <p className="text-[10px] text-[#71717A]">{selected.length} member{selected.length !== 1 ? "s" : ""} selected</p>
+            )}
+            <button onClick={create}
+                className="w-full py-2 bg-[#F97316] text-white rounded-xl text-sm font-semibold hover:bg-[#FB923C] transition-colors shadow-sm">
+                Create Group
+            </button>
         </div>
     );
 };
 
-// Video Call Interface
+// ── Add Member Modal ──────────────────────────────────────────────────────────
+const AddMemberModal = ({ channel, onClose, allUsers, currentUser }) => {
+    const [busy, setBusy] = useState(false);
+    const memberIds = Object.keys(channel?.state?.members || {});
+    const available = (allUsers || []).filter(u => !memberIds.includes(u.id));
+
+    const add = async (uid) => {
+        setBusy(true);
+        try {
+            await api.post("/chat/sync-user", { userId: uid });
+            await channel.addMembers([uid]);
+            toast.success("Member added!");
+        } catch (e) {
+            toast.error("Failed to add member.");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <Modal title="Add Members" onClose={onClose}>
+            {available.length === 0
+                ? <p className="text-sm text-[#71717A] text-center py-6">All users are already members</p>
+                : available.map(u => (
+                    <div key={u.id} className="flex items-center gap-3 py-2">
+                        <img src={avatarUrl(u.name, u.image)} alt={u.name} className="h-9 w-9 rounded-xl border border-[#E4E4E7] object-cover" />
+                        <div className="flex-1">
+                            <p className="text-sm font-semibold text-[#18181B]">{u.name}</p>
+                            <p className="text-xs text-[#71717A]">{u.jobTitle || u.role}</p>
+                        </div>
+                        <button onClick={() => add(u.id)} disabled={busy}
+                            className="px-3 py-1.5 bg-[#F97316] text-white text-xs rounded-lg hover:bg-[#FB923C] disabled:opacity-50 transition-colors font-medium">
+                            Add
+                        </button>
+                    </div>
+                ))
+            }
+        </Modal>
+    );
+};
+
+// ── Member List Modal ─────────────────────────────────────────────────────────
+const MemberListModal = ({ channel, onClose, currentUser }) => {
+    const [busy, setBusy] = useState(false);
+    const members  = Object.values(channel?.state?.members || {});
+    const isAdmin  = channel?.data?.created_by_id === currentUser?.id;
+
+    const remove = async (uid) => {
+        if (!confirm("Remove this member?")) return;
+        setBusy(true);
+        try {
+            await channel.removeMembers([uid]);
+            toast.success("Removed.");
+        } catch {
+            toast.error("Failed to remove.");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <Modal title={`Members (${members.length})`} onClose={onClose}>
+            {members.map(m => {
+                const isCreator = m.user_id === channel?.data?.created_by_id;
+                const canRemove = isAdmin && !isCreator && m.user_id !== currentUser?.id;
+                return (
+                    <div key={m.user_id} className="flex items-center gap-3 py-2">
+                        <img
+                            src={m.user?.image || avatarUrl(m.user?.name)}
+                            alt={m.user?.name}
+                            className="h-9 w-9 rounded-xl border border-[#E4E4E7] object-cover"
+                        />
+                        <div className="flex-1">
+                            <p className="text-sm font-semibold text-[#18181B] flex items-center gap-1.5">
+                                {m.user?.name}
+                                {isCreator && (
+                                    <span className="text-[9px] font-bold text-[#F97316] bg-[#FFF7ED] border border-[#FED7AA] px-1.5 py-0.5 rounded-full">ADMIN</span>
+                                )}
+                            </p>
+                            <p className="text-xs text-[#71717A]">{m.user?.role || "Member"}</p>
+                        </div>
+                        {canRemove && (
+                            <button onClick={() => remove(m.user_id)} disabled={busy}
+                                className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-100 text-xs rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors font-medium">
+                                Remove
+                            </button>
+                        )}
+                    </div>
+                );
+            })}
+        </Modal>
+    );
+};
+
+// ── Reusable Modal shell ──────────────────────────────────────────────────────
+const Modal = ({ title, onClose, children }) => (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col border border-[#E4E4E7]"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#E4E4E7]">
+                <h2 className="font-bold text-[#18181B]">{title}</h2>
+                <button onClick={onClose} className="text-[#71717A] hover:text-[#18181B] transition-colors">
+                    <X className="h-4 w-4" />
+                </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-1">{children}</div>
+        </div>
+    </div>
+);
+
+// ── Video Call ────────────────────────────────────────────────────────────────
 const VideoCallComponent = ({ client, callId, onLeave }) => {
-    const [call, setCall] = useState(null);
-    const [callError, setCallError] = useState(null);
-    const callRef = useRef(null);
+    const [call, setCall]   = useState(null);
+    const [err, setErr]     = useState(null);
+    const callRef           = useRef(null);
 
     useEffect(() => {
         const c = client.call("default", callId);
         callRef.current = c;
-        c.join({ create: true })
-            .then(() => setCall(c))
-            .catch((err) => {
-                console.error("Failed to join call:", err);
-                setCallError("Failed to connect to call. Please try again.");
-            });
-
-        return () => {
-            callRef.current?.leave().catch(console.error);
-        };
+        c.join({ create: true }).then(() => setCall(c)).catch(e => {
+            console.error(e);
+            setErr("Failed to connect to call.");
+        });
+        return () => { callRef.current?.leave().catch(() => {}); };
     }, [client, callId]);
 
-    if (callError) {
-        return (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-gray-950 text-white gap-4">
-                <p className="text-red-400">{callError}</p>
-                <button onClick={onLeave} className="bg-red-600 text-white px-4 py-2 rounded-lg">Go Back</button>
-            </div>
-        );
-    }
-
-    if (!call) {
-        return (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-gray-950 text-white gap-3">
-                <Loader2 className="animate-spin h-8 w-8 text-indigo-400" />
-                <p className="text-gray-400">Connecting to call...</p>
-            </div>
-        );
-    }
+    if (err) return (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-950 text-white gap-4">
+            <p className="text-red-400">{err}</p>
+            <button onClick={onLeave} className="bg-red-600 px-4 py-2 rounded-xl">Go Back</button>
+        </div>
+    );
+    if (!call) return (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-950 text-white gap-3">
+            <Loader2 className="animate-spin h-8 w-8 text-[#F97316]" />
+            <p className="text-gray-400 text-sm">Connecting…</p>
+        </div>
+    );
 
     return (
         <StreamVideo client={client}>
             <StreamCall call={call}>
-                <div className="w-full h-full flex flex-col bg-gray-950 text-white relative">
+                <div className="w-full h-full flex flex-col bg-gray-950 relative">
                     <div className="absolute top-4 left-4 z-50">
-                        <button onClick={onLeave} className="bg-red-600/90 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium shadow-lg backdrop-blur-sm transition-colors">
+                        <button onClick={onLeave}
+                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-medium shadow-lg transition-colors text-sm">
                             End Call
                         </button>
                     </div>
@@ -634,341 +742,6 @@ const VideoCallComponent = ({ client, callId, onLeave }) => {
                 </div>
             </StreamCall>
         </StreamVideo>
-    );
-};
-
-// Create Group Modal
-const CreateGroupView = ({ onClose, client, users, currentUser, setActiveChannel }) => {
-    const [selectedUsers, setSelectedUsers] = useState([]);
-    const [groupName, setGroupName] = useState("");
-
-    const handleCreate = async () => {
-        if (!groupName) { toast.warning("Please enter a group name"); return; }
-        if (selectedUsers.length === 0) { toast.warning("Select at least one member"); return; }
-
-        try {
-            // Step 1: Sync all selected users to Stream Chat first
-            console.log("Syncing selected users to Stream Chat:", selectedUsers);
-            for (const userId of selectedUsers) {
-                try {
-                    await api.post("/chat/sync-user", { userId });
-                } catch (syncError) {
-                    console.error(`Failed to sync user ${userId}:`, syncError);
-                    // Continue anyway - user might already be synced
-                }
-            }
-
-            // Step 2: Generate a unique ID for the team channel
-            const channelId = `group-${Date.now()}`;
-
-            // Step 3: Create the channel with all members
-            const channel = client.channel("team", channelId, {
-                name: groupName,
-                members: [currentUser.id, ...selectedUsers],
-                created_by_id: currentUser.id
-            });
-
-            await channel.create();
-
-            // Immediately set as active channel
-            setActiveChannel(channel);
-            onClose();
-        } catch (error) {
-            console.error("Error creating group:", error);
-            toast.error(`Failed to create group: ${error.message || "Please try again."}`);
-        }
-    };
-
-    const toggleUser = (id) => {
-        if (selectedUsers.includes(id)) setSelectedUsers(selectedUsers.filter(u => u !== id));
-        else setSelectedUsers([...selectedUsers, id]);
-    };
-
-    return (
-        <div className="p-4 border-b border-gray-200 bg-indigo-50/50 space-y-3 shadow-inner">
-            <div className="flex justify-between items-center">
-                <h3 className="font-semibold text-sm text-indigo-900">Create New Group</h3>
-                <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="h-4 w-4" /></button>
-            </div>
-
-            <input
-                placeholder="Group Name (e.g. Marketing Team)"
-                className="w-full p-2 border border-gray-300 rounded text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-            />
-
-            <div className="text-xs font-medium text-gray-500 uppercase mt-2">Select Members</div>
-            <div className="max-h-40 overflow-y-auto space-y-1 bg-white border border-gray-200 rounded p-1">
-                {users?.map(u => (
-                    <div
-                        key={u.id}
-                        onClick={() => toggleUser(u.id)}
-                        className={`p-2 text-sm cursor-pointer rounded flex justify-between items-center ${selectedUsers.includes(u.id) ? "bg-indigo-50 text-indigo-700" : "hover:bg-gray-50"}`}
-                    >
-                        <div className="flex items-center gap-2">
-                            <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[10px]">{u.name[0]}</div>
-                            <span>{u.name}</span>
-                        </div>
-                        {selectedUsers.includes(u.id) && <div className="h-2 w-2 rounded-full bg-indigo-600" />}
-                    </div>
-                ))}
-            </div>
-
-            <button onClick={handleCreate} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded text-sm font-medium transition-colors shadow-sm">
-                Create Group
-            </button>
-        </div>
-    );
-};
-
-// Add Member Modal
-const AddMemberModal = ({ channel, onClose, allUsers, currentUser }) => {
-    const [loading, setLoading] = useState(false);
-
-    const currentMemberIds = Object.keys(channel?.state?.members || {});
-    console.log("Current member IDs:", currentMemberIds);
-    console.log("All users:", allUsers?.map(u => ({ id: u.id, name: u.name })));
-
-    const availableUsers = allUsers?.filter(u => !currentMemberIds.includes(u.id)) || [];
-    console.log("Available users to add:", availableUsers?.map(u => ({ id: u.id, name: u.name })));
-
-    const handleAddMember = async (userId) => {
-        setLoading(true);
-        try {
-            // Step 1: Sync user to Stream Chat first
-            console.log("Syncing user to Stream:", userId);
-            await api.post("/chat/sync-user", { userId });
-
-            // Step 2: Add member to channel
-            console.log("Adding member to channel:", userId);
-            await channel.addMembers([userId]);
-
-            toast.success("Member added successfully!");
-        } catch (error) {
-            console.error("Failed to add member:", error);
-            toast.error(`Failed to add member: ${error.response?.data?.message || error.message}`);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-                {/* Header */}
-                <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-gray-900">Add Members</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                        <X className="h-5 w-5" />
-                    </button>
-                </div>
-
-                {/* User List */}
-                <div className="flex-1 overflow-y-auto p-4">
-                    {/* Debug Info */}
-                    <div className="mb-3 p-2 bg-gray-100 rounded text-xs">
-                        <div>Total Users: {allUsers?.length || 0}</div>
-                        <div>Current Members: {currentMemberIds.length}</div>
-                        <div>Available to Add: {availableUsers.length}</div>
-                    </div>
-
-                    {availableUsers.length === 0 ? (
-                        <p className="text-center text-gray-500 py-8">
-                            {allUsers?.length > 0
-                                ? "All users are already members of this group"
-                                : "No users available to add"}
-                        </p>
-                    ) : (
-                        <div className="space-y-2">
-                            {availableUsers.map(user => (
-                                <div key={user.id} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors">
-                                    <div className="flex items-center gap-3">
-                                        <img src={user.image} alt={user.name} className="h-10 w-10 rounded-full object-cover border border-gray-200" />
-                                        <div>
-                                            <div className="font-semibold text-gray-900">{user.name}</div>
-                                            <div className="text-xs text-gray-500">{user.role}</div>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => handleAddMember(user.id)}
-                                        disabled={loading}
-                                        className="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    >
-                                        Add
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// Member List Modal
-const MemberListModal = ({ channel, onClose, currentUser }) => {
-    const [loading, setLoading] = useState(false);
-
-    const members = Object.values(channel?.state?.members || {});
-    const isAdmin = channel?.data?.created_by_id === currentUser?.id;
-
-    const handleRemoveMember = async (userId) => {
-        if (!confirm("Are you sure you want to remove this member?")) return;
-
-        setLoading(true);
-        try {
-            await channel.removeMembers([userId]);
-            toast.success("Member removed successfully!");
-        } catch (error) {
-            console.error("Failed to remove member:", error);
-            toast.error("Failed to remove member. Please try again.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-                {/* Header */}
-                <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-gray-900">Members ({members.length})</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                        <X className="h-5 w-5" />
-                    </button>
-                </div>
-
-                {/* Member List */}
-                <div className="flex-1 overflow-y-auto p-4">
-                    <div className="space-y-2">
-                        {members.map(member => {
-                            const isCreator = member.user_id === channel?.data?.created_by_id;
-                            const canRemove = isAdmin && !isCreator && member.user_id !== currentUser?.id;
-
-                            return (
-                                <div key={member.user_id} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors">
-                                    <div className="flex items-center gap-3">
-                                        <img
-                                            src={member.user?.image || `https://ui-avatars.com/api/?name=${member.user?.name}`}
-                                            alt={member.user?.name}
-                                            className="h-10 w-10 rounded-full object-cover border border-gray-200"
-                                        />
-                                        <div>
-                                            <div className="font-semibold text-gray-900 flex items-center gap-2">
-                                                {member.user?.name}
-                                                {isCreator && (
-                                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">Admin</span>
-                                                )}
-                                            </div>
-                                            <div className="text-xs text-gray-500">{member.user?.role || "Member"}</div>
-                                        </div>
-                                    </div>
-                                    {canRemove && (
-                                        <button
-                                            onClick={() => handleRemoveMember(member.user_id)}
-                                            disabled={loading}
-                                            className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                        >
-                                            Remove
-                                        </button>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// Message Info Modal - Shows who read the message in groups
-const MessageInfoModal = ({ message, channel, onClose }) => {
-    const allMembers = Object.values(channel?.state?.members || {});
-    const readBy = message?.readBy || [];
-
-    // Get members who have read the message
-    const readMembers = allMembers.filter(member =>
-        readBy.some(reader => reader.id === member.user_id)
-    );
-
-    // Get members who haven't read yet
-    const unreadMembers = allMembers.filter(member =>
-        !readBy.some(reader => reader.id === member.user_id) &&
-        member.user_id !== message?.user?.id // Exclude message sender
-    );
-
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-                {/* Header */}
-                <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-gray-900">Message Info</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                        <X className="h-5 w-5" />
-                    </button>
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {/* Read Section */}
-                    <div>
-                        <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                            <span className="text-blue-600">✓✓</span> Read ({readMembers.length})
-                        </h3>
-                        {readMembers.length === 0 ? (
-                            <p className="text-sm text-gray-400 italic pl-6">No one has read this message yet</p>
-                        ) : (
-                            <div className="space-y-2">
-                                {readMembers.map(member => {
-                                    const readInfo = readBy.find(r => r.id === member.user_id);
-                                    return (
-                                        <div key={member.user_id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg">
-                                            <img
-                                                src={member.user?.image || `https://ui-avatars.com/api/?name=${member.user?.name}`}
-                                                alt={member.user?.name}
-                                                className="h-8 w-8 rounded-full object-cover border border-gray-200"
-                                            />
-                                            <div className="flex-1">
-                                                <div className="text-sm font-medium text-gray-900">{member.user?.name}</div>
-                                                {readInfo?.last_read && (
-                                                    <div className="text-xs text-gray-500">
-                                                        {new Date(readInfo.last_read).toLocaleString()}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Unread Section */}
-                    {unreadMembers.length > 0 && (
-                        <div>
-                            <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                                <span className="text-gray-400">○</span> Not Read Yet ({unreadMembers.length})
-                            </h3>
-                            <div className="space-y-2">
-                                {unreadMembers.map(member => (
-                                    <div key={member.user_id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg opacity-60">
-                                        <img
-                                            src={member.user?.image || `https://ui-avatars.com/api/?name=${member.user?.name}`}
-                                            alt={member.user?.name}
-                                            className="h-8 w-8 rounded-full object-cover border border-gray-200 grayscale"
-                                        />
-                                        <div className="text-sm font-medium text-gray-500">{member.user?.name}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
     );
 };
 

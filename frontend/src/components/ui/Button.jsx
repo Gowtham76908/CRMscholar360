@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 const variants = {
-    primary:   "bg-indigo-600 text-white hover:bg-indigo-700 focus-visible:ring-indigo-500",
+    primary:   "bg-orange-500 text-white hover:bg-orange-600 focus-visible:ring-orange-400",
     secondary: "bg-gray-100 text-gray-700 hover:bg-gray-200 focus-visible:ring-gray-400",
     ghost:     "bg-transparent text-gray-600 hover:bg-gray-100 focus-visible:ring-gray-400",
     danger:    "bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500",

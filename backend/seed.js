@@ -205,9 +205,9 @@ async function main() {
     const userDefs = [
         // SUPER_ADMIN
         {
-            name: "Dharun Jayakrishnan",
-            email: "dharun@dcrm.io",
-            phone: "+91 9994081905",
+            name: "System Admin",
+            email: "admin@dcrm.io",
+            phone: "+91 9999999999",
             role: "SUPER_ADMIN",
             department: "Management",
             jobTitle: "CEO & Founder",

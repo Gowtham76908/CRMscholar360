@@ -21,6 +21,13 @@ function getSLAStatus(lead) {
     return null;
 }
 
+const getCategoryFromScore = (score) => {
+    if (score >= 81) return "PREMIUM";
+    if (score >= 61) return "HOT";
+    if (score >= 31) return "WARM";
+    return "COLD";
+};
+
 const getPages = (current, total) => {
     const delta = 2;
     if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
@@ -41,11 +48,38 @@ const Leads = () => {
     const searchTerm   = searchParams.get("search") || "";
     const statusFilter = searchParams.get("status") || "ALL";
     const page         = parseInt(searchParams.get("page") || "1", 10);
+    const sortBy       = searchParams.get("sortBy")    || "createdAt";
+    const sortOrder    = searchParams.get("sortOrder") || "desc";
+    const scoreMin     = searchParams.get("score_min") || "";
+    const mineFilter   = searchParams.get("mine")      || "";
 
-    const setActiveTab    = (v) => setSearchParams(p => { p.set("tab", v); p.set("page", "1"); return p; }, { replace: true });
-    const setSearchTerm   = (v) => setSearchParams(p => { if (v) p.set("search", v); else p.delete("search"); p.set("page", "1"); return p; }, { replace: true });
-    const setStatusFilter = (v) => setSearchParams(p => { p.set("status", v); p.set("page", "1"); return p; }, { replace: true });
-    const setPage         = (v) => setSearchParams(p => { p.set("page", String(v)); return p; }, { replace: true });
+    const [localSearch, setLocalSearch] = useState(searchTerm);
+
+    // Sync local search when URL changes
+    useEffect(() => {
+        setLocalSearch(searchTerm);
+    }, [searchTerm]);
+
+    // Debounce updating searchParams
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (localSearch !== searchTerm) {
+                setSearchParams(p => {
+                    const next = new URLSearchParams(p);
+                    if (localSearch) next.set("search", localSearch);
+                    else next.delete("search");
+                    next.set("page", "1");
+                    return next;
+                }, { replace: true });
+            }
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [localSearch, setSearchParams, searchTerm]);
+
+    const setActiveTab    = (v) => setSearchParams(p => { const next = new URLSearchParams(p); next.set("tab", v); next.set("page", "1"); return next; }, { replace: true });
+    const setSearchTerm   = (v) => setSearchParams(p => { const next = new URLSearchParams(p); if (v) next.set("search", v); else next.delete("search"); next.set("page", "1"); return next; }, { replace: true });
+    const setStatusFilter = (v) => setSearchParams(p => { const next = new URLSearchParams(p); next.set("status", v); next.set("page", "1"); return next; }, { replace: true });
+    const setPage         = (v) => setSearchParams(p => { const next = new URLSearchParams(p); next.set("page", String(v)); return next; }, { replace: true });
     const limit = 20;
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingLead, setEditingLead] = useState(null);
@@ -54,14 +88,18 @@ const Leads = () => {
     const queryClient = useQueryClient();
 
     const { data: leadsData, isLoading, isFetching } = useQuery({
-        queryKey: ["leads", page, searchTerm, statusFilter, activeTab],
+        queryKey: ["leads", page, searchTerm, statusFilter, activeTab, sortBy, sortOrder, scoreMin, mineFilter],
         queryFn: async () => {
             const params = {
                 page,
                 limit,
                 search: searchTerm || undefined,
                 status: statusFilter === "ALL" ? undefined : statusFilter,
-                isSearchLead: activeTab === "search-leads"
+                isSearchLead: activeTab === "search-leads" ? true : activeTab === "leads" ? false : undefined,
+                sortBy,
+                sortOrder,
+                score_min: scoreMin ? parseInt(scoreMin, 10) : undefined,
+                mine: mineFilter === "true" ? true : undefined,
             };
             const res = await api.get("/leads", { params });
             return res.data;
@@ -75,6 +113,32 @@ const Leads = () => {
     const pageButtons = useMemo(() => getPages(page, meta.totalPages), [page, meta.totalPages]);
 
     const goTo = useCallback((p) => setPage(Math.max(1, Math.min(meta.totalPages, p))), [meta.totalPages]);
+
+    const toggleSort = (field) => {
+        setSearchParams(p => {
+            const next = new URLSearchParams(p);
+            const currentField = next.get("sortBy") || "createdAt";
+            const currentOrder = next.get("sortOrder") || "desc";
+            if (currentField === field) {
+                next.set("sortOrder", currentOrder === "desc" ? "asc" : "desc");
+            } else {
+                next.set("sortBy", field);
+                next.set("sortOrder", "asc");
+            }
+            return next;
+        }, { replace: true });
+    };
+
+    useEffect(() => {
+        if (searchParams.get("new") === "1") {
+            setIsAddModalOpen(true);
+            setSearchParams(p => {
+                const next = new URLSearchParams(p);
+                next.delete("new");
+                return next;
+            }, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
 
     useEffect(() => {
         const handler = (e) => {
@@ -284,8 +348,8 @@ const Leads = () => {
                         type="text"
                         placeholder="Search leads by name or email..."
                         className="pl-10 w-full border border-gray-300 rounded-lg py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                        value={searchTerm}
-                        onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+                        value={localSearch}
+                        onChange={(e) => setLocalSearch(e.target.value)}
                     />
                 </div>
                 <div className="relative w-full sm:w-48">
@@ -345,17 +409,45 @@ const Leads = () => {
             )}
 
             {/* View toggle + lead count */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4">
                 <p className="text-sm text-gray-500">
                     Showing <span className="font-semibold text-gray-700">{meta.total === 0 ? 0 : (page - 1) * limit + 1}–{Math.min(page * limit, meta.total)}</span> of <span className="font-semibold text-gray-700">{meta.total}</span>
                 </p>
-                <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
-                    <button onClick={() => setViewMode("grid")} className={`p-1.5 rounded-md transition-colors ${viewMode === "grid" ? "bg-white shadow text-indigo-600" : "text-gray-400 hover:text-gray-600"}`} title="Card view">
-                        <LayoutGrid className="h-4 w-4" />
-                    </button>
-                    <button onClick={() => setViewMode("table")} className={`p-1.5 rounded-md transition-colors ${viewMode === "table" ? "bg-white shadow text-indigo-600" : "text-gray-400 hover:text-gray-600"}`} title="Table view">
-                        <List className="h-4 w-4" />
-                    </button>
+                <div className="flex items-center gap-2">
+                    {/* Sort Dropdown */}
+                    <div className="flex items-center gap-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-600">
+                        <span className="font-medium">Sort:</span>
+                        <select
+                            value={`${sortBy}:${sortOrder}`}
+                            onChange={(e) => {
+                                const [field, order] = e.target.value.split(":");
+                                setSearchParams(p => {
+                                    p.set("sortBy", field);
+                                    p.set("sortOrder", order);
+                                    return p;
+                                }, { replace: true });
+                            }}
+                            className="bg-transparent border-0 p-0 pr-6 text-indigo-600 font-semibold focus:ring-0 cursor-pointer text-xs"
+                        >
+                            <option value="createdAt:desc">Newest First</option>
+                            <option value="createdAt:asc">Oldest First</option>
+                            <option value="score:desc">Score: High to Low</option>
+                            <option value="score:asc">Score: Low to High</option>
+                            <option value="name:asc">Name: A to Z</option>
+                            <option value="name:desc">Name: Z to A</option>
+                            <option value="status:asc">Status: A to Z</option>
+                            <option value="status:desc">Status: Z to A</option>
+                        </select>
+                    </div>
+
+                    <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+                        <button onClick={() => setViewMode("grid")} className={`p-1.5 rounded-md transition-colors ${viewMode === "grid" ? "bg-white shadow text-indigo-600" : "text-gray-400 hover:text-gray-600"}`} title="Card view">
+                            <LayoutGrid className="h-4 w-4" />
+                        </button>
+                        <button onClick={() => setViewMode("table")} className={`p-1.5 rounded-md transition-colors ${viewMode === "table" ? "bg-white shadow text-indigo-600" : "text-gray-400 hover:text-gray-600"}`} title="Table view">
+                            <List className="h-4 w-4" />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -371,7 +463,9 @@ const Leads = () => {
                             CONVERTED: "bg-emerald-50 text-emerald-700 border-emerald-100",
                             LOST: "bg-red-50 text-red-600 border-red-100",
                         };
+                        const dynamicCategory = getCategoryFromScore(lead.score ?? 0);
                         const categoryColors = {
+                            PREMIUM: "bg-purple-100 text-purple-700",
                             HOT: "bg-red-100 text-red-700",
                             WARM: "bg-amber-100 text-amber-700",
                             COLD: "bg-blue-100 text-blue-700",
@@ -400,7 +494,7 @@ const Leads = () => {
                                         <p className="text-xs text-gray-400 mt-0.5 capitalize truncate">{lead.enquiryType?.toLowerCase().replace(/_/g, " ") || "—"}</p>
                                     </div>
                                     <div className="flex items-center gap-1 flex-shrink-0">
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusColors[lead.status] ?? "bg-gray-100 text-gray-500 border-gray-200"}`}>
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusColors[lead.status] ?? "bg-gray-100 text-gray-500"}`}>
                                             {lead.status?.replace("_", " ")}
                                         </span>
                                         {sla === "breach" && (
@@ -437,8 +531,8 @@ const Leads = () => {
                                 {/* Footer — score, source, assigned */}
                                 <div className="px-4 pb-3 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-2">
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${categoryColors[lead.category] ?? "bg-gray-100 text-gray-500"}`}>
-                                            {lead.category || "COLD"} · {lead.score ?? 0}
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${categoryColors[dynamicCategory] ?? "bg-gray-100 text-gray-500"}`}>
+                                            {dynamicCategory} · {lead.score ?? 0}
                                         </span>
                                         {lead.source && (
                                             <span className="text-[10px] text-gray-400 capitalize">{lead.source.toLowerCase().replace(/_/g, " ")}</span>
@@ -491,15 +585,32 @@ const Leads = () => {
                         <table className="min-w-full divide-y divide-gray-100">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="px-4 py-3"><input type="checkbox" className="rounded border-gray-300 text-indigo-600" onChange={handleSelectAll} checked={leads.length > 0 && selectedLeads.length === leads.length} /></th>
-                                    {["Name", "Contact", "Score", "Source", "Assigned", "Status", "Actions"].map(h => (
-                                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
-                                    ))}
+                                    <th className="px-4 py-3 w-10"><input type="checkbox" className="rounded border-gray-300 text-indigo-600" onChange={handleSelectAll} checked={leads.length > 0 && selectedLeads.length === leads.length} /></th>
+                                    <th onClick={() => toggleSort("name")} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 hover:text-indigo-600 transition-colors">
+                                        <div className="flex items-center gap-1">
+                                            Name {sortBy === "name" && (sortOrder === "asc" ? "▲" : "▼")}
+                                        </div>
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Contact</th>
+                                    <th onClick={() => toggleSort("score")} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 hover:text-indigo-600 transition-colors">
+                                        <div className="flex items-center gap-1">
+                                            Score {sortBy === "score" && (sortOrder === "asc" ? "▲" : "▼")}
+                                        </div>
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Source</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Assigned</th>
+                                    <th onClick={() => toggleSort("status")} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 hover:text-indigo-600 transition-colors">
+                                        <div className="flex items-center gap-1">
+                                            Status {sortBy === "status" && (sortOrder === "asc" ? "▲" : "▼")}
+                                        </div>
+                                    </th>
+                                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {leads.map((lead) => {
                                     const latestRecording = lead.callLogs?.find(c => c.recordingUrl);
+                                    const dynamicCategory = getCategoryFromScore(lead.score ?? 0);
                                     return (
                                         <tr key={lead.id} className={`hover:bg-gray-50 transition-colors ${selectedLeads.includes(lead.id) ? "bg-indigo-50/40" : ""}`}>
                                             <td className="px-4 py-3"><input type="checkbox" className="rounded border-gray-300 text-indigo-600" checked={selectedLeads.includes(lead.id)} onChange={() => handleSelectOne(lead.id)} /></td>
@@ -523,7 +634,12 @@ const Leads = () => {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap">
-                                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${lead.category === "HOT" ? "bg-red-100 text-red-700" : lead.category === "WARM" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>{lead.category || "COLD"} · {lead.score ?? 0}</span>
+                                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                                                    dynamicCategory === "PREMIUM" ? "bg-purple-100 text-purple-700" :
+                                                    dynamicCategory === "HOT" ? "bg-red-100 text-red-700" :
+                                                    dynamicCategory === "WARM" ? "bg-amber-100 text-amber-700" :
+                                                    "bg-blue-100 text-blue-700"
+                                                }`}>{dynamicCategory} · {lead.score ?? 0}</span>
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap"><span className="text-xs capitalize text-gray-500">{lead.source?.toLowerCase().replace(/_/g, " ") || "—"}</span></td>
                                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{lead.assignedTo?.name || "—"}</td>

@@ -76,7 +76,7 @@ const GlobalSearch = () => {
                             {results.leads.map(lead => (
                                 <div
                                     key={lead.id}
-                                    onClick={() => handleNavigate("/leads")} // Ideally deep link /leads?id=...
+                                    onClick={() => handleNavigate(`/leads/${lead.id}`)}
                                     className="px-2 py-2 hover:bg-gray-50 rounded cursor-pointer text-sm"
                                 >
                                     <div className="font-medium text-gray-900">{lead.name}</div>
@@ -95,7 +95,7 @@ const GlobalSearch = () => {
                             {results.tasks.map(task => (
                                 <div
                                     key={task.id}
-                                    onClick={() => handleNavigate("/tasks")}
+                                    onClick={() => handleNavigate(`/tasks/${task.id}`)}
                                     className="px-2 py-2 hover:bg-gray-50 rounded cursor-pointer text-sm"
                                 >
                                     <div className="font-medium text-gray-900">{task.title}</div>

@@ -111,7 +111,7 @@ function CRMPanel() {
             <PanelSection title="Views">
                 <PanelLink to="/leads?mine=true" icon={Star} label="My Leads" />
                 <PanelLink to="/leads?score_min=61" icon={Star} label="Hot Leads" />
-                <PanelLink to="/kanban" icon={KanbanSquare} label="Kanban Board" />
+                {/* <PanelLink to="/kanban" icon={KanbanSquare} label="Kanban Board" /> */}
                 <PanelLink to="/search-leads" icon={SearchCheck} label="Search Leads" />
                 <PanelLink to="/linkedin-leads" icon={Linkedin} label="LinkedIn Leads" />
             </PanelSection>
@@ -210,13 +210,13 @@ function AutomatePanel() {
             </PanelSection>
 
             <PanelSection title="Work">
-                <PanelLink to="/sprints" icon={ZapIcon} label="Sprints" />
+                {/* <PanelLink to="/sprints" icon={ZapIcon} label="Sprints" /> */}
                 <PanelLink to="/tasks" icon={CheckSquare} label="My Tasks" />
             </PanelSection>
 
             <PanelSection title="Analytics">
                 <PanelLink to="/reports" icon={BarChart} label="Reports" />
-                <PanelLink to="/leaderboard" icon={Trophy} label="Leaderboard" />
+                {/* <PanelLink to="/leaderboard" icon={Trophy} label="Leaderboard" /> */}
             </PanelSection>
         </>
     );

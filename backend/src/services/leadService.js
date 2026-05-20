@@ -16,8 +16,8 @@ const getLeads = async ({
     // 1. Build Where Clause
     const where = {};
 
-    // Role-based access control
-    if (role === "EMPLOYEE") {
+    // Role-based access control or My Leads filter
+    if (role === "EMPLOYEE" || filters.mine) {
         where.assignedToId = userId;
     } else if (filters.assignedTo) {
         where.assignedToId = filters.assignedTo;
@@ -30,6 +30,10 @@ const getLeads = async ({
 
     if (filters.isSearchLead !== undefined) {
         where.isSearchLead = filters.isSearchLead;
+    }
+
+    if (filters.score_min !== undefined) {
+        where.score = { gte: filters.score_min };
     }
 
     // Date range filter
@@ -58,7 +62,7 @@ const getLeads = async ({
     }
 
     // 2. Build Order By
-    const validSortFields = ["createdAt", "updatedAt"];
+    const validSortFields = ["createdAt", "updatedAt", "score", "name", "status"];
     const orderByField = validSortFields.includes(sortBy) ? sortBy : "createdAt";
     const orderDirection = sortOrder === "asc" ? "asc" : "desc";
     const orderBy = { [orderByField]: orderDirection };

@@ -21,27 +21,48 @@ const DEFAULT_SETTINGS = {
     defaultNotes: "",
 };
 
+const SENSITIVE_FIELDS = ["smtpPass", "accountNo", "ifsc", "bankName", "gstin"];
+
+function stripSensitive(settings) {
+    const safe = { ...settings };
+    for (const field of SENSITIVE_FIELDS) delete safe[field];
+    return safe;
+}
+
 const getSettings = async (req, res) => {
     try {
         let settings = await prisma.companySettings.findFirst();
         if (!settings) {
             settings = await prisma.companySettings.create({ data: DEFAULT_SETTINGS });
         }
-        res.json(settings);
+        const isPrivileged = ["SUPER_ADMIN", "ADMIN"].includes(req.user?.role);
+        res.json(isPrivileged ? settings : stripSensitive(settings));
     } catch (error) {
         res.status(500).json({ message: "Error fetching settings", error: error.message });
     }
 };
 
+const ALLOWED_UPDATE_FIELDS = [
+    "companyName", "shortName", "gstin", "address", "city", "state", "pincode",
+    "phone", "email", "website", "placeOfSupply", "bankName", "accountNo", "ifsc",
+    "branch", "defaultTaxRate", "defaultNotes", "logoUrl", "currency",
+    "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpSecure", "smtpFrom",
+];
+
 const updateSettings = async (req, res) => {
     try {
+        const data = {};
+        for (const field of ALLOWED_UPDATE_FIELDS) {
+            if (req.body[field] !== undefined) data[field] = req.body[field];
+        }
+
         let settings = await prisma.companySettings.findFirst();
         if (!settings) {
-            settings = await prisma.companySettings.create({ data: { ...DEFAULT_SETTINGS, ...req.body } });
+            settings = await prisma.companySettings.create({ data: { ...DEFAULT_SETTINGS, ...data } });
         } else {
             settings = await prisma.companySettings.update({
                 where: { id: settings.id },
-                data: req.body,
+                data,
             });
         }
         res.json(settings);

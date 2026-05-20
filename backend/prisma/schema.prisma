@@ -222,13 +222,33 @@ model TaskFile {
 }
 
 model Integration {
-  id          String    @id @default(uuid())
-  platform    String    @unique
-  isConnected Boolean   @default(false)
-  lastSynced  DateTime?
-  config      Json?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id            String           @id @default(uuid())
+  platform      String           @unique
+  isConnected   Boolean          @default(false)
+  status        String           @default("DISCONNECTED") // CONNECTED | DISCONNECTED | ERROR
+  lastSynced    DateTime?
+  config        Json?
+  accessToken   String?          // AES-256-GCM encrypted
+  refreshToken  String?          // AES-256-GCM encrypted
+  expiresAt     DateTime?
+  errorMessage  String?
+  metadata      Json?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  logs          IntegrationLog[]
+}
+
+model IntegrationLog {
+  id            String      @id @default(uuid())
+  integrationId String
+  type          String      // CONNECTED|DISCONNECTED|TOKEN_REFRESHED|SYNC_STARTED|SYNC_COMPLETED|SYNC_FAILED|WEBHOOK_RECEIVED|AUTH_FAILED
+  message       String
+  status        String      @default("INFO") // SUCCESS | ERROR | INFO
+  metadata      Json?
+  createdAt     DateTime    @default(now())
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId, createdAt])
 }
 
 model Activity {
@@ -263,6 +283,8 @@ model Commission {
   leadId    String
   amount    Float
   createdAt DateTime @default(now())
+
+  @@unique([userId, leadId])
 }
 
 model Permission {

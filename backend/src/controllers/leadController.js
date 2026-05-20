@@ -24,14 +24,16 @@ const getLeads = async (req, res) => {
             });
         }
 
-        const { page, limit, status, assignedTo, startDate, endDate, search, sortBy, sortOrder, isSearchLead } = validationResult.data;
+        const { page, limit, status, assignedTo, startDate, endDate, search, sortBy, sortOrder, isSearchLead, score_min, mine } = validationResult.data;
 
         const rawFilters = {
             status,
             assignedTo,
             startDate,
             endDate,
-            isSearchLead
+            isSearchLead,
+            score_min,
+            mine
         };
 
         const filters = Object.fromEntries(
@@ -106,7 +108,7 @@ const updateLead = async (req, res) => {
     try {
         const { userId } = req.user;
         const { id } = req.params;
-        const { status, name, email, phone, source, enquiryType } = req.body; 
+        const { status, name, email, phone, source, enquiryType, assignedToId } = req.body;
 
         // Fetch current lead to calculate delta for scoring if needed
         const currentLead = await prisma.lead.findUnique({ where: { id } });
@@ -124,6 +126,7 @@ const updateLead = async (req, res) => {
             ...(phone !== undefined && { phone, phoneNormalized: normalizePhone(phone) }),
             ...(source !== undefined && { source }),
             ...(enquiryType !== undefined && { enquiryType }),
+            ...(assignedToId !== undefined && { assignedToId }),
             score,
             category
         };
@@ -155,12 +158,21 @@ const updateLead = async (req, res) => {
             runRulesForLead("LEAD_ASSIGNED", updatedLead).catch(console.error);
         }
 
-        // Trigger Commission if status changed to CONVERTED
+        // Trigger Commission if status changed to CONVERTED — idempotency guarded
         if (status === "CONVERTED" && currentLead.status !== "CONVERTED") {
-            // Assign commission to the person who converted it (current user) or the assignee?
-            // Usually the assignee gets the commission.
             const targetUserId = updatedLead.assignedToId || userId;
-            await createCommission(updatedLead.id, targetUserId);
+            // Check-then-create inside a transaction to prevent duplicate commissions
+            // on concurrent requests (e.g. double-click, retry). Schema-level unique
+            // constraint on (userId, leadId) should also be added as a migration.
+            await prisma.$transaction(async (tx) => {
+                const existing = await tx.commission.findFirst({
+                    where: { leadId: updatedLead.id, userId: targetUserId },
+                    select: { id: true },
+                });
+                if (!existing) {
+                    await createCommission(updatedLead.id, targetUserId);
+                }
+            }, { isolationLevel: "Serializable" });
         }
 
         res.json({ message: "Lead updated successfully", lead: updatedLead });
@@ -264,6 +276,27 @@ const mergeLeads = async (req, res) => {
                 data: { leadId: primaryLeadId }
             });
 
+            // Move communication history — these were previously orphaned on merge
+            await prisma.whatsAppMessage.updateMany({
+                where: { leadId: secondaryLeadId },
+                data: { leadId: primaryLeadId }
+            });
+
+            await prisma.emailLog.updateMany({
+                where: { leadId: secondaryLeadId },
+                data: { leadId: primaryLeadId }
+            });
+
+            await prisma.callLog.updateMany({
+                where: { leadId: secondaryLeadId },
+                data: { leadId: primaryLeadId }
+            });
+
+            await prisma.salestrailCall.updateMany({
+                where: { leadId: secondaryLeadId },
+                data: { leadId: primaryLeadId }
+            });
+
             // Soft Delete Secondary (Mark as LOST or special MERGED status if exist, using LOST for now based on enum)
             // or we can delete? Prompt said "Soft delete (status = MERGED)".
             // My Enum LeadStatus doesn't have MERGED. I should add it or use LOST. 
@@ -344,8 +377,20 @@ const csvField = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 // Export Leads to CSV
 const exportLeads = async (req, res) => {
     try {
+        const { userId, role } = req.user;
+
+        // Apply the same role-based scoping used in getLeads — prevents TEAM_LEAD from
+        // exfiltrating the entire lead database via a single export request.
+        const where = {};
+        if (role === "EMPLOYEE") {
+            where.assignedToId = userId;
+        }
+
         const leads = await prisma.lead.findMany({
-            include: { assignedTo: { select: { name: true } } }
+            where,
+            include: { assignedTo: { select: { name: true } } },
+            take: 10000, // safety cap — stream/paginate if larger exports are needed
+            orderBy: { createdAt: "desc" },
         });
 
         const headers = ["Name", "Email", "Phone", "Source", "Type", "Status", "Score", "Category", "Assigned To", "Created At"];
@@ -616,29 +661,56 @@ const getDashboardStats = async (req, res) => {
 // GET /leads/duplicates — find groups of leads sharing the same phone or email
 const getDuplicates = async (req, res) => {
     try {
+        // Ask the DB which phone/email values appear more than once — avoids full table scan in JS
+        const [phoneDupeGroups, emailDupeGroups] = await Promise.all([
+            prisma.lead.groupBy({
+                by: ["phoneNormalized"],
+                where: { phoneNormalized: { not: null } },
+                _count: { phoneNormalized: true },
+                having: { phoneNormalized: { _count: { gt: 1 } } },
+            }),
+            prisma.lead.groupBy({
+                by: ["email"],
+                where: { email: { not: null } },
+                _count: { email: true },
+                having: { email: { _count: { gt: 1 } } },
+            }),
+        ]);
+
+        const dupePhones = phoneDupeGroups.map(r => r.phoneNormalized);
+        const dupeEmails = emailDupeGroups.map(r => r.email);
+
+        if (dupePhones.length === 0 && dupeEmails.length === 0) {
+            return res.json({ groups: [], total: 0 });
+        }
+
+        // Fetch only the leads that actually have duplicates
         const leads = await prisma.lead.findMany({
             where: {
                 OR: [
-                    { phoneNormalized: { not: null } },
-                    { email: { not: null } },
+                    ...(dupePhones.length ? [{ phoneNormalized: { in: dupePhones } }] : []),
+                    ...(dupeEmails.length ? [{ email: { in: dupeEmails } }] : []),
                 ],
             },
             include: { assignedTo: { select: { id: true, name: true } } },
             orderBy: { createdAt: "asc" },
+            take: 1000, // safety cap — UI can't usefully display more
         });
 
         const phoneMap = new Map();
         const emailMap = new Map();
 
         for (const lead of leads) {
-            if (lead.phoneNormalized) {
+            if (lead.phoneNormalized && dupePhones.includes(lead.phoneNormalized)) {
                 if (!phoneMap.has(lead.phoneNormalized)) phoneMap.set(lead.phoneNormalized, []);
                 phoneMap.get(lead.phoneNormalized).push(lead);
             }
             if (lead.email) {
                 const key = lead.email.toLowerCase().trim();
-                if (!emailMap.has(key)) emailMap.set(key, []);
-                emailMap.get(key).push(lead);
+                if (dupeEmails.some(e => e.toLowerCase() === key)) {
+                    if (!emailMap.has(key)) emailMap.set(key, []);
+                    emailMap.get(key).push(lead);
+                }
             }
         }
 
@@ -646,14 +718,11 @@ const getDuplicates = async (req, res) => {
         const seenIds = new Set();
 
         for (const [phone, groupLeads] of phoneMap) {
-            if (groupLeads.length < 2) continue;
             groups.push({ type: "phone", value: phone, leads: groupLeads });
             groupLeads.forEach(l => seenIds.add(l.id));
         }
 
         for (const [email, groupLeads] of emailMap) {
-            if (groupLeads.length < 2) continue;
-            // Only emit if at least one lead isn't already covered by a phone group
             const hasNew = groupLeads.some(l => !seenIds.has(l.id));
             if (!hasNew) continue;
             groups.push({ type: "email", value: email, leads: groupLeads });

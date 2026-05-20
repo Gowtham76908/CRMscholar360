@@ -5,6 +5,7 @@ const autoCheckout = require("./jobs/autoCheckout");
 const autoBreakOffline = require("./jobs/autoBreakOffline");
 const { notifyLeaderboardWinner, notifyTasksDueSoon, notifyOverdueTasks } = require("./services/notificationService");
 const { runNoReplyTimeoutCheck } = require("./services/whatsappAutoReplyService");
+const { runNoActivityRules } = require("./services/automationEngine");
 
 const startScheduler = () => {
     console.log("[Scheduler] Starting background jobs...");
@@ -55,6 +56,13 @@ const startScheduler = () => {
             console.error("[Scheduler] Overdue task notification failed:", err)
         );
     }, { timezone: "Asia/Kolkata" });
+
+    // No-activity automation rules — runs every 6 hours
+    cron.schedule("0 */6 * * *", () => {
+        runNoActivityRules().catch(err =>
+            console.error("[Scheduler] runNoActivityRules failed:", err)
+        );
+    });
 
     // WhatsApp No-Reply timeout follow-ups — runs every hour
     cron.schedule("0 * * * *", () => {

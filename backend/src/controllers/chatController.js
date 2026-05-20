@@ -285,6 +285,108 @@ const syncAllUsers = async (req, res) => {
     }
 };
 
+// Seed demo channels + messages
+const seedDemoData = async (req, res) => {
+    try {
+        const streamClient = getStreamClient();
+        const creatorId = req.user.userId;
+
+        const users = await prisma.user.findMany({ where: { isActive: true } });
+        for (const u of users) await upsertUserToStream(u).catch(() => {});
+
+        const allIds = users.map(u => u.id);
+        if (!allIds.includes(creatorId)) allIds.push(creatorId);
+
+        const byDept = (dept) => users.filter(u => u.department === dept).map(u => u.id);
+        const pick = (arr, i) => arr[i % arr.length];
+
+        const channels = [
+            {
+                id: "general-team", name: "General", type: "team", members: allIds,
+                messages: [
+                    { text: "Good morning everyone! Hope you all had a great weekend 🌞", dept: null },
+                    { text: "Don't forget standup at 10am — let's keep it sharp today.", dept: null },
+                    { text: "New DCRM features are live on staging — please test before EOD.", dept: "Engineering" },
+                    { text: "Sales pipeline looking really strong this week 💪", dept: "Sales" },
+                    { text: "Team lunch this Friday at 1pm. Who's in? 🍕", dept: "HR" },
+                    { text: "Reminder: fill in your attendance by 6pm!", dept: "HR" },
+                    { text: "Great work on the Q3 numbers everyone, seriously 🚀", dept: null },
+                ]
+            },
+            {
+                id: "sales-team", name: "Sales Team", type: "team", members: [...byDept("Sales"), creatorId],
+                messages: [
+                    { text: "Q4 pipeline is looking very healthy — 47 hot leads this week alone 🔥", dept: "Sales" },
+                    { text: "New inbound from Meta Ads — Tech Solutions Pvt Ltd. Assigning to Arjun.", dept: "Sales" },
+                    { text: "Arjun, Deepa — please update your lead statuses before EOD.", dept: "Sales" },
+                    { text: "Anita Bose just converted! Big win 🎉 That's our 3rd enterprise this month.", dept: "Sales" },
+                    { text: "Follow-up calls done for today ✅ Two demos scheduled for Thursday.", dept: "Sales" },
+                    { text: "Let's hit 200 conversions by month end. We're at 178 right now — so close!", dept: "Sales" },
+                    { text: "Sunrise Traders proposal sent. Waiting for their sign-off.", dept: "Sales" },
+                ]
+            },
+            {
+                id: "dev-team", name: "Dev Team", type: "team", members: [...byDept("Engineering"), creatorId],
+                messages: [
+                    { text: "Deployment to staging done ✓ All services healthy.", dept: "Engineering" },
+                    { text: "PR review needed for the automation branch — it's been sitting for 2 days.", dept: "Engineering" },
+                    { text: "Bug #423 fixed — email notification delay was a cron timing issue. Pushing to prod tonight.", dept: "Engineering" },
+                    { text: "New API docs updated in Notion. Please review the webhook section.", dept: "Engineering" },
+                    { text: "Heads up: database migration scheduled for Sunday 2am. ~10min downtime.", dept: "Engineering" },
+                    { text: "Frontend bundle size down by 18% after tree-shaking cleanup 🎯", dept: "Engineering" },
+                ]
+            },
+            {
+                id: "announcements", name: "Announcements", type: "team", members: allIds,
+                messages: [
+                    { text: "Company all-hands this Friday at 3pm in the main hall. Attendance mandatory.", dept: null },
+                    { text: "New WFH policy document has been shared in the company Drive. Please review.", dept: "HR" },
+                    { text: "Welcome Lakshmi Rao to the Marketing team! Please give her a warm welcome 🎉", dept: "HR" },
+                    { text: "Office will be closed on Monday for the public holiday. Enjoy the long weekend!", dept: "HR" },
+                    { text: "Q3 revenue targets exceeded by 12%! Huge thanks to the sales and marketing teams 🏆", dept: null },
+                ]
+            },
+            {
+                id: "marketing-team", name: "Marketing", type: "team", members: [...byDept("Marketing"), creatorId],
+                messages: [
+                    { text: "New campaign for Q4 goes live Monday — all creatives are ready.", dept: "Marketing" },
+                    { text: "Google Ads CTR improved to 4.2% this week — best in 6 months!", dept: "Marketing" },
+                    { text: "Blog post on automation features published. LinkedIn post scheduled for tomorrow.", dept: "Marketing" },
+                    { text: "Meta lead form updated with new qualification questions. Let's see conversion improve.", dept: "Marketing" },
+                ]
+            },
+        ];
+
+        let seededChannels = 0;
+        let seededMessages = 0;
+
+        for (const def of channels) {
+            const members = def.members.length > 0 ? def.members : allIds;
+            const ch = streamClient.channel(def.type, def.id, {
+                name: def.name,
+                members,
+                created_by_id: creatorId,
+            });
+            await ch.create();
+            seededChannels++;
+
+            const deptUsers = def.messages[0]?.dept ? byDept(def.messages[0].dept) : allIds;
+            for (let i = 0; i < def.messages.length; i++) {
+                const msg = def.messages[i];
+                const pool = msg.dept ? byDept(msg.dept) : allIds;
+                const senderId = pool.length > 0 ? pick(pool, i) : creatorId;
+                await ch.sendMessage({ text: msg.text, user_id: senderId }).catch(() => {});
+                seededMessages++;
+            }
+        }
+
+        res.json({ ok: true, message: `Seeded ${seededChannels} channels with ${seededMessages} messages`, users: users.length });
+    } catch (err) {
+        console.error("Seed error:", err);
+        res.status(500).json({ message: err.message });
+    }
+};
+
 module.exports = {
     createToken,
     createGroupChannel,
@@ -293,4 +395,5 @@ module.exports = {
     syncUserToStream,
     syncAllUsers,
     upsertUserToStream,
+    seedDemoData,
 };

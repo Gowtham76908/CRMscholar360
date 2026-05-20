@@ -24,13 +24,13 @@ async function main() {
     // ──────────────────────────────────────────────
     console.log("Step 1: Restoring users...");
 
-    const dharunPassword = await bcrypt.hash("dharun123", 10);
+    const dharunPassword = await bcrypt.hash("admin123", 10);
     const kishorPassword = await bcrypt.hash("kishor123", 10);
 
     const dharun = await prisma.user.upsert({
-        where: { email: "dharun@zenxai.io" },
+        where: { email: "admin@zenxai.io" },
         update: {
-            name: "Dharun",
+            name: "Admin",
             role: "ADMIN",
             department: "Management",
             jobTitle: "Admin Manager",
@@ -38,8 +38,8 @@ async function main() {
             onlineStatus: "OFFLINE",
         },
         create: {
-            name: "Dharun",
-            email: "dharun@zenxai.io",
+            name: "Admin",
+            email: "admin@zenxai.io",
             password: dharunPassword,
             role: "ADMIN",
             department: "Management",
@@ -48,7 +48,7 @@ async function main() {
             onlineStatus: "OFFLINE",
         },
     });
-    console.log(`  ✓ Dharun (ADMIN) — ${dharun.email}`);
+    console.log(`  ✓ Admin (ADMIN) — ${dharun.email}`);
 
     const kishor = await prisma.user.upsert({
         where: { email: "kishor@zenxai.io" },
@@ -203,7 +203,7 @@ async function main() {
             lead: null,
         },
         {
-            title: "Monthly lead report for Dharun",
+            title: "Monthly lead report for Admin",
             dueDate: new Date(Date.UTC(currentYear, currentMonth + 1, 3)),
             lead: null,
         },
@@ -306,7 +306,7 @@ async function main() {
     console.log("\n=== Restoration Complete ===");
     console.log(`
   Users:
-    • Dharun (ADMIN)      → dharun@zenxai.io      / dharun123
+    • Admin (ADMIN)       → admin@zenxai.io       / admin123
     • Kishor M V S (EMPLOYEE) → kishor@zenxai.io  / kishor123
 
   Data:
@@ -324,7 +324,7 @@ async function main() {
   Next Steps:
     1. Start backend: cd backend && npm run dev
     2. Start frontend: cd frontend && npm run dev
-    3. Log in as Kishor or Dharun and verify:
+    3. Log in as Kishor or Admin and verify:
        - Dashboard shows leads and tasks
        - Leaderboard shows scores
        - Messages connects without error

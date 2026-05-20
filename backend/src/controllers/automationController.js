@@ -1,137 +1,121 @@
 const prisma = require("../utils/prisma");
+const { seedDefaultAutomations } = require("../services/automationSeedService");
 
-const ruleInclude = {
-    conditions: true,
-    actions: { orderBy: { order: "asc" } },
-    _count: { select: { logs: true } }
-};
-
-// GET /api/automations
 const getRules = async (req, res) => {
     try {
         const rules = await prisma.automationRule.findMany({
-            include: ruleInclude,
-            orderBy: { createdAt: "desc" }
+            include: {
+                conditions: true,
+                actions: { orderBy: { order: "asc" } },
+                _count: { select: { logs: true } },
+            },
+            orderBy: { createdAt: "asc" },
         });
         res.json(rules);
-    } catch (err) {
-        res.status(500).json({ message: "Error fetching automation rules", error: err.message });
+    } catch (e) {
+        res.status(500).json({ message: "Error fetching automation rules", error: e.message });
     }
 };
 
-// POST /api/automations
 const createRule = async (req, res) => {
     try {
         const { name, description, triggerType, triggerConfig, conditions = [], actions = [] } = req.body;
-
-        if (!name || !triggerType) {
-            return res.status(400).json({ message: "name and triggerType are required" });
-        }
+        if (!name || !triggerType) return res.status(400).json({ message: "name and triggerType are required" });
 
         const rule = await prisma.automationRule.create({
             data: {
                 name,
                 description,
                 triggerType,
-                triggerConfig: triggerConfig ?? null,
+                triggerConfig: triggerConfig ?? {},
+                isActive: true,
                 conditions: { create: conditions },
-                actions: {
-                    create: actions.map((a, i) => ({ ...a, order: i }))
-                }
+                actions: { create: actions.map((a, i) => ({ type: a.type, config: a.config, order: a.order ?? i })) },
             },
-            include: ruleInclude
+            include: { conditions: true, actions: { orderBy: { order: "asc" } } },
         });
-
         res.status(201).json(rule);
-    } catch (err) {
-        res.status(500).json({ message: "Error creating rule", error: err.message });
+    } catch (e) {
+        res.status(500).json({ message: "Error creating rule", error: e.message });
     }
 };
 
-// PATCH /api/automations/:id
-const updateRule = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { name, description, isActive, triggerType, triggerConfig, conditions, actions } = req.body;
-
-        const existing = await prisma.automationRule.findUnique({ where: { id } });
-        if (!existing) return res.status(404).json({ message: "Rule not found" });
-
-        const updateData = {
-            ...(name        !== undefined && { name }),
-            ...(description !== undefined && { description }),
-            ...(isActive    !== undefined && { isActive }),
-            ...(triggerType !== undefined && { triggerType }),
-            ...(triggerConfig !== undefined && { triggerConfig }),
-        };
-
-        // Replace conditions and actions inside a transaction so a mid-flight failure
-        // never leaves the rule in a partially-deleted state.
-        const updated = await prisma.$transaction(async (tx) => {
-            if (conditions !== undefined) {
-                await tx.automationCondition.deleteMany({ where: { ruleId: id } });
-                updateData.conditions = { create: conditions };
-            }
-            if (actions !== undefined) {
-                await tx.automationAction.deleteMany({ where: { ruleId: id } });
-                updateData.actions = { create: actions.map((a, i) => ({ ...a, order: i })) };
-            }
-            return tx.automationRule.update({
-                where: { id },
-                data: updateData,
-                include: ruleInclude,
-            });
-        });
-
-        res.json(updated);
-    } catch (err) {
-        res.status(500).json({ message: "Error updating rule", error: err.message });
-    }
-};
-
-// DELETE /api/automations/:id
-const deleteRule = async (req, res) => {
-    try {
-        const { id } = req.params;
-        await prisma.automationRule.delete({ where: { id } });
-        res.json({ message: "Rule deleted" });
-    } catch (err) {
-        res.status(500).json({ message: "Error deleting rule", error: err.message });
-    }
-};
-
-// PATCH /api/automations/:id/toggle
 const toggleRule = async (req, res) => {
     try {
         const { id } = req.params;
-        const rule = await prisma.automationRule.findUnique({ where: { id } });
-        if (!rule) return res.status(404).json({ message: "Rule not found" });
-
-        const updated = await prisma.automationRule.update({
+        const current = await prisma.automationRule.findUnique({ where: { id }, select: { isActive: true } });
+        if (!current) return res.status(404).json({ message: "Rule not found" });
+        const rule = await prisma.automationRule.update({
             where: { id },
-            data: { isActive: !rule.isActive },
-            include: ruleInclude
+            data: { isActive: !current.isActive },
         });
-        res.json(updated);
-    } catch (err) {
-        res.status(500).json({ message: "Error toggling rule", error: err.message });
+        res.json(rule);
+    } catch (e) {
+        res.status(500).json({ message: "Error toggling rule", error: e.message });
     }
 };
 
-// GET /api/automations/:id/logs
-const getRuleLogs = async (req, res) => {
+const updateRule = async (req, res) => {
     try {
         const { id } = req.params;
-        const logs = await prisma.automationLog.findMany({
-            where: { ruleId: id },
-            include: { lead: { select: { id: true, name: true } } },
-            orderBy: { createdAt: "desc" },
-            take: 50
+        const { name, description, triggerConfig, isActive, actions } = req.body;
+
+        const updates = {};
+        if (name !== undefined) updates.name = name;
+        if (description !== undefined) updates.description = description;
+        if (triggerConfig !== undefined) updates.triggerConfig = triggerConfig;
+        if (isActive !== undefined) updates.isActive = Boolean(isActive);
+
+        if (actions !== undefined) {
+            await prisma.automationAction.deleteMany({ where: { ruleId: id } });
+            updates.actions = {
+                create: actions.map((a, i) => ({ type: a.type, config: a.config, order: a.order ?? i })),
+            };
+        }
+
+        const rule = await prisma.automationRule.update({
+            where: { id },
+            data: updates,
+            include: { conditions: true, actions: { orderBy: { order: "asc" } } },
         });
-        res.json(logs);
-    } catch (err) {
-        res.status(500).json({ message: "Error fetching logs", error: err.message });
+        res.json(rule);
+    } catch (e) {
+        if (e.code === "P2025") return res.status(404).json({ message: "Rule not found" });
+        res.status(500).json({ message: "Error updating rule", error: e.message });
     }
 };
 
-module.exports = { getRules, createRule, updateRule, deleteRule, toggleRule, getRuleLogs };
+const deleteRule = async (req, res) => {
+    try {
+        await prisma.automationRule.delete({ where: { id: req.params.id } });
+        res.json({ deleted: true });
+    } catch (e) {
+        if (e.code === "P2025") return res.status(404).json({ message: "Rule not found" });
+        res.status(500).json({ message: "Error deleting rule", error: e.message });
+    }
+};
+
+const getRuleLogs = async (req, res) => {
+    try {
+        const logs = await prisma.automationLog.findMany({
+            where: { ruleId: req.params.id },
+            include: { lead: { select: { id: true, name: true } } },
+            orderBy: { createdAt: "desc" },
+            take: 50,
+        });
+        res.json(logs);
+    } catch (e) {
+        res.status(500).json({ message: "Error fetching logs", error: e.message });
+    }
+};
+
+const seedRules = async (req, res) => {
+    try {
+        const results = await seedDefaultAutomations();
+        res.json({ seeded: results });
+    } catch (e) {
+        res.status(500).json({ message: "Seed failed", error: e.message });
+    }
+};
+
+module.exports = { getRules, createRule, toggleRule, updateRule, deleteRule, getRuleLogs, seedRules };

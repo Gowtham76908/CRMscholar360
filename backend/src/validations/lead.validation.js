@@ -8,9 +8,11 @@ const getLeadsSchema = z.object({
     startDate: z.coerce.date().optional(),
     endDate: z.coerce.date().optional(),
     search: z.string().trim().max(100).optional(),
-    sortBy: z.enum(["createdAt", "updatedAt"]).default("createdAt"),
+    sortBy: z.enum(["createdAt", "updatedAt", "score", "name", "status"]).default("createdAt"),
     sortOrder: z.enum(["asc", "desc"]).default("desc"),
-    isSearchLead: z.string().optional().transform(v => v === 'true' ? true : v === 'false' ? false : undefined),
+    isSearchLead: z.any().optional().transform(v => v === 'true' || v === true ? true : v === 'false' || v === false ? false : undefined),
+    score_min: z.coerce.number().int().min(0).max(100).optional(),
+    mine: z.any().optional().transform(v => v === 'true' || v === true ? true : v === 'false' || v === false ? false : undefined),
 })
 .refine((data) => {
     if (data.startDate && data.endDate) {

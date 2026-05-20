@@ -113,6 +113,13 @@ const updateUser = async (req, res) => {
         const { id } = req.params;
         const { name, phone, role, department, jobTitle } = req.body;
 
+        if (role === "SUPER_ADMIN") {
+            return res.status(403).json({ message: "Cannot assign SUPER_ADMIN role" });
+        }
+        if (role === "ADMIN" && req.user.role !== "SUPER_ADMIN") {
+            return res.status(403).json({ message: "Only Super Admins can assign the Admin role" });
+        }
+
         // Find department ID if department name is provided
         let departmentId = undefined;
         if (department) {

@@ -1,53 +1,25 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import {
-    AlertCircle, Clock, EyeOff, TrendingDown, Brain, Bot, TrendingUp,
-    CheckCircle2, XCircle, Users, Building2, Rocket, Phone, MessageSquare,
-    Link2, Store, Home, GraduationCap, Briefcase, HeartPulse, BookOpen,
-    Wrench, BarChart2, Target, ClipboardList, Mail, MessageCircle,
-    ArrowRight, Check, X, Zap, Shield, Mic, PhoneCall, Bell, Trophy,
-    Activity, LineChart, FileText, Star, Layers, Settings2, Globe,
-    ChevronDown, ChevronUp, Menu, CalendarCheck, Loader2, Sparkles,
+    TrendingUp, Bot, Inbox, Users, Mail, MessageSquare, BarChart2,
+    Shield, Zap, ArrowRight, Check, X, AlertCircle, CheckCircle2,
+    CalendarCheck, Loader2, Menu, ChevronRight,
+    Activity, Bell, Target, Layers,
 } from "lucide-react";
-import { FaWhatsapp, FaLinkedin, FaFacebook, FaGoogle } from "react-icons/fa";
+import { FaWhatsapp, FaLinkedin } from "react-icons/fa";
+import useInView from "../hooks/useInView";
+import useCountUp from "../hooks/useCountUp";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Reusable Components
-// ─────────────────────────────────────────────────────────────────────────────
+const fadeIn = (visible, delay = 0) => ({
+    opacity: visible ? 1 : 0,
+    transform: visible ? "none" : "translateY(16px)",
+    transition: `all 0.5s ease ${delay}s`,
+});
 
-const Badge = ({ children, variant = "teal" }) => {
-    const styles = {
-        teal: "bg-teal-50 text-teal-700 border border-teal-200",
-        navy: "bg-indigo-50 text-indigo-700 border border-indigo-200",
-        white: "bg-white/10 text-white/90 border border-white/20",
-    };
-    return (
-        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full uppercase tracking-widest ${styles[variant]}`}>
-            {children}
-        </span>
-    );
-};
-
-const SectionHeader = ({ badge, title, subtitle, light = false }) => (
-    <div className="text-center mb-14">
-        {badge && <Badge variant={light ? "white" : "teal"}>{badge}</Badge>}
-        <h2 className={`mt-4 text-3xl sm:text-4xl font-extrabold leading-tight ${light ? "text-white" : "text-[#1e2d6b]"}`}>
-            {title}
-        </h2>
-        {subtitle && (
-            <p className={`mt-4 text-base sm:text-lg max-w-2xl mx-auto ${light ? "text-white/70" : "text-gray-500"}`}>
-                {subtitle}
-            </p>
-        )}
-    </div>
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Book Demo Modal
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Book Demo Modal ──────────────────────────────────────────────────────────
 
 function BookDemoModal({ onClose }) {
     const [form, setForm] = useState({ companyName: "", email: "", phone: "", date: "", time: "" });
@@ -73,33 +45,29 @@ function BookDemoModal({ onClose }) {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-                {/* Header */}
-                <div className="bg-gradient-to-r from-[#1e2d6b] to-[#0d9488] px-7 py-6">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <h2 className="text-xl font-extrabold text-white">Book Your Free Demo</h2>
-                            <p className="text-teal-200 text-sm mt-1 flex items-center gap-1.5">
-                                <CalendarCheck size={13} /> 45-minute personalised walkthrough
-                            </p>
-                        </div>
-                        <button onClick={onClose} className="text-white/60 hover:text-white transition-colors mt-0.5">
-                            <X size={20} />
-                        </button>
+                <div className="px-7 py-5 border-b border-zinc-100 flex justify-between items-center">
+                    <div>
+                        <h2 className="text-lg font-bold text-zinc-900">Book a free demo</h2>
+                        <p className="text-xs text-zinc-400 mt-0.5 flex items-center gap-1">
+                            <CalendarCheck size={12} /> 45-minute personalised walkthrough
+                        </p>
                     </div>
+                    <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700 transition-colors">
+                        <X size={20} />
+                    </button>
                 </div>
-
                 <div className="px-7 py-6">
                     {success ? (
                         <div className="text-center py-6">
-                            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <CheckCircle2 size={32} className="text-green-500" />
+                            <div className="w-14 h-14 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <CheckCircle2 size={28} className="text-green-500" />
                             </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-2">Demo Booked!</h3>
-                            <p className="text-gray-500 text-sm mb-1">A confirmation email with calendar invite has been sent.</p>
-                            <p className="text-gray-400 text-xs mb-6">Our team will confirm the details shortly.</p>
-                            <button onClick={onClose} className="bg-[#1e2d6b] text-white px-6 py-2.5 rounded-lg font-semibold hover:bg-[#162356] transition-colors text-sm">
+                            <h3 className="text-lg font-bold text-zinc-900 mb-2">Demo booked!</h3>
+                            <p className="text-sm text-zinc-500 mb-6">We'll send a calendar invite shortly.</p>
+                            <button onClick={onClose}
+                                className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2.5 rounded-lg font-semibold text-sm transition-colors">
                                 Close
                             </button>
                         </div>
@@ -107,45 +75,42 @@ function BookDemoModal({ onClose }) {
                         <form onSubmit={handleSubmit} className="space-y-4">
                             {error && (
                                 <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg flex items-center gap-2">
-                                    <AlertCircle size={15} /> {error}
+                                    <AlertCircle size={14} /> {error}
                                 </div>
                             )}
                             {[
-                                { label: "Company Name", name: "companyName", type: "text", placeholder: "Your Company Ltd." },
-                                { label: "Business Email", name: "email", type: "email", placeholder: "you@company.com" },
-                                { label: "Phone Number", name: "phone", type: "tel", placeholder: "+91 9XXXXXXXXX" },
+                                { label: "Company name", name: "companyName", type: "text", placeholder: "Acme Corp" },
+                                { label: "Business email", name: "email", type: "email", placeholder: "you@company.com" },
+                                { label: "Phone number", name: "phone", type: "tel", placeholder: "+91 9XXXXXXXXX" },
                             ].map(({ label, name, type, placeholder }) => (
                                 <div key={name}>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{label} *</label>
+                                    <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{label} *</label>
                                     <input
-                                        type={type} name={name} value={form[name]} onChange={handleChange} required
-                                        placeholder={placeholder}
-                                        className="w-full border border-gray-200 rounded-lg px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-gray-50 placeholder:text-gray-400"
+                                        type={type} name={name} required placeholder={placeholder}
+                                        value={form[name]} onChange={handleChange}
+                                        className="w-full px-3.5 py-2.5 border border-zinc-200 rounded-lg text-sm text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition"
                                     />
                                 </div>
                             ))}
                             <div className="grid grid-cols-2 gap-3">
                                 {[
-                                    { label: "Preferred Date", name: "date", type: "date", extra: { min: today } },
-                                    { label: "Preferred Time", name: "time", type: "time" },
-                                ].map(({ label, name, type, extra = {} }) => (
+                                    { label: "Preferred date", name: "date", type: "date" },
+                                    { label: "Preferred time", name: "time", type: "time" },
+                                ].map(({ label, name, type }) => (
                                     <div key={name}>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{label} *</label>
+                                        <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{label}</label>
                                         <input
-                                            type={type} name={name} value={form[name]} onChange={handleChange} required {...extra}
-                                            className="w-full border border-gray-200 rounded-lg px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-gray-50"
+                                            type={type} name={name} min={type === "date" ? today : undefined}
+                                            value={form[name]} onChange={handleChange}
+                                            className="w-full px-3.5 py-2.5 border border-zinc-200 rounded-lg text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition"
                                         />
                                     </div>
                                 ))}
                             </div>
-                            <p className="text-xs text-gray-400 flex items-center gap-1.5">
-                                <CalendarCheck size={12} /> A calendar invite will be sent to your email automatically.
-                            </p>
-                            <button
-                                type="submit" disabled={loading}
-                                className="w-full bg-gradient-to-r from-[#1e2d6b] to-[#0d9488] text-white font-bold py-3 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
-                            >
-                                {loading ? <><Loader2 size={15} className="animate-spin" /> Booking...</> : "Book My Free Demo"}
+                            <button type="submit" disabled={loading}
+                                className="w-full py-2.5 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all mt-1 disabled:opacity-60"
+                                style={{ background: "linear-gradient(135deg,#F97316,#EA580C)", boxShadow: "0 4px 14px rgba(249,115,22,0.3)" }}>
+                                {loading ? <><Loader2 size={15} className="animate-spin" /> Booking…</> : "Book demo"}
                             </button>
                         </form>
                     )}
@@ -155,945 +120,432 @@ function BookDemoModal({ onClose }) {
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main Landing Page
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Navbar ───────────────────────────────────────────────────────────────────
 
-export default function LandingPage() {
-    const navigate = useNavigate();
-    const [showDemo, setShowDemo] = useState(false);
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+function Navbar({ onDemo }) {
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [scrolled, setScrolled] = useState(false);
 
-    const openDemo = () => { setShowDemo(true); setMobileMenuOpen(false); };
+    useEffect(() => {
+        const handler = () => {
+            const next = window.scrollY > 20;
+            setScrolled(prev => prev === next ? prev : next);
+        };
+        window.addEventListener("scroll", handler, { passive: true });
+        return () => window.removeEventListener("scroll", handler);
+    }, []);
 
     return (
-        <div className="min-h-screen font-sans text-gray-900 bg-white antialiased">
-            {showDemo && <BookDemoModal onClose={() => setShowDemo(false)} />}
+        <header className={`fixed top-0 inset-x-0 z-40 transition-all duration-300 ${scrolled ? "bg-white/95 backdrop-blur shadow-sm border-b border-zinc-100" : "bg-transparent"}`}>
+            <div className="max-w-6xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                    <img src="/DCODE.PNG" alt="D-CRM" className="h-8 w-8 object-contain" />
+                    <span className="font-bold text-zinc-900 tracking-tight text-base">D-CRM</span>
+                </div>
 
-            {/* ── NAVBAR ─────────────────────────────────────────────────────── */}
-            <nav className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex items-center justify-between h-16">
-                        <div className="flex items-center gap-2.5">
-                            <img src="/DCODE.PNG" alt="D-CRM" className="h-9 w-9 object-contain" />
-                            <span className="font-extrabold text-lg text-[#1e2d6b]">D-CRM <span className="text-teal-500">CRM</span></span>
-                        </div>
+                <nav className="hidden md:flex items-center gap-7">
+                    {["Features", "Integrations", "Pricing", "Contact"].map(item => (
+                        <a key={item} href={`#${item.toLowerCase()}`}
+                            className="text-sm text-zinc-500 hover:text-zinc-900 font-medium transition-colors">
+                            {item}
+                        </a>
+                    ))}
+                </nav>
 
-                        <div className="hidden md:flex items-center gap-7 text-sm font-medium text-gray-500">
-                            {["features", "pricing", "usecases", "contact"].map(s => (
-                                <a key={s} href={`#${s}`} className="hover:text-[#1e2d6b] transition-colors capitalize">{s === "usecases" ? "Use Cases" : s}</a>
-                            ))}
-                        </div>
+                <div className="hidden md:flex items-center gap-3">
+                    <Link to="/login" className="text-sm font-semibold text-zinc-600 hover:text-zinc-900 transition-colors">
+                        Sign in
+                    </Link>
+                    <button onClick={onDemo}
+                        className="text-sm font-semibold text-white px-4 py-2 rounded-lg transition-all hover:-translate-y-px"
+                        style={{ background: "linear-gradient(135deg,#F97316,#EA580C)", boxShadow: "0 3px 10px rgba(249,115,22,0.3)" }}>
+                        Book demo
+                    </button>
+                </div>
 
-                        <div className="hidden md:flex items-center gap-3">
-                            <button onClick={openDemo} className="border border-teal-500 text-teal-600 font-semibold px-4 py-2 rounded-lg text-sm hover:bg-teal-50 transition-colors">
-                                Book Demo
-                            </button>
-                            <button onClick={() => navigate("/login")} className="bg-[#1e2d6b] text-white font-semibold px-4 py-2 rounded-lg text-sm hover:bg-[#162356] transition-colors">
-                                Sign In
-                            </button>
-                        </div>
+                <button className="md:hidden text-zinc-600" onClick={() => setMenuOpen(!menuOpen)}>
+                    <Menu size={22} />
+                </button>
+            </div>
 
-                        <button className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-                            {mobileMenuOpen ? <X size={22} className="text-gray-600" /> : <Menu size={22} className="text-gray-600" />}
+            {menuOpen && (
+                <div className="md:hidden bg-white border-t border-zinc-100 px-5 py-4 space-y-3 shadow-lg">
+                    {["Features", "Integrations", "Pricing", "Contact"].map(item => (
+                        <a key={item} href={`#${item.toLowerCase()}`}
+                            onClick={() => setMenuOpen(false)}
+                            className="block text-sm text-zinc-600 hover:text-zinc-900 font-medium py-1">
+                            {item}
+                        </a>
+                    ))}
+                    <div className="pt-2 flex flex-col gap-2">
+                        <Link to="/login" onClick={() => setMenuOpen(false)}
+                            className="text-sm font-semibold text-zinc-600 py-2 text-center border border-zinc-200 rounded-lg">
+                            Sign in
+                        </Link>
+                        <button onClick={() => { onDemo(); setMenuOpen(false); }}
+                            className="text-sm font-semibold text-white py-2 rounded-lg"
+                            style={{ background: "linear-gradient(135deg,#F97316,#EA580C)" }}>
+                            Book demo
                         </button>
                     </div>
+                </div>
+            )}
+        </header>
+    );
+}
 
-                    {mobileMenuOpen && (
-                        <div className="md:hidden pb-4 border-t border-gray-100 pt-3 space-y-1">
-                            {["features", "pricing", "usecases", "contact"].map(s => (
-                                <a key={s} href={`#${s}`} onClick={() => setMobileMenuOpen(false)}
-                                    className="block px-3 py-2 text-sm font-medium text-gray-600 hover:text-[#1e2d6b] rounded-lg hover:bg-gray-50 capitalize">
-                                    {s === "usecases" ? "Use Cases" : s}
-                                </a>
-                            ))}
-                            <div className="flex gap-2 pt-2">
-                                <button onClick={openDemo} className="flex-1 border border-teal-500 text-teal-600 font-semibold py-2 rounded-lg text-sm">Book Demo</button>
-                                <button onClick={() => navigate("/login")} className="flex-1 bg-[#1e2d6b] text-white font-semibold py-2 rounded-lg text-sm">Sign In</button>
+// ─── Hero Section ─────────────────────────────────────────────────────────────
+
+const floatingCards = [
+    { icon: TrendingUp, label: "Lead Pipeline",   sub: "Capture, score & assign leads",        color: "text-orange-500",  bg: "bg-orange-50",  delay: "0s",   dur: "5s",   pos: { top: "10%",    right: "-20%" } },
+    { icon: Bot,        label: "AI Automation",   sub: "Smart follow-ups on autopilot",         color: "text-violet-600",  bg: "bg-violet-50",  delay: "1.4s", dur: "6.5s", pos: { bottom: "30%", right: "-18%" } },
+    { icon: Bell,       label: "Smart Reminders", sub: "Never miss a follow-up again",          color: "text-sky-600",     bg: "bg-sky-50",     delay: "0.7s", dur: "4.8s", pos: { top: "40%",    left: "-18%"  } },
+    { icon: Activity,   label: "Unified Inbox",   sub: "WhatsApp, email & calls in one place",  color: "text-emerald-600", bg: "bg-emerald-50", delay: "2s",   dur: "5.6s", pos: { bottom: "12%", left: "-14%"  } },
+];
+
+function HeroSection({ onDemo }) {
+    const navigate = useNavigate();
+
+    return (
+        <section className="pt-32 pb-20 sm:pt-40 sm:pb-28 bg-white overflow-hidden relative">
+            <div className="absolute inset-0 pointer-events-none"
+                style={{ background: "radial-gradient(ellipse 80% 60% at 60% -10%, #fff7ed 0%, transparent 70%)" }} />
+
+            <div className="max-w-6xl mx-auto px-5 sm:px-8">
+                <div className="grid lg:grid-cols-2 gap-14 items-center">
+                    <div className="animate-fade-up">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-widest uppercase text-orange-500 bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-full mb-6">
+                            <Zap size={11} /> AI-powered CRM
+                        </span>
+                        <h1 className="text-4xl sm:text-5xl xl:text-[56px] font-extrabold text-zinc-900 leading-[1.08] tracking-tight mb-6">
+                            Your Team's<br />
+                            <span className="text-orange-500">Relationship</span><br />
+                            Operating System
+                        </h1>
+                        <p className="text-base sm:text-lg text-zinc-500 leading-relaxed max-w-lg mb-8">
+                            Manage leads, communication, automation and customer relationships in one place. Built for teams that move fast.
+                        </p>
+                        <div className="flex flex-wrap gap-3">
+                            <button onClick={onDemo}
+                                className="inline-flex items-center gap-2 text-sm font-semibold text-white px-5 py-3 rounded-lg transition-all hover:-translate-y-0.5"
+                                style={{ background: "linear-gradient(135deg,#F97316,#EA580C)", boxShadow: "0 6px 20px rgba(249,115,22,0.35)" }}>
+                                Get started <ArrowRight size={15} />
+                            </button>
+                            <button onClick={() => navigate("/login")}
+                                className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700 bg-white border border-zinc-200 px-5 py-3 rounded-lg hover:border-zinc-300 hover:bg-zinc-50 transition-all">
+                                Watch demo
+                            </button>
+                        </div>
+                        <p className="text-xs text-zinc-400 mt-4 flex items-center gap-1.5">
+                            <Check size={12} className="text-emerald-500" /> No credit card required
+                        </p>
+                    </div>
+
+                    <div className="relative hidden lg:block">
+                        <div className="bg-white border border-zinc-100 rounded-2xl shadow-2xl shadow-zinc-200/60 overflow-hidden">
+                            <div className="bg-zinc-50 border-b border-zinc-100 px-5 py-3 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <img src="/DCODE.PNG" alt="D-CRM" className="h-5 w-5 object-contain opacity-70" />
+                                    <span className="text-xs font-semibold text-zinc-400">D-CRM Dashboard</span>
+                                </div>
+                                <div className="flex gap-1.5">
+                                    <div className="w-2 h-2 rounded-full bg-zinc-200" />
+                                    <div className="w-2 h-2 rounded-full bg-zinc-200" />
+                                    <div className="w-2 h-2 rounded-full bg-orange-300" />
+                                </div>
+                            </div>
+                            <div className="p-5 space-y-3">
+                                <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest mb-4">Platform Modules</p>
+                                {[
+                                    { icon: TrendingUp, label: "Lead Management", color: "text-orange-500", bg: "bg-orange-50"  },
+                                    { icon: Bot,        label: "AI Automation",   color: "text-violet-600", bg: "bg-violet-50"  },
+                                    { icon: Inbox,      label: "Unified Inbox",   color: "text-sky-600",    bg: "bg-sky-50"     },
+                                    { icon: Users,      label: "Team & Roles",    color: "text-emerald-600",bg: "bg-emerald-50" },
+                                    { icon: BarChart2,  label: "Analytics",       color: "text-amber-500",  bg: "bg-amber-50"   },
+                                ].map(({ icon: Icon, label, color, bg }) => (
+                                    <div key={label} className="flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-50 transition-colors">
+                                        <div className={`w-7 h-7 rounded-lg ${bg} flex items-center justify-center flex-shrink-0`}>
+                                            <Icon size={14} className={color} />
+                                        </div>
+                                        <span className="text-sm font-medium text-zinc-700">{label}</span>
+                                        <div className="ml-auto w-2 h-2 rounded-full bg-emerald-400" />
+                                    </div>
+                                ))}
                             </div>
                         </div>
-                    )}
-                </div>
-            </nav>
 
-            {/* ── HERO ───────────────────────────────────────────────────────── */}
-            <section className="relative bg-gradient-to-br from-[#0d1a4a] via-[#1e2d6b] to-[#0d4a4a] text-white overflow-hidden">
-                <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute top-20 left-10 w-80 h-80 bg-teal-400/10 rounded-full blur-3xl" />
-                    <div className="absolute bottom-10 right-20 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl" />
-                </div>
-                <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-28 text-center">
-                    <div className="flex items-center justify-center gap-3 mb-7">
-                        <span className="inline-flex items-center gap-1.5 bg-teal-500/20 border border-teal-400/30 text-teal-300 text-xs font-bold px-3 py-1.5 rounded-full uppercase tracking-widest">
-                            <Sparkles size={11} /> AI Sales Engine
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 bg-white/10 border border-white/20 text-white/80 text-xs font-bold px-3 py-1.5 rounded-full uppercase tracking-widest">
-                            <Shield size={11} /> Enterprise-Grade
-                        </span>
+                        {floatingCards.map(({ icon: Icon, label, sub, color, bg, delay, dur, pos }) => (
+                            <div key={label}
+                                className="absolute flex items-center gap-3 bg-white/90 backdrop-blur-sm rounded-xl px-3.5 py-2.5 shadow-lg border border-white/80 w-52"
+                                style={{ animation: `float-slow ${dur} ease-in-out infinite`, animationDelay: delay, ...pos }}>
+                                <div className={`w-7 h-7 rounded-lg ${bg} flex items-center justify-center flex-shrink-0`}>
+                                    <Icon size={14} className={color} />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-0.5">{label}</p>
+                                    <p className="text-xs font-semibold text-zinc-700 truncate">{sub}</p>
+                                </div>
+                            </div>
+                        ))}
                     </div>
-                    <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight mb-6 tracking-tight">
-                        From Leads to Revenue –<br />
-                        <span className="text-teal-400">Fully Automated with AI</span>
-                    </h1>
-                    <p className="text-lg sm:text-xl text-white/70 max-w-2xl mx-auto mb-10">
-                        The AI-Powered Sales Operating System built for businesses that refuse to leave growth to chance.
+                </div>
+            </div>
+        </section>
+    );
+}
+
+// ─── Features Section ─────────────────────────────────────────────────────────
+
+const features = [
+    { icon: TrendingUp,  title: "Lead Management",      desc: "Capture, score and track every lead from all channels in one pipeline.",         color: "text-orange-500",  bg: "bg-orange-50"  },
+    { icon: Bot,         title: "AI Automation",         desc: "Trigger smart follow-ups, reminders and assignments automatically.",             color: "text-violet-600",  bg: "bg-violet-50"  },
+    { icon: Inbox,       title: "Unified Inbox",         desc: "All messages — WhatsApp, email, calls — in a single shared workspace.",          color: "text-sky-600",     bg: "bg-sky-50"     },
+    { icon: FaWhatsapp,  title: "WhatsApp Integration",  desc: "Send broadcasts, templates and auto-replies via WhatsApp Business.",             color: "text-emerald-600", bg: "bg-emerald-50" },
+    { icon: Mail,        title: "Email Integration",     desc: "Track opens, clicks and send campaigns directly from the CRM.",                  color: "text-rose-500",    bg: "bg-rose-50"    },
+    { icon: BarChart2,   title: "Analytics",             desc: "Real-time dashboards on pipeline health, team performance and conversion.",       color: "text-amber-500",   bg: "bg-amber-50"   },
+    { icon: Shield,      title: "Role Management",       desc: "Granular access control for admins, managers and sales reps.",                   color: "text-zinc-600",    bg: "bg-zinc-100"   },
+    { icon: FaLinkedin,  title: "LinkedIn Leads",        desc: "Import and enrich leads directly from LinkedIn profiles at scale.",              color: "text-blue-600",    bg: "bg-blue-50"    },
+];
+
+function FeaturesSection() {
+    const [ref, visible] = useInView();
+    return (
+        <section id="features" className="py-24 bg-white" ref={ref}>
+            <div className="max-w-6xl mx-auto px-5 sm:px-8">
+                <div className="text-center mb-14" style={fadeIn(visible)}>
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-widest uppercase text-orange-500 bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-full mb-4">
+                        <Layers size={11} /> Platform Features
+                    </span>
+                    <h2 className="text-3xl sm:text-4xl font-extrabold text-zinc-900 mt-4 leading-tight">
+                        Everything your team needs
+                    </h2>
+                    <p className="mt-4 text-base text-zinc-500 max-w-xl mx-auto">
+                        One platform to replace your disconnected tools — CRM, inbox, automation, analytics and more.
                     </p>
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                        <button onClick={openDemo}
-                            className="inline-flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-400 text-white font-bold px-8 py-4 rounded-xl text-base shadow-xl shadow-teal-500/20 transition-all transform hover:scale-105">
-                            <CalendarCheck size={18} /> Book Free Demo
-                        </button>
-                        <button onClick={() => navigate("/login")}
-                            className="inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 border border-white/25 text-white font-bold px-8 py-4 rounded-xl text-base backdrop-blur transition-all">
-                            Sign In <ArrowRight size={17} />
-                        </button>
-                    </div>
-
-                    <div className="mt-20 grid grid-cols-2 sm:grid-cols-4 gap-6 max-w-3xl mx-auto">
-                        {[
-                            { n: "3×", l: "Conversion Uplift" },
-                            { n: "70%", l: "Less Manual Work" },
-                            { n: "30s", l: "Lead Response Time" },
-                            { n: "24/7", l: "Automated Engagement" },
-                        ].map(({ n, l }) => (
-                            <div key={n} className="text-center">
-                                <div className="text-3xl font-extrabold text-teal-400">{n}</div>
-                                <div className="text-white/55 text-sm mt-1">{l}</div>
-                            </div>
-                        ))}
-                    </div>
                 </div>
-            </section>
 
-            {/* ── PROBLEM ────────────────────────────────────────────────────── */}
-            <section className="py-24 bg-gray-50">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <SectionHeader
-                        badge="The Reality"
-                        title="Your Sales Team Is Fighting a Losing Battle"
-                        subtitle="Most businesses haemorrhage revenue every day — not because of bad products, but because of broken sales processes."
-                    />
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                        {[
-                            { Icon: AlertCircle, title: "Lead Leakage", desc: "Up to 80% of leads never receive a timely follow-up, vanishing before a conversation even begins.", color: "text-red-500", bg: "bg-red-50" },
-                            { Icon: Clock, title: "Manual Follow-Ups", desc: "Sales reps waste hours on repetitive tasks instead of closing deals and building relationships.", color: "text-amber-500", bg: "bg-amber-50" },
-                            { Icon: EyeOff, title: "Zero Visibility", desc: "Managers operate blind — no real-time data on pipeline health, team performance, or lead status.", color: "text-purple-500", bg: "bg-purple-50" },
-                            { Icon: TrendingDown, title: "Poor Conversions", desc: "Low conversion rates persist because there's no intelligence guiding who to call, when, and how.", color: "text-blue-500", bg: "bg-blue-50" },
-                        ].map(({ Icon, title, desc, color, bg }) => (
-                            <div key={title} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
-                                <div className={`w-11 h-11 ${bg} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
-                                    <Icon size={22} className={color} />
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    {features.map(({ icon: Icon, title, desc, color, bg }, i) => (
+                        <div key={title}
+                            className="group bg-white border border-zinc-100 rounded-xl p-5 hover:border-orange-200 hover:shadow-md transition-all duration-300"
+                            style={fadeIn(visible, i * 0.06)}>
+                            <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center mb-4`}>
+                                <Icon size={18} className={color} />
+                            </div>
+                            <h3 className="text-sm font-bold text-zinc-900 mb-1.5">{title}</h3>
+                            <p className="text-xs text-zinc-500 leading-relaxed">{desc}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
+}
+
+// ─── AI Automation Showcase ───────────────────────────────────────────────────
+
+const workflowSteps = [
+    { icon: Target,       label: "Lead Created",    sub: "New lead enters pipeline",                  color: "text-orange-500",  bg: "bg-orange-50 border-orange-200"  },
+    { icon: MessageSquare,label: "Welcome Message", sub: "Personalised intro sent via WhatsApp",      color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200"},
+    { icon: Bell,         label: "Reminder",        sub: "Auto follow-up after 24 hours",             color: "text-sky-600",     bg: "bg-sky-50 border-sky-200"        },
+    { icon: Activity,     label: "Follow-Up",       sub: "Smart re-engagement sequence",              color: "text-violet-600",  bg: "bg-violet-50 border-violet-200"  },
+];
+
+function AutomationSection() {
+    const [ref, visible] = useInView();
+    return (
+        <section className="py-24" style={{ background: "#fafafa" }} ref={ref}>
+            <div className="max-w-5xl mx-auto px-5 sm:px-8">
+                <div className="text-center mb-14" style={fadeIn(visible)}>
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-widest uppercase text-orange-500 bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-full mb-4">
+                        <Bot size={11} /> AI Automation
+                    </span>
+                    <h2 className="text-3xl sm:text-4xl font-extrabold text-zinc-900 mt-4">Works while you sleep</h2>
+                    <p className="mt-4 text-base text-zinc-500 max-w-xl mx-auto">
+                        Set up once. D-CRM handles follow-ups, reminders, and lead nurturing automatically.
+                    </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch gap-0 max-w-3xl mx-auto">
+                    {workflowSteps.map(({ icon: Icon, label, sub, color, bg }, i) => (
+                        <div key={label} className="flex flex-col sm:flex-row items-center flex-1">
+                            <div className={`flex-1 w-full bg-white border ${bg} rounded-xl p-5 text-center shadow-sm`}
+                                style={fadeIn(visible, i * 0.12)}>
+                                <div className={`w-10 h-10 rounded-xl bg-white border ${bg} flex items-center justify-center mx-auto mb-3`}>
+                                    <Icon size={18} className={color} />
                                 </div>
-                                <h3 className="font-bold text-[#1e2d6b] mb-2">{title}</h3>
-                                <p className="text-gray-500 text-sm leading-relaxed">{desc}</p>
+                                <p className="text-sm font-bold text-zinc-900">{label}</p>
+                                <p className="text-xs text-zinc-400 mt-1 leading-snug">{sub}</p>
                             </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* ── MARKET GAP ─────────────────────────────────────────────────── */}
-            <section className="py-24 bg-white">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <SectionHeader
-                        badge="Market Gap"
-                        title="Why Traditional CRMs Are Failing You"
-                    />
-                    <div className="grid md:grid-cols-2 gap-10 items-center">
-                        <div className="bg-[#1e2d6b] rounded-2xl p-8 text-white">
-                            <h3 className="font-bold text-lg mb-5 flex items-center gap-2">
-                                <XCircle size={20} className="text-red-400" /> What Old CRMs Do
-                            </h3>
-                            <ul className="space-y-3 text-white/75 text-sm">
-                                {[
-                                    "Store contact data passively",
-                                    "Require 100% manual input",
-                                    "Generate static, stale reports",
-                                    "Offer zero predictive intelligence",
-                                    "Burden teams with admin overhead",
-                                ].map(i => (
-                                    <li key={i} className="flex items-center gap-2.5">
-                                        <X size={14} className="text-red-400 flex-shrink-0" /> {i}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                        <div>
-                            <h3 className="font-bold text-xl text-[#1e2d6b] mb-4">The Uncomfortable Truth</h3>
-                            <p className="text-gray-500 mb-4 leading-relaxed">
-                                Traditional CRMs were designed as <strong className="text-gray-700">digital filing cabinets</strong>, not revenue engines. They record what happened — they never tell you what to do next. In a world where buyers expect instant, personalised engagement, a passive database is a liability, not an asset.
-                            </p>
-                            <p className="text-gray-500 leading-relaxed">
-                                The gap between <strong className="text-gray-700">data storage and intelligent action</strong> is costing businesses crores in missed opportunity every year.
-                            </p>
-                            <div className="mt-6 p-4 bg-teal-50 border border-teal-200 rounded-xl">
-                                <p className="text-teal-800 text-sm font-medium">D-CRM bridges this gap — turning your CRM from a passive record into an active revenue driver.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── SOLUTION ───────────────────────────────────────────────────── */}
-            <section className="py-24 bg-gradient-to-br from-[#f0fdf4] to-[#eff6ff]">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                    <SectionHeader
-                        badge="The Solution"
-                        title={<>Not Just a CRM.<br />An AI Sales Engine.</>}
-                        subtitle="D-CRM is purpose-built to think, act, and convert — transforming your entire sales pipeline from a manual, chaotic process into a fully automated, intelligence-driven revenue machine."
-                    />
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-7">
-                        {[
-                            { Icon: Brain, title: "AI-Driven Intelligence", desc: "Every lead is scored, prioritised, and engaged using machine learning — no human guesswork required.", color: "text-purple-600", bg: "bg-purple-50" },
-                            { Icon: Bot, title: "End-to-End Automation", desc: "From first touch to closed deal, every workflow is automated — calls, WhatsApp, follow-ups, and nurturing.", color: "text-teal-600", bg: "bg-teal-50" },
-                            { Icon: LineChart, title: "Revenue Visibility", desc: "Real-time dashboards and AI analytics give leaders complete pipeline visibility and actionable insights.", color: "text-blue-600", bg: "bg-blue-50" },
-                        ].map(({ Icon, title, desc, color, bg }) => (
-                            <div key={title} className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left group">
-                                <div className={`w-12 h-12 ${bg} rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
-                                    <Icon size={24} className={color} />
+                            {i < workflowSteps.length - 1 && (
+                                <div className="flex sm:flex-col items-center justify-center px-2 py-2 sm:py-0">
+                                    <ChevronRight size={16} className="text-orange-300 rotate-90 sm:rotate-0" />
                                 </div>
-                                <h3 className="font-bold text-[#1e2d6b] text-lg mb-2">{title}</h3>
-                                <p className="text-gray-500 text-sm leading-relaxed">{desc}</p>
-                            </div>
-                        ))}
-                    </div>
+                            )}
+                        </div>
+                    ))}
                 </div>
-            </section>
+            </div>
+        </section>
+    );
+}
 
-            {/* ── FEATURES ───────────────────────────────────────────────────── */}
-            <section id="features" className="py-24 bg-white">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <SectionHeader
-                        badge="Core Features"
-                        title="Everything You Need to Win"
-                        subtitle="A complete suite of intelligent tools built to capture, qualify, engage, and convert every lead."
-                    />
+// ─── Stats Section ────────────────────────────────────────────────────────────
 
-                    {/* Lead Management */}
-                    <div className="mb-20 grid md:grid-cols-2 gap-12 items-center">
-                        <div>
-                            <Badge>Core Feature</Badge>
-                            <h3 className="mt-4 text-2xl font-extrabold text-[#1e2d6b]">Lead Management — Capture Every Opportunity</h3>
-                            <p className="mt-3 text-gray-500 leading-relaxed">
-                                Leads arrive from Facebook, Google, your website, landing pages, inbound calls, and more. D-CRM captures every single one instantly into one centralised, prioritised dashboard. No spreadsheets. No manual entry. No leads slipping through.
-                            </p>
-                            <div className="mt-5 p-4 bg-teal-50 border border-teal-200 rounded-xl text-sm text-teal-800">
-                                <strong>Key Advantage:</strong> Multi-source capture API connects to 50+ lead channels with deduplication and instant assignment built in.
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            {[
-                                { Icon: Globe, t: "Multi-Source Capture", d: "Facebook, Google, portals, website forms — all unified" },
-                                { Icon: Layers, t: "Centralised Dashboard", d: "Single view of all leads, statuses, and history" },
-                                { Icon: Activity, t: "Real-Time Tracking", d: "Instant notifications and live lead status updates" },
-                                { Icon: Settings2, t: "Auto-Assignment", d: "Smart round-robin or rule-based allocation to reps" },
-                            ].map(({ Icon, t, d }) => (
-                                <div key={t} className="bg-teal-50 rounded-xl p-4 border border-teal-100 hover:bg-teal-100/70 transition-colors">
-                                    <Icon size={18} className="text-teal-600 mb-2" />
-                                    <h4 className="font-bold text-[#1e2d6b] text-sm mb-1">{t}</h4>
-                                    <p className="text-gray-500 text-xs leading-relaxed">{d}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+const stats = [
+    { label: "Lead sources supported",    value: 8,  suffix: ""  },
+    { label: "Automation trigger types",  value: 12, suffix: "+" },
+    { label: "Integrations available",    value: 10, suffix: "+" },
+    { label: "Team roles & permissions",  value: 5,  suffix: ""  },
+];
 
-                    {/* Lead Qualification */}
-                    <div className="mb-20">
-                        <div className="text-center mb-10">
-                            <Badge>AI Feature</Badge>
-                            <h3 className="mt-4 text-2xl font-extrabold text-[#1e2d6b]">Lead Qualification — Stop Chasing the Wrong Leads</h3>
-                            <p className="mt-3 text-gray-500 max-w-xl mx-auto text-sm leading-relaxed">
-                                D-CRM's multi-layer qualification engine automatically filters, scores, and prioritises your leads so your team invests energy where it matters most.
-                            </p>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {[
-                                { layer: "Layer 1", Icon: Shield, title: "Initial Filtration", desc: "Removes duplicates and spam automatically before they reach your team.", gradient: "from-blue-500 to-blue-600" },
-                                { layer: "Layer 2", Icon: Star, title: "Lead Scoring", desc: "AI assigns a score from 1–100 based on intent signals and behaviour patterns.", gradient: "from-teal-500 to-teal-600" },
-                                { layer: "Layer 3", Icon: Zap, title: "Priority Automation", desc: "High-score leads are instantly routed to senior reps with URGENT flags.", gradient: "from-[#1e2d6b] to-[#2a3d8b]" },
-                            ].map(({ layer, Icon, title, desc, gradient }) => (
-                                <div key={title} className={`bg-gradient-to-br ${gradient} text-white rounded-2xl p-7`}>
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <Icon size={18} className="opacity-80" />
-                                        <span className="text-xs font-bold opacity-70 uppercase tracking-wider">{layer}</span>
-                                    </div>
-                                    <h4 className="font-extrabold text-lg mb-2">{title}</h4>
-                                    <p className="text-white/75 text-sm leading-relaxed">{desc}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+function StatItem({ label, value, suffix, trigger }) {
+    const count = useCountUp(value, 1800, trigger);
+    const display = count >= 1000 ? `${(count / 1000).toFixed(count >= 100000 ? 0 : 1)}K` : count;
+    return (
+        <div className="text-center">
+            <p className="text-4xl sm:text-5xl font-extrabold text-zinc-900 tabular-nums">{display}{suffix}</p>
+            <p className="mt-2 text-sm text-zinc-500 font-medium">{label}</p>
+        </div>
+    );
+}
 
-                    {/* WOW Features */}
-                    <div className="space-y-12">
-                        {/* WOW #1 */}
-                        <div className="bg-gradient-to-br from-[#f0fdf4] to-white rounded-3xl p-8 lg:p-10 border border-teal-100">
-                            <Badge>WOW Feature #1</Badge>
-                            <h3 className="mt-4 text-2xl font-extrabold text-[#1e2d6b]">AI Lead Engagement — Your Sales Engine That Never Sleeps</h3>
-                            <p className="mt-3 text-gray-500 text-sm leading-relaxed max-w-2xl">
-                                D-CRM's AI Engagement Layer triggers intelligent, personalised outreach the moment a lead enters the system — day or night, weekday or weekend.
-                            </p>
-                            <div className="mt-7 grid grid-cols-1 md:grid-cols-3 gap-5">
-                                {[
-                                    { Icon: PhoneCall, t: "AI-Triggered Calls", d: "Instant automated call attempts within seconds of lead capture — before your competitor even knows the lead exists." },
-                                    { Icon: Bell, t: "Automated Nurturing", d: "Multi-touch nurture sequences across calls, WhatsApp, and SMS — tailored to each lead's behaviour and stage." },
-                                    { Icon: Zap, t: "Smart Follow-Ups", d: "AI determines the optimal time and channel for every follow-up based on past engagement patterns." },
-                                ].map(({ Icon, t, d }) => (
-                                    <div key={t} className="bg-white rounded-xl p-5 border border-teal-200 shadow-sm flex flex-col gap-3">
-                                        <div className="w-9 h-9 bg-teal-50 rounded-lg flex items-center justify-center">
-                                            <Icon size={18} className="text-teal-600" />
-                                        </div>
-                                        <h4 className="font-bold text-[#1e2d6b] text-sm">{t}</h4>
-                                        <p className="text-gray-500 text-xs leading-relaxed">{d}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* WOW #2 */}
-                        <div className="bg-gradient-to-br from-[#eff6ff] to-white rounded-3xl p-8 lg:p-10 border border-blue-100">
-                            <Badge variant="navy">WOW Feature #2</Badge>
-                            <h3 className="mt-4 text-2xl font-extrabold text-[#1e2d6b]">AI Transcriber — Every Word. Instantly Captured.</h3>
-                            <p className="mt-3 text-gray-500 text-sm leading-relaxed max-w-2xl">
-                                D-CRM automatically converts every sales call into a searchable, structured text transcript in real time. No manual note-taking. Every conversation becomes a permanent, analysable asset.
-                            </p>
-                            <div className="mt-7 grid grid-cols-1 md:grid-cols-3 gap-5">
-                                {[
-                                    { Icon: Mic, t: "Instant Transcription", d: "Calls are transcribed automatically the moment they end — available for review within seconds." },
-                                    { Icon: FileText, t: "Searchable Archives", d: "Search across thousands of calls by keyword, lead name, or topic — find any conversation in under 3 seconds." },
-                                    { Icon: BookOpen, t: "Training Intelligence", d: "Use real transcripts to coach underperforming reps and replicate top-performer techniques." },
-                                ].map(({ Icon, t, d }) => (
-                                    <div key={t} className="bg-white rounded-xl p-5 border border-blue-200 shadow-sm flex flex-col gap-3">
-                                        <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center">
-                                            <Icon size={18} className="text-blue-600" />
-                                        </div>
-                                        <h4 className="font-bold text-[#1e2d6b] text-sm">{t}</h4>
-                                        <p className="text-gray-500 text-xs leading-relaxed">{d}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* WOW #3 */}
-                        <div className="bg-gradient-to-br from-[#1e2d6b] to-[#0d4a4a] rounded-3xl p-8 lg:p-10 text-white">
-                            <Badge variant="white"><Sparkles size={11} /> WOW Feature #3 — The Game Changer</Badge>
-                            <h3 className="mt-4 text-2xl font-extrabold">AI Call Analysis — Intelligence That Transforms Sales</h3>
-                            <p className="mt-3 text-white/70 text-sm leading-relaxed max-w-2xl">
-                                Our proprietary AI Call Analysis engine goes beyond transcription to deliver deep behavioural and intent-based intelligence from every single sales conversation.
-                            </p>
-                            <div className="mt-7 grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                {[
-                                    { Icon: Target, t: "Customer Intent Detection", d: "AI identifies buying signals, objections, and urgency levels within the conversation — flagging hot prospects automatically." },
-                                    { Icon: Activity, t: "Behaviour Insights", d: "Understand sentiment, hesitation patterns, and emotional cues to adapt your sales approach for each lead type." },
-                                    { Icon: TrendingUp, t: "Sales Improvement Recs", d: "AI generates personalised coaching recommendations for each rep based on their call patterns and conversion data." },
-                                    { Icon: Star, t: "Conversation Scoring", d: "Every call receives an AI quality score — enabling objective, data-driven performance management at scale." },
-                                ].map(({ Icon, t, d }) => (
-                                    <div key={t} className="bg-white/10 rounded-xl p-5 border border-white/15 flex flex-col gap-3 hover:bg-white/15 transition-colors">
-                                        <div className="w-9 h-9 bg-white/10 rounded-lg flex items-center justify-center">
-                                            <Icon size={18} className="text-teal-300" />
-                                        </div>
-                                        <h4 className="font-bold text-teal-300 text-sm">{t}</h4>
-                                        <p className="text-white/65 text-xs leading-relaxed">{d}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* AI Voice Agents */}
-                    <div className="mt-16 grid md:grid-cols-2 gap-10 items-start">
-                        <div>
-                            <Badge>AI Automation</Badge>
-                            <h3 className="mt-4 text-2xl font-extrabold text-[#1e2d6b]">AI Voice Agents — Scale Your Outreach Infinitely</h3>
-                            <p className="mt-3 text-gray-500 text-sm leading-relaxed">
-                                D-CRM's AI Voice Agents are autonomous conversational AI callers that handle initial outreach, qualification calls, and follow-up sequences at a scale no human team can match — running 24/7 without fatigue, sick days, or training costs.
-                            </p>
-                            <ul className="mt-5 space-y-2.5">
-                                {[
-                                    "Make hundreds of simultaneous outbound calls",
-                                    "Conduct natural, scripted qualification conversations",
-                                    "Handle FAQs, objections, and appointment booking",
-                                    "Escalate warm leads to human reps automatically",
-                                ].map(item => (
-                                    <li key={item} className="flex items-center gap-2.5 text-sm text-gray-600">
-                                        <Check size={15} className="text-teal-500 flex-shrink-0" /> {item}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                        <div className="bg-[#1e2d6b] rounded-2xl p-7 text-white">
-                            <h4 className="font-bold text-lg mb-5 flex items-center gap-2">
-                                <TrendingUp size={20} className="text-teal-400" /> The Business Impact
-                            </h4>
-                            <ul className="space-y-3.5">
-                                {[
-                                    "10× outreach capacity with zero additional headcount",
-                                    "Consistent messaging quality on every single call",
-                                    "Instant response to every lead — zero wait time",
-                                    "Dramatic reduction in cost per qualified lead",
-                                ].map(item => (
-                                    <li key={item} className="flex items-start gap-2.5 text-white/75 text-sm">
-                                        <ArrowRight size={15} className="text-teal-400 mt-0.5 flex-shrink-0" /> {item}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    </div>
-
-                    {/* WhatsApp Chatbot */}
-                    <div className="mt-16">
-                        <div className="text-center mb-10">
-                            <Badge>AI Automation</Badge>
-                            <h3 className="mt-4 text-2xl font-extrabold text-[#1e2d6b]">AI WhatsApp Chatbot — Engage Leads Where They Live</h3>
-                            <p className="mt-3 text-gray-500 text-sm max-w-xl mx-auto leading-relaxed">
-                                With over 500 million WhatsApp users in India alone, D-CRM's AI WhatsApp Chatbot delivers instant, intelligent engagement around the clock.
-                            </p>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {[
-                                { n: "01", Icon: FaWhatsapp, t: "Instant Response", d: "Lead sends a message → AI responds within 3 seconds, every time, without exception", iconClass: "text-green-500" },
-                                { n: "02", Icon: Brain, t: "Smart Qualification", d: "Conversational AI asks the right questions to qualify leads before routing to a human rep", iconClass: "text-teal-600" },
-                                { n: "03", Icon: Bell, t: "Continuous Nurturing", d: "Automated drip messages, reminders, and follow-ups keep leads engaged until they're ready to buy", iconClass: "text-blue-600" },
-                            ].map(({ n, Icon, t, d, iconClass }) => (
-                                <div key={n} className="bg-teal-50 rounded-2xl p-6 border border-teal-100 flex gap-4 hover:shadow-md transition-shadow">
-                                    <div className="flex-shrink-0">
-                                        <div className="w-11 h-11 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                                            <Icon size={20} className={iconClass} />
-                                        </div>
-                                        <div className="text-xs font-bold text-teal-400 mt-2 text-center">{n}</div>
-                                    </div>
-                                    <div>
-                                        <h4 className="font-bold text-[#1e2d6b] mb-1.5 text-sm">{t}</h4>
-                                        <p className="text-gray-500 text-xs leading-relaxed">{d}</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+function StatsSection() {
+    const [ref, visible] = useInView(0.3);
+    return (
+        <section className="py-20 bg-white" ref={ref}>
+            <div className="max-w-5xl mx-auto px-5 sm:px-8">
+                <p className="text-center text-xs font-semibold tracking-widest uppercase text-zinc-400 mb-10">Platform at a glance</p>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-10 sm:gap-12">
+                    {stats.map((s) => (
+                        <StatItem key={s.label} {...s} trigger={visible} />
+                    ))}
                 </div>
-            </section>
+            </div>
+        </section>
+    );
+}
 
-            {/* ── COMMAND CENTRE ─────────────────────────────────────────────── */}
-            <section className="py-24 bg-gray-50">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <SectionHeader
-                        badge="Command Centre"
-                        title="Total Visibility. Zero Blind Spots."
-                        subtitle="The D-CRM Command Dashboard puts your entire sales operation on a single, beautifully designed screen."
-                    />
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                        {[
-                            { Icon: Layers, t: "Live Pipeline View", d: "Real-time status of all active leads across every stage" },
-                            { Icon: Activity, t: "Team Activity Feed", d: "Live log of every call, message, and action taken" },
-                            { Icon: Bell, t: "AI Alerts", d: "Proactive nudges for high-priority leads requiring attention" },
-                            { Icon: BarChart2, t: "Conversion Metrics", d: "At-a-glance KPIs and trend lines updated in real time" },
-                        ].map(({ Icon, t, d }) => (
-                            <div key={t} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:border-teal-400 hover:shadow-md transition-all group">
-                                <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-teal-100 transition-colors">
-                                    <Icon size={20} className="text-teal-600" />
-                                </div>
-                                <h3 className="font-bold text-[#1e2d6b] mb-1.5 text-sm">{t}</h3>
-                                <p className="text-gray-500 text-xs leading-relaxed">{d}</p>
-                            </div>
-                        ))}
-                    </div>
+// ─── Testimonials ─────────────────────────────────────────────────────────────
+
+const testimonials = [
+    { quote: "Finally a CRM that actually reduces manual work. The AI automation handles follow-ups so the team can focus on closing.", name: "Sales Manager", title: "B2B Technology Company", initials: "SM", color: "bg-orange-500"  },
+    { quote: "Moving everything into one platform made a real difference. No more switching between WhatsApp, email and spreadsheets.",  name: "Growth Lead",   title: "EdTech Startup",          initials: "GL", color: "bg-violet-500" },
+    { quote: "The lead scoring and pipeline visibility changed how we prioritise. The team adopted it quickly with no friction.",        name: "Founder",       title: "Digital Services Agency", initials: "FD", color: "bg-emerald-500"},
+];
+
+function TestimonialsSection() {
+    const [ref, visible] = useInView();
+    return (
+        <section className="py-24" style={{ background: "#fafafa" }} ref={ref}>
+            <div className="max-w-6xl mx-auto px-5 sm:px-8">
+                <div className="text-center mb-14" style={fadeIn(visible)}>
+                    <h2 className="text-3xl sm:text-4xl font-extrabold text-zinc-900">What teams say</h2>
+                    <p className="mt-4 text-base text-zinc-500">From sales managers to founders using D-CRM daily.</p>
                 </div>
-            </section>
-
-            {/* ── HR, ANALYTICS & GAMIFICATION ───────────────────────────────── */}
-            <section className="py-24 bg-white">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-20">
-                    {/* HR + Analytics */}
-                    <div className="grid md:grid-cols-2 gap-12 items-start">
-                        <div>
-                            <Badge>HR & Performance</Badge>
-                            <h3 className="mt-4 text-2xl font-extrabold text-[#1e2d6b]">Manage People With the Same Precision as Data</h3>
-                            <p className="mt-3 text-gray-500 text-sm leading-relaxed">
-                                D-CRM extends beyond sales automation into comprehensive team performance management. Every action taken by every team member is tracked, measured, and analysed.
-                            </p>
-                            <div className="mt-6 space-y-4">
-                                {[
-                                    { Icon: Activity, t: "Activity Tracking", d: "Real-time log of calls made, leads contacted, tasks completed, and time spent per rep" },
-                                    { Icon: ClipboardList, t: "Performance Scorecards", d: "Automated weekly and monthly scorecards for every team member with trend analysis" },
-                                    { Icon: Brain, t: "Coaching Intelligence", d: "AI-generated insights identify which reps need support and what specific improvements will drive results" },
-                                ].map(({ Icon, t, d }) => (
-                                    <div key={t} className="flex gap-3.5">
-                                        <div className="flex-shrink-0 w-8 h-8 bg-teal-50 rounded-lg flex items-center justify-center mt-0.5">
-                                            <Icon size={15} className="text-teal-600" />
-                                        </div>
-                                        <div>
-                                            <strong className="text-[#1e2d6b] text-sm">{t}</strong>
-                                            <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">{d}</p>
-                                        </div>
-                                    </div>
+                <div className="grid sm:grid-cols-3 gap-6">
+                    {testimonials.map(({ quote, name, title, initials, color }, i) => (
+                        <div key={name}
+                            className="bg-white border border-zinc-100 rounded-2xl p-7 shadow-sm hover:shadow-md transition-shadow"
+                            style={fadeIn(visible, i * 0.1)}>
+                            <div className="flex gap-0.5 mb-4">
+                                {[...Array(5)].map((_, k) => (
+                                    <svg key={k} className="w-4 h-4 text-orange-400 fill-orange-400" viewBox="0 0 20 20">
+                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                    </svg>
                                 ))}
                             </div>
-                        </div>
-                        <div>
-                            <Badge>Analytics</Badge>
-                            <h3 className="mt-4 text-2xl font-extrabold text-[#1e2d6b]">Reports That Drive Decisions, Not Just Documents</h3>
-                            <p className="mt-3 text-gray-500 text-sm leading-relaxed">D-CRM's reporting suite transforms raw sales data into clear, actionable intelligence.</p>
-                            <div className="mt-5 grid grid-cols-2 gap-4">
-                                {[
-                                    { Icon: BarChart2, t: "Real-Time Dashboards", d: "Live metrics — no manual report generation" },
-                                    { Icon: Target, t: "Conversion Analytics", d: "Deep-dive by source, rep, campaign, and time period" },
-                                    { Icon: TrendingUp, t: "Revenue Forecasting", d: "AI-powered projections with confidence intervals" },
-                                    { Icon: FileText, t: "Custom Report Builder", d: "Build board packs and daily huddle reports in minutes" },
-                                ].map(({ Icon, t, d }) => (
-                                    <div key={t} className="bg-teal-50 rounded-xl p-4 border border-teal-100 hover:bg-teal-100/70 transition-colors">
-                                        <Icon size={18} className="text-teal-600 mb-2" />
-                                        <h4 className="font-bold text-[#1e2d6b] text-sm">{t}</h4>
-                                        <p className="text-gray-500 text-xs mt-1 leading-relaxed">{d}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Gamification */}
-                    <div className="grid md:grid-cols-2 gap-12 items-center">
-                        <div className="bg-[#1e2d6b] rounded-2xl p-8 text-white">
-                            <h3 className="font-bold text-lg mb-5 flex items-center gap-2">
-                                <Trophy size={20} className="text-teal-400" /> Gamification Features
-                            </h3>
-                            <ul className="space-y-3">
-                                {[
-                                    "Live leaderboards visible to the full team",
-                                    "Points, badges, and achievement milestones",
-                                    "Weekly and monthly performance challenges",
-                                    "Manager-configurable reward triggers",
-                                    "Public recognition for top performers",
-                                ].map(item => (
-                                    <li key={item} className="flex items-center gap-2.5 text-white/75 text-sm">
-                                        <Check size={14} className="text-teal-400 flex-shrink-0" /> {item}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                        <div>
-                            <Badge>Motivation Engine</Badge>
-                            <h3 className="mt-4 text-2xl font-extrabold text-[#1e2d6b]">Leaderboards & Gamification — Fuel Your Team's Competitive Edge</h3>
-                            <p className="mt-3 text-gray-500 text-sm leading-relaxed">
-                                Sales is a performance sport. When your team can see exactly where they stand relative to their peers in real time, intrinsic motivation skyrockets.
-                            </p>
-                            <div className="mt-5 p-4 bg-teal-50 border border-teal-200 rounded-xl">
-                                <p className="text-teal-800 text-sm">Teams using gamification report <strong>up to 48% higher daily activity rates</strong> and significantly improved morale — without changing headcount.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── TEAM MANAGEMENT ────────────────────────────────────────────── */}
-            <section className="py-20 bg-gray-50">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                    <SectionHeader
-                        badge="Team Management"
-                        title="Built for Teams of Any Size — Scale Without Limits"
-                    />
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-7">
-                        {[
-                            { Icon: Users, t: "Unlimited Users", d: "Add as many sales reps, managers, and admins as your business demands. No per-seat penalties, no hidden charges.", bg: "bg-blue-50", color: "text-blue-600" },
-                            { Icon: Building2, t: "Role-Based Hierarchy", d: "Define granular permissions for every role — from field agents to national heads. Everyone sees exactly what they need.", bg: "bg-teal-50", color: "text-teal-600" },
-                            { Icon: Rocket, t: "Enterprise Scalability", d: "Whether you have 5 users or 500, D-CRM's architecture performs consistently — fast, reliable, and always available.", bg: "bg-purple-50", color: "text-purple-600" },
-                        ].map(({ Icon, t, d, bg, color }) => (
-                            <div key={t} className="bg-white rounded-2xl p-7 shadow-sm border border-gray-100 text-left hover:shadow-md transition-shadow group">
-                                <div className={`w-12 h-12 ${bg} rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
-                                    <Icon size={24} className={color} />
-                                </div>
-                                <h3 className="font-bold text-[#1e2d6b] mb-2">{t}</h3>
-                                <p className="text-gray-500 text-sm leading-relaxed">{d}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* ── INTEGRATIONS ───────────────────────────────────────────────── */}
-            <section className="py-24 bg-white">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <SectionHeader
-                        badge="Ecosystem"
-                        title="Plug D-CRM Into Your Existing Stack — Seamlessly"
-                        subtitle="D-CRM is built to integrate, not replace. Our open API architecture connects with the tools your business already relies on."
-                    />
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                        {[
-                            { Icon: Phone, t: "Telephony Integrations", d: "Connects with all major VoIP providers, IVR systems, and cloud telephony platforms.", bg: "bg-blue-50", color: "text-blue-600" },
-                            { Icon: FaWhatsapp, t: "WhatsApp Business API", d: "Official WhatsApp Business API integration — compliant, scalable, and ready for high-volume messaging.", bg: "bg-green-50", color: "text-green-600" },
-                            { Icon: Link2, t: "Open API & Webhooks", d: "Connect D-CRM to your ERP, marketing automation, or any custom internal tool via robust REST APIs.", bg: "bg-teal-50", color: "text-teal-600" },
-                            { Icon: Store, t: "Lead Portals", d: "Native connectors for 99acres, MagicBricks, JustDial, Sulekha, Facebook Lead Ads, and Google Ads.", bg: "bg-orange-50", color: "text-orange-600" },
-                        ].map(({ Icon, t, d, bg, color }) => (
-                            <div key={t} className="bg-gray-50 rounded-2xl p-6 border border-gray-100 hover:shadow-md transition-shadow group">
-                                <div className={`w-11 h-11 ${bg} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
-                                    <Icon size={22} className={color} />
-                                </div>
-                                <h3 className="font-bold text-[#1e2d6b] mb-2 text-sm">{t}</h3>
-                                <p className="text-gray-500 text-xs leading-relaxed">{d}</p>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Integration logos row */}
-                    <div className="mt-12 flex flex-wrap items-center justify-center gap-8 opacity-50">
-                        {[
-                            { Icon: FaFacebook, label: "Facebook", color: "text-blue-600" },
-                            { Icon: FaGoogle, label: "Google Ads", color: "text-red-500" },
-                            { Icon: FaWhatsapp, label: "WhatsApp", color: "text-green-500" },
-                            { Icon: FaLinkedin, label: "LinkedIn", color: "text-blue-700" },
-                            { Icon: Phone, label: "Telephony", color: "text-gray-600" },
-                        ].map(({ Icon, label, color }) => (
-                            <div key={label} className="flex flex-col items-center gap-1.5">
-                                <Icon size={28} className={color} />
-                                <span className="text-xs text-gray-400 font-medium">{label}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* ── BEFORE & AFTER ─────────────────────────────────────────────── */}
-            <section className="py-24 bg-gray-50">
-                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                    <SectionHeader
-                        badge="Transformation"
-                        title="Before & After D-CRM"
-                    />
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                        <div className="bg-white rounded-2xl p-8 border-2 border-red-100 text-left">
-                            <div className="flex items-center gap-2 mb-5">
-                                <XCircle size={20} className="text-red-500" />
-                                <h3 className="font-extrabold text-lg text-red-600">BEFORE D-CRM</h3>
-                            </div>
-                            <ul className="space-y-3 text-sm">
-                                {["Leads lost in spreadsheets", "Slow, manual calls", "No automated follow-up system", "5–8% conversion rate"].map(i => (
-                                    <li key={i} className="flex items-center gap-2.5 text-gray-600">
-                                        <X size={14} className="text-red-400 flex-shrink-0" /> {i}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                        <div className="bg-gradient-to-br from-[#1e2d6b] to-[#0d9488] rounded-2xl p-8 text-white text-left">
-                            <div className="flex items-center gap-2 mb-5">
-                                <CheckCircle2 size={20} className="text-teal-300" />
-                                <h3 className="font-extrabold text-lg">AFTER D-CRM</h3>
-                            </div>
-                            <ul className="space-y-3 text-sm">
-                                {["Auto-captured leads instantly", "AI calls within 30 seconds", "Fully automated follow-ups", "18–25% conversion rate"].map(i => (
-                                    <li key={i} className="flex items-center gap-2.5 text-white/85">
-                                        <Check size={14} className="text-teal-300 flex-shrink-0" /> {i}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    </div>
-                    <p className="mt-6 text-gray-500 text-sm">The difference between these two realities isn't budget or headcount. <strong className="text-teal-600">It's D-CRM.</strong></p>
-                </div>
-            </section>
-
-            {/* ── COMPETITIVE EDGE ───────────────────────────────────────────── */}
-            <section className="py-24 bg-white">
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <SectionHeader
-                        badge="Competitive Edge"
-                        title="D-CRM vs Traditional CRM"
-                        subtitle="There is simply no comparison."
-                    />
-                    <div className="overflow-x-auto rounded-2xl border border-gray-200 shadow-sm">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="bg-gray-50 border-b border-gray-200">
-                                    <th className="text-left px-6 py-4 font-semibold text-gray-500 w-2/5">Capability</th>
-                                    <th className="text-center px-6 py-4 font-semibold text-gray-400">Traditional CRM</th>
-                                    <th className="text-center px-6 py-4 font-bold text-[#1e2d6b]">D-CRM</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {[
-                                    ["Lead Response Time", "Hours to days", "Under 30 seconds"],
-                                    ["Follow-Up Automation", "Manual reminders only", "Full AI-driven sequences"],
-                                    ["Lead Qualification", "None", "Multi-layer AI scoring"],
-                                    ["Call Analysis", "Not available", "AI intent + sentiment"],
-                                    ["Voice AI Agents", "Not available", "Fully autonomous callers"],
-                                    ["WhatsApp Chatbot", "Not available", "Official API integrated"],
-                                    ["Performance Coaching", "Manager-dependent", "AI-generated recommendations"],
-                                    ["24/7 Operation", "No", "Always on"],
-                                ].map(([cap, old, neo], i) => (
-                                    <tr key={cap} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
-                                        <td className="px-6 py-3.5 font-medium text-gray-700 text-sm">{cap}</td>
-                                        <td className="px-6 py-3.5 text-center text-gray-400 text-sm">{old}</td>
-                                        <td className="px-6 py-3.5 text-center">
-                                            <span className="inline-flex items-center gap-1.5 text-teal-700 font-semibold text-sm bg-teal-50 px-2.5 py-1 rounded-full">
-                                                <Check size={12} /> {neo}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── USE CASES ──────────────────────────────────────────────────── */}
-            <section id="usecases" className="py-24 bg-gray-50">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <SectionHeader
-                        badge="Use Cases"
-                        title="Built for Businesses That Mean Business"
-                        subtitle="D-CRM adapts to your industry — with proven workflows for every sales context."
-                    />
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                        {[
-                            { Icon: Home, t: "Real Estate", d: "AI qualifies intent, filters serious buyers, and auto-books site visits — dramatically reducing wasted costs.", bg: "bg-orange-50", color: "text-orange-600" },
-                            { Icon: GraduationCap, t: "EdTech & Coaching", d: "AI nurtures interested students until enrolment — automating counselling touchpoints at massive scale.", bg: "bg-blue-50", color: "text-blue-600" },
-                            { Icon: Briefcase, t: "Agencies & Consultancies", d: "D-CRM manages your inbound pipeline, nurtures warm prospects, and books discovery calls — without human intervention.", bg: "bg-purple-50", color: "text-purple-600" },
-                            { Icon: HeartPulse, t: "Service Businesses", d: "Streamlines complex multi-touch sales cycles and keeps high-value prospects engaged through extended decision timelines.", bg: "bg-red-50", color: "text-red-600" },
-                        ].map(({ Icon, t, d, bg, color }) => (
-                            <div key={t} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow group text-left">
-                                <div className={`w-12 h-12 ${bg} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
-                                    <Icon size={24} className={color} />
-                                </div>
-                                <h3 className="font-bold text-[#1e2d6b] mb-2">{t}</h3>
-                                <p className="text-gray-500 text-sm leading-relaxed">{d}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* ── PRICING ────────────────────────────────────────────────────── */}
-            <section id="pricing" className="py-24 bg-white">
-                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <SectionHeader
-                        badge="Pricing"
-                        title="Simple, Transparent Pricing"
-                        subtitle="Pay per user, per month. No setup fees. No long-term contracts. Scale as you grow."
-                    />
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-                        {[
-                            {
-                                users: 1, price: 999, popular: false,
-                                features: ["Full CRM dashboard", "Lead capture & tracking", "Task & activity management", "Basic analytics", "Email support"],
-                            },
-                            {
-                                users: 3, price: 2499, popular: false,
-                                features: ["Everything in 1-user plan", "Team collaboration tools", "AI lead scoring", "WhatsApp integration", "Priority email support"],
-                            },
-                            {
-                                users: 5, price: 4499, popular: true,
-                                features: ["Everything in 3-user plan", "AI Voice Agents", "AI Call Transcription", "Advanced analytics", "Dedicated onboarding"],
-                            },
-                            {
-                                users: 10, price: 7999, popular: false,
-                                features: ["Everything in 5-user plan", "AI Call Analysis", "Custom integrations", "Performance gamification", "Priority support + SLA"],
-                            },
-                        ].map(({ users, price, popular, features }) => (
-                            <div key={users} className={`relative rounded-2xl p-7 flex flex-col ${popular
-                                ? "bg-gradient-to-br from-[#1e2d6b] to-[#0d4a4a] text-white border-2 border-teal-400 shadow-xl shadow-teal-500/15"
-                                : "bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
-                            }`}>
-                                {popular && (
-                                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-teal-500 text-white text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wide whitespace-nowrap">
-                                        Most Popular
-                                    </div>
-                                )}
-                                <div className="mb-5">
-                                    <div className={`text-xs font-bold uppercase tracking-widest mb-1 ${popular ? "text-teal-300" : "text-teal-600"}`}>
-                                        {users} User{users > 1 ? "s" : ""}
-                                    </div>
-                                    <div className={`text-3xl font-extrabold ${popular ? "text-white" : "text-[#1e2d6b]"}`}>
-                                        ₹{price.toLocaleString("en-IN")}
-                                    </div>
-                                    <div className={`text-xs mt-1 ${popular ? "text-teal-200" : "text-gray-400"}`}>
-                                        per month + GST
-                                    </div>
-                                </div>
-
-                                <ul className="space-y-2.5 flex-1 mb-7">
-                                    {features.map(f => (
-                                        <li key={f} className={`flex items-start gap-2 text-xs ${popular ? "text-white/80" : "text-gray-600"}`}>
-                                            <Check size={13} className={`flex-shrink-0 mt-0.5 ${popular ? "text-teal-300" : "text-teal-500"}`} /> {f}
-                                        </li>
-                                    ))}
-                                </ul>
-
-                                <button
-                                    onClick={openDemo}
-                                    className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all ${popular
-                                        ? "bg-teal-500 hover:bg-teal-400 text-white"
-                                        : "border-2 border-[#1e2d6b] text-[#1e2d6b] hover:bg-[#1e2d6b] hover:text-white"
-                                    }`}>
-                                    Get Started
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Enterprise / More Users CTA */}
-                    <div className="rounded-2xl bg-gradient-to-r from-gray-50 to-teal-50 border border-teal-200 p-8 flex flex-col md:flex-row items-center justify-between gap-6">
-                        <div className="flex items-start gap-4">
-                            <div className="w-12 h-12 bg-white rounded-xl border border-teal-200 flex items-center justify-center flex-shrink-0 shadow-sm">
-                                <Users size={22} className="text-teal-600" />
-                            </div>
-                            <div>
-                                <h3 className="font-extrabold text-[#1e2d6b] text-lg">Need More Than 10 Users?</h3>
-                                <p className="text-gray-500 text-sm mt-1 max-w-md">We offer custom enterprise plans with volume discounts, dedicated account management, and white-glove onboarding. Let's build the right plan for your team.</p>
-                            </div>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-3 flex-shrink-0">
-                            <button onClick={openDemo} className="inline-flex items-center justify-center gap-2 bg-[#1e2d6b] text-white font-bold px-6 py-3 rounded-xl hover:bg-[#162356] transition-colors text-sm whitespace-nowrap">
-                                <CalendarCheck size={15} /> Book a Demo
-                            </button>
-                            <a href="mailto:dcodetechnologiesai@gmail.com" className="inline-flex items-center justify-center gap-2 border-2 border-[#1e2d6b] text-[#1e2d6b] font-bold px-6 py-3 rounded-xl hover:bg-[#1e2d6b] hover:text-white transition-colors text-sm whitespace-nowrap">
-                                <Mail size={15} /> Contact Sales
-                            </a>
-                        </div>
-                    </div>
-
-                    {/* ROI */}
-                    <div className="mt-16">
-                        <div className="text-center mb-10">
-                            <Badge>Return on Investment</Badge>
-                            <h3 className="mt-4 text-2xl font-extrabold text-[#1e2d6b]">One Conversion Pays for the Entire System</h3>
-                            <p className="mt-3 text-gray-500 text-sm max-w-xl mx-auto leading-relaxed">The economics of D-CRM are strikingly simple. A single additional conversion — made possible by faster AI engagement — covers the entire cost.</p>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {[
-                                { Icon: Home, t: "Real Estate Example", d: "1 extra deal closed via AI engagement = ₹1.5L commission. D-CRM plan = fraction of that.", highlight: "Breakeven: Deal #1." },
-                                { Icon: GraduationCap, t: "EdTech Example", d: "3 extra enrolments via AI nurturing = ₹1.5L revenue. D-CRM cost = minimal subscription.", highlight: "Breakeven: 3 Students." },
-                                { Icon: TrendingUp, t: "Every Deal After That", d: "Pure profit driven by automation — with zero increase in headcount or marketing spend required.", highlight: "100% ROI." },
-                            ].map(({ Icon, t, d, highlight }) => (
-                                <div key={t} className="bg-teal-50 border border-teal-200 rounded-2xl p-6 hover:shadow-md transition-shadow">
-                                    <div className="w-10 h-10 bg-teal-100 rounded-xl flex items-center justify-center mb-4">
-                                        <Icon size={20} className="text-teal-700" />
-                                    </div>
-                                    <h4 className="font-bold text-[#1e2d6b] mb-2 text-sm">{t}</h4>
-                                    <p className="text-gray-500 text-xs mb-3 leading-relaxed">{d}</p>
-                                    <p className="font-bold text-teal-700 text-sm">{highlight}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── WHY NOW ────────────────────────────────────────────────────── */}
-            <section className="py-24 bg-gray-50">
-                <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                    <SectionHeader
-                        badge="Why Now"
-                        title="The AI Revolution in Sales Is Happening — With or Without You"
-                        subtitle="We are in the most significant technological shift in the history of sales. AI is not a future concept — it is being deployed by your competitors right now."
-                    />
-                    <div className="space-y-3 text-left">
-                        {[
-                            { yr: "2020–2022", desc: "Early adopters test AI sales tools — modest automation, significant advantage", highlight: false },
-                            { yr: "2023–2024", desc: "AI becomes mainstream in enterprise sales — SMBs begin to fall behind rapidly", highlight: false },
-                            { yr: "2025 — Now", desc: "Full AI automation is table stakes — businesses without it face structural disadvantage", highlight: true },
-                            { yr: "2026+", desc: "AI-first companies dominate their categories — the gap becomes insurmountable for laggards", highlight: false },
-                        ].map(({ yr, desc, highlight }) => (
-                            <div key={yr} className={`flex items-start gap-4 p-4 rounded-xl border ${highlight ? "bg-[#1e2d6b] border-[#1e2d6b] text-white" : "bg-white border-gray-200"}`}>
-                                <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${highlight ? "bg-teal-400" : "bg-teal-100"}`}>
-                                    <div className={`w-2 h-2 rounded-full ${highlight ? "bg-[#1e2d6b]" : "bg-teal-600"}`} />
+                            <p className="text-sm text-zinc-600 leading-relaxed mb-6">"{quote}"</p>
+                            <div className="flex items-center gap-3">
+                                <div className={`w-9 h-9 rounded-full ${color} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
+                                    {initials}
                                 </div>
                                 <div>
-                                    <div className={`font-bold text-sm ${highlight ? "text-teal-300" : "text-[#1e2d6b]"}`}>{yr}</div>
-                                    <div className={`text-sm mt-0.5 ${highlight ? "text-white/80" : "text-gray-500"}`}>{desc}</div>
+                                    <p className="text-sm font-bold text-zinc-900">{name}</p>
+                                    <p className="text-xs text-zinc-400">{title}</p>
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* ── CTA ────────────────────────────────────────────────────────── */}
-            <section className="py-28 bg-gradient-to-br from-[#0d1a4a] via-[#1e2d6b] to-[#0d4a4a] text-white text-center relative overflow-hidden">
-                <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute top-10 left-20 w-64 h-64 bg-teal-400/10 rounded-full blur-3xl" />
-                    <div className="absolute bottom-10 right-20 w-80 h-80 bg-blue-400/10 rounded-full blur-3xl" />
-                </div>
-                <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <h2 className="text-4xl sm:text-5xl font-extrabold mb-4 tracking-tight">Let's Automate Your Sales Today</h2>
-                    <p className="text-white/65 text-lg mb-3">You've seen the problem. You've seen the solution. You've seen the ROI.</p>
-                    <p className="text-white/55 text-sm mb-12">The only question left is: <strong className="text-white">how much revenue are you willing to leave on the table while you wait?</strong></p>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-12 max-w-2xl mx-auto">
-                        {[
-                            { Icon: Rocket, t: "Quick Deploy", d: "Live in 7 days or less" },
-                            { Icon: BookOpen, t: "Full Training", d: "Team onboarding included" },
-                            { Icon: Wrench, t: "Dedicated Support", d: "Priority access to our team" },
-                            { Icon: TrendingUp, t: "ROI Guarantee", d: "Results or we make it right" },
-                        ].map(({ Icon, t, d }) => (
-                            <div key={t} className="bg-white/10 border border-white/15 rounded-xl p-4 hover:bg-white/15 transition-colors">
-                                <Icon size={22} className="text-teal-400 mb-2 mx-auto" />
-                                <div className="font-bold text-sm">{t}</div>
-                                <div className="text-white/55 text-xs mt-1">{d}</div>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                        <button onClick={openDemo}
-                            className="inline-flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-400 text-white font-bold px-10 py-4 rounded-xl text-base shadow-xl shadow-teal-500/20 transition-all transform hover:scale-105">
-                            <CalendarCheck size={18} /> Book Free Demo
-                        </button>
-                        <button onClick={() => navigate("/login")}
-                            className="inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 border border-white/25 text-white font-bold px-10 py-4 rounded-xl text-base backdrop-blur transition-all">
-                            Sign In <ArrowRight size={17} />
-                        </button>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── FOOTER ─────────────────────────────────────────────────────── */}
-            <footer id="contact" className="bg-[#0d1a4a] text-white py-14">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-10">
-                        <div>
-                            <div className="flex items-center gap-2.5 mb-3">
-                                <img src="/DCODE.PNG" alt="D-CRM" className="h-8 w-8 object-contain" />
-                                <span className="font-extrabold text-lg">D-CRM <span className="text-teal-400">CRM</span></span>
-                            </div>
-                            <p className="text-white/50 text-sm leading-relaxed">The AI-Powered Sales Operating System built for businesses that refuse to leave growth to chance.</p>
                         </div>
-                        <div>
-                            <h4 className="font-bold mb-4 text-teal-400 text-sm uppercase tracking-wide">Get Started</h4>
-                            <div className="space-y-2.5">
-                                <button onClick={openDemo} className="flex items-center gap-2 text-white/60 hover:text-white text-sm transition-colors">
-                                    <CalendarCheck size={14} /> Book a Free Demo
-                                </button>
-                                <button onClick={() => navigate("/login")} className="flex items-center gap-2 text-white/60 hover:text-white text-sm transition-colors">
-                                    <ArrowRight size={14} /> Sign In to Dashboard
-                                </button>
-                            </div>
-                        </div>
-                        <div>
-                            <h4 className="font-bold mb-4 text-teal-400 text-sm uppercase tracking-wide">Contact Us</h4>
-                            <div className="space-y-3">
-                                <a href="mailto:dcodetechnologiesai@gmail.com" className="flex items-center gap-2.5 text-white/60 hover:text-white text-sm transition-colors">
-                                    <Mail size={14} /> dcodetechnologiesai@gmail.com
-                                </a>
-                                <a href="tel:+919003103018" className="flex items-center gap-2.5 text-white/60 hover:text-white text-sm transition-colors">
-                                    <Phone size={14} /> +91 9003103018
-                                </a>
-                                <a href="https://wa.me/919003103018" className="flex items-center gap-2.5 text-white/60 hover:text-white text-sm transition-colors">
-                                    <FaWhatsapp size={14} /> WhatsApp: +91 9003103018
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="border-t border-white/10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-                        <p className="text-white/35 text-xs">© {new Date().getFullYear()} D-CRM by DCODE Technologies. All rights reserved.</p>
-                        <div className="flex items-center gap-4 text-white/30">
-                            <FaLinkedin size={16} className="hover:text-white/60 cursor-pointer transition-colors" />
-                            <FaFacebook size={16} className="hover:text-white/60 cursor-pointer transition-colors" />
-                            <FaWhatsapp size={16} className="hover:text-white/60 cursor-pointer transition-colors" />
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
+}
+
+// ─── CTA Section ──────────────────────────────────────────────────────────────
+
+function CTASection({ onDemo }) {
+    const [ref, visible] = useInView();
+    return (
+        <section className="py-24 bg-white" ref={ref}>
+            <div className="max-w-4xl mx-auto px-5 sm:px-8">
+                <div className="rounded-2xl px-8 py-16 text-center relative overflow-hidden"
+                    style={{ background: "linear-gradient(135deg,#F97316 0%,#EA580C 100%)", boxShadow: "0 20px 60px rgba(249,115,22,0.25)" }}>
+                    <div className="absolute top-[-40px] right-[-40px] w-48 h-48 rounded-full bg-white/10" />
+                    <div className="absolute bottom-[-30px] left-[-30px] w-36 h-36 rounded-full bg-white/10" />
+                    <div className="relative z-10" style={fadeIn(visible)}>
+                        <h2 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight mb-4">
+                            Start managing relationships smarter.
+                        </h2>
+                        <p className="text-base text-orange-100 mb-8 max-w-lg mx-auto">
+                            Join teams using D-CRM to close more deals, faster — with less manual work.
+                        </p>
+                        <div className="flex flex-wrap gap-3 justify-center">
+                            <button onClick={onDemo}
+                                className="inline-flex items-center gap-2 text-sm font-semibold text-orange-600 bg-white px-6 py-3 rounded-lg hover:bg-orange-50 transition-all hover:-translate-y-0.5 shadow-md">
+                                Get started <ArrowRight size={15} />
+                            </button>
+                            <Link to="/login"
+                                className="inline-flex items-center gap-2 text-sm font-semibold text-white border border-white/40 px-6 py-3 rounded-lg hover:bg-white/10 transition-all">
+                                Sign in
+                            </Link>
                         </div>
                     </div>
                 </div>
-            </footer>
+            </div>
+        </section>
+    );
+}
+
+// ─── Footer ───────────────────────────────────────────────────────────────────
+
+function Footer() {
+    return (
+        <footer className="border-t border-zinc-100 bg-white py-10">
+            <div className="max-w-6xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                    <img src="/DCODE.PNG" alt="D-CRM" className="h-6 w-6 object-contain" />
+                    <span className="text-sm font-bold text-zinc-800">D-CRM</span>
+                </div>
+                <p className="text-xs text-zinc-400">© {new Date().getFullYear()} D-CRM. All rights reserved.</p>
+                <div className="flex items-center gap-5">
+                    {["Privacy", "Terms", "Contact"].map(item => (
+                        <a key={item} href="#" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors">{item}</a>
+                    ))}
+                </div>
+            </div>
+        </footer>
+    );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function LandingPage() {
+    const [demoOpen, setDemoOpen] = useState(false);
+    const openDemo = () => setDemoOpen(true);
+
+    return (
+        <div className="min-h-screen bg-white font-sans antialiased">
+            <Navbar onDemo={openDemo} />
+            <HeroSection onDemo={openDemo} />
+            <FeaturesSection />
+            <AutomationSection />
+            <StatsSection />
+            <TestimonialsSection />
+            <CTASection onDemo={openDemo} />
+            <Footer />
+            {demoOpen && <BookDemoModal onClose={() => setDemoOpen(false)} />}
         </div>
     );
 }

@@ -7,11 +7,12 @@ const roleMiddleware = require("../middleware/roleMiddleware");
 router.use(authMiddleware);
 router.use(roleMiddleware(["ADMIN", "SUPER_ADMIN"]));
 
-router.get("/",           ctrl.getRules);
-router.post("/",          ctrl.createRule);
-router.patch("/:id",      ctrl.updateRule);
-router.delete("/:id",     ctrl.deleteRule);
+router.get("/",             ctrl.getRules);
+router.post("/",            ctrl.createRule);
+router.post("/seed",        ctrl.seedRules);        // must be before /:id
 router.patch("/:id/toggle", ctrl.toggleRule);
-router.get("/:id/logs",   ctrl.getRuleLogs);
+router.get("/:id/logs",     ctrl.getRuleLogs);
+router.patch("/:id",        ctrl.updateRule);
+router.delete("/:id",       ctrl.deleteRule);
 
 module.exports = router;

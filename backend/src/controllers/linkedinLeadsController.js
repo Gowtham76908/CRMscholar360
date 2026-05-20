@@ -3,8 +3,16 @@ const prisma = require("../utils/prisma");
 const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
 
-const SERPER_API_KEY = process.env.SERPER_API_KEY;
+const { decrypt } = require("../utils/encrypt");
 const SERPER_BASE_URL = "https://google.serper.dev";
+
+const getSerperKey = async () => {
+    try {
+        const intg = await prisma.integration.findUnique({ where: { platform: "linkedin_serper" } });
+        if (intg?.config?.apiKey) return decrypt(intg.config.apiKey);
+    } catch (_) {}
+    return process.env.SERPER_API_KEY || null;
+};
 
 // ─── Extraction helpers ───────────────────────────────────────────────────────
 
@@ -170,27 +178,29 @@ const searchLinkedInLeads = async (req, res) => {
             return res.status(400).json({ message: "Search query is required" });
         }
 
+        const apiKey = await getSerperKey();
+        if (!apiKey) {
+            return res.status(503).json({ message: "Serper API key not configured. Add SERPER_API_KEY to .env or configure LinkedIn Lead Search in Settings → Integrations." });
+        }
+
         const sitePrefix = type === "companies"
             ? "site:linkedin.com/company"
             : "site:linkedin.com/in";
 
         const locationPart = location.trim() ? ` "${location.trim()}"` : "";
         const linkedinQuery = `${sitePrefix} "${query.trim()}"${locationPart}`;
-
-        // Secondary search to find contact info (email/phone) for the same query
         const contactQuery = `"${query.trim()}"${locationPart} email contact phone`;
 
-        // Fire both in parallel to keep latency low
         const [linkedinRes, contactRes] = await Promise.all([
             axios.post(
                 `${SERPER_BASE_URL}/search`,
                 { q: linkedinQuery, gl: "in", hl: "en", num: 20 },
-                { headers: { "X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json" } }
+                { headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" } }
             ),
             axios.post(
                 `${SERPER_BASE_URL}/search`,
                 { q: contactQuery, gl: "in", hl: "en", num: 20 },
-                { headers: { "X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json" } }
+                { headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" } }
             )
         ]);
 
@@ -225,6 +235,11 @@ const importLinkedInLeads = async (req, res) => {
         if (!leads || !Array.isArray(leads) || leads.length === 0) {
             return res.status(400).json({ message: "No leads provided" });
         }
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { workspaceId: true }
+        });
 
         let created = 0;
         let duplicates = 0;
@@ -277,7 +292,9 @@ const importLinkedInLeads = async (req, res) => {
                     linkedinUrl: linkedinUrl || null,
                     jobTitle: jobTitle || null,
                     company: company || null,
-                    biodata: biodata || null
+                    biodata: biodata || null,
+                    assignedToId: userId,
+                    workspaceId: user?.workspaceId || null
                 }
             });
 

@@ -10,6 +10,7 @@ import Team from "./pages/Team";
 import Tasks from "./pages/Tasks";
 import Leads from "./pages/Leads";
 import Integrations from "./pages/Integrations";
+import IntegrationHub from "./pages/IntegrationHub";
 import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
 import Departments from "./pages/Departments";
@@ -75,7 +76,7 @@ function App() {
             <Route path="/inbox" element={<Inbox />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/tasks/:id" element={<TaskDetail />} />
-            <Route path="/integrations" element={<Integrations />} />
+            <Route path="/integrations" element={<IntegrationHub />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/departments" element={<Departments />} />
             <Route path="/departments/:id" element={<DepartmentDetails />} />

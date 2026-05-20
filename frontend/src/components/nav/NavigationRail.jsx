@@ -38,7 +38,7 @@ export const MODES = [
         icon: Zap,
         label: "Automate",
         defaultPath: "/automations",
-        paths: ["/automations", "/sprints", "/tasks", "/reports", "/leaderboard"],
+        paths: ["/automations", "/tasks", "/reports"],
         shortcut: "4",
     },
     {
@@ -114,14 +114,14 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
                             className={cn(
                                 "relative w-full flex items-center justify-center p-2.5 rounded-xl transition-all duration-150",
                                 isActive
-                                    ? "bg-indigo-50 text-indigo-600"
+                                    ? "bg-orange-50 text-orange-600"
                                     : "text-gray-400 hover:text-gray-700 hover:bg-gray-50"
                             )}
                         >
                             <mode.icon className="h-5 w-5" />
                             {/* Active indicator bar */}
                             {isActive && panelOpen && (
-                                <span className="absolute -right-px top-1/2 -translate-y-1/2 h-5 w-0.5 bg-indigo-600 rounded-l-full" />
+                                <span className="absolute -right-px top-1/2 -translate-y-1/2 h-5 w-0.5 bg-orange-500 rounded-l-full" />
                             )}
                             {/* Unread badge */}
                             {badge > 0 && (
@@ -143,7 +143,7 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
                     window.dispatchEvent(e);
                 }}
                 title="Command palette (Ctrl+K)"
-                className="p-2.5 rounded-xl text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                className="p-2.5 rounded-xl text-gray-400 hover:text-orange-500 hover:bg-orange-50 transition-colors"
             >
                 <Command className="h-4 w-4" />
             </button>

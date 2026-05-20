@@ -10,6 +10,7 @@ const TRIGGER_TYPES = [
     { value: "STATUS_CHANGED", label: "Lead status changes to…" },
     { value: "LEAD_ASSIGNED",  label: "Lead is assigned" },
     { value: "NO_ACTIVITY",    label: "No activity for N days" },
+    { value: "MISSED_CALL",    label: "Missed / unanswered call" },
 ];
 
 const STATUS_OPTIONS  = ["NEW", "CONTACTED", "FOLLOW_UP", "CONVERTED", "LOST"];
@@ -34,7 +35,9 @@ const ACTION_TYPES = [
     { value: "ASSIGN_LEAD",        label: "Assign lead to user" },
     { value: "CREATE_TASK",        label: "Create a task" },
     { value: "CREATE_REMINDER",    label: "Create a reminder" },
-    { value: "SEND_NOTIFICATION",  label: "Send notification" },
+    { value: "SEND_NOTIFICATION",  label: "Send in-app notification" },
+    { value: "SEND_WHATSAPP",      label: "Send WhatsApp template" },
+    { value: "SEND_EMAIL",         label: "Send email" },
 ];
 
 const STATUS_COLORS = {
@@ -65,6 +68,16 @@ const emptyRule = () => ({
     actions: [],
 });
 
+const CONSTRAINT_TYPES = [
+    { value: "COOLDOWN",               label: "Cooldown (hours between runs)" },
+    { value: "MAX_EXECUTIONS_PER_DAY", label: "Max runs per day" },
+    { value: "BUSINESS_HOURS_ONLY",    label: "Business hours only" },
+    { value: "SKIP_WEEKENDS",          label: "Skip weekends" },
+    { value: "PREVENT_DUPLICATES",          label: "Run only once per lead" },
+    { value: "PREVENT_RECURSIVE_TRIGGERS",  label: "Block if already in trigger chain" },
+];
+
+const emptyConstraint = () => ({ type: "COOLDOWN", hours: 24 });
 const emptyCondition = () => ({ field: "source", operator: "equals", value: "" });
 const emptyAction    = () => ({ type: "CHANGE_STATUS", config: {} });
 
@@ -85,6 +98,12 @@ function RuleModal({ initial, users, onSave, onClose }) {
     const removeCondition = (i) => setForm(f => ({ ...f, conditions: f.conditions.filter((_, idx) => idx !== i) }));
     const addAction = () => setForm(f => ({ ...f, actions: [...f.actions, emptyAction()] }));
     const removeAction = (i) => setForm(f => ({ ...f, actions: f.actions.filter((_, idx) => idx !== i) }));
+
+    const getConstraints = () => form.triggerConfig?.constraints ?? [];
+    const setConstraints = (constraints) => set({ triggerConfig: { ...form.triggerConfig, constraints } });
+    const addConstraint = () => setConstraints([...getConstraints(), emptyConstraint()]);
+    const removeConstraint = (i) => setConstraints(getConstraints().filter((_, idx) => idx !== i));
+    const setConstraint = (i, patch) => setConstraints(getConstraints().map((c, idx) => idx === i ? { ...c, ...patch } : c));
 
     const needsValue = (op) => op === "equals" || op === "not_equals";
     const fieldValues = (field) => {
@@ -132,7 +151,7 @@ function RuleModal({ initial, users, onSave, onClose }) {
                             <select
                                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                                 value={form.triggerConfig?.status ?? ""}
-                                onChange={e => set({ triggerConfig: { status: e.target.value } })}
+                                onChange={e => set({ triggerConfig: { ...form.triggerConfig, status: e.target.value } })}
                             >
                                 <option value="">— select status —</option>
                                 {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -144,11 +163,80 @@ function RuleModal({ initial, users, onSave, onClose }) {
                                     type="number" min="1"
                                     className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                                     value={form.triggerConfig?.days ?? 1}
-                                    onChange={e => set({ triggerConfig: { days: parseInt(e.target.value) || 1 } })}
+                                    onChange={e => set({ triggerConfig: { ...form.triggerConfig, days: parseInt(e.target.value) || 1 } })}
                                 />
                                 <span className="text-sm text-gray-500">days without activity</span>
                             </div>
                         )}
+                    </div>
+
+                    {/* Constraints */}
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Constraints</p>
+                            <button onClick={addConstraint} className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1">
+                                <Plus className="h-3 w-3" /> Add
+                            </button>
+                        </div>
+                        {getConstraints().length === 0 && (
+                            <p className="text-xs text-gray-400">No constraints — rule can fire on every trigger event.</p>
+                        )}
+                        {getConstraints().map((c, i) => (
+                            <div key={i} className="flex items-center gap-2 flex-wrap">
+                                <select
+                                    className="flex-1 min-w-[180px] border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                                    value={c.type}
+                                    onChange={e => setConstraint(i, { type: e.target.value, hours: 24, max: 1 })}
+                                >
+                                    {CONSTRAINT_TYPES.map(ct => <option key={ct.value} value={ct.value}>{ct.label}</option>)}
+                                </select>
+                                {c.type === "COOLDOWN" && (
+                                    <>
+                                        <input
+                                            type="number" min="1"
+                                            className="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                                            value={c.hours ?? 24}
+                                            onChange={e => setConstraint(i, { hours: parseInt(e.target.value) || 24 })}
+                                        />
+                                        <span className="text-xs text-gray-500">hours</span>
+                                    </>
+                                )}
+                                {c.type === "MAX_EXECUTIONS_PER_DAY" && (
+                                    <>
+                                        <input
+                                            type="number" min="1"
+                                            className="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                                            value={c.max ?? 1}
+                                            onChange={e => setConstraint(i, { max: parseInt(e.target.value) || 1 })}
+                                        />
+                                        <span className="text-xs text-gray-500">per day</span>
+                                    </>
+                                )}
+                                {c.type === "BUSINESS_HOURS_ONLY" && (
+                                    <>
+                                        <input
+                                            type="number" min="0" max="23"
+                                            className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                                            placeholder="9"
+                                            value={c.startHour ?? 9}
+                                            onChange={e => setConstraint(i, { startHour: parseInt(e.target.value) })}
+                                        />
+                                        <span className="text-xs text-gray-500">–</span>
+                                        <input
+                                            type="number" min="0" max="23"
+                                            className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                                            placeholder="18"
+                                            value={c.endHour ?? 18}
+                                            onChange={e => setConstraint(i, { endHour: parseInt(e.target.value) })}
+                                        />
+                                        <span className="text-xs text-gray-500">hr</span>
+                                    </>
+                                )}
+                                <button onClick={() => removeConstraint(i)} className="text-red-400 hover:text-red-600">
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        ))}
                     </div>
 
                     {/* Conditions */}
@@ -306,6 +394,34 @@ function RuleModal({ initial, users, onSave, onClose }) {
                                         />
                                     </div>
                                 )}
+                                {action.type === "SEND_WHATSAPP" && (
+                                    <div className="space-y-1.5">
+                                        <input
+                                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
+                                            placeholder="WATI template name (e.g. welcome_lead)"
+                                            value={action.config.templateName ?? ""}
+                                            onChange={e => setActionConfig(i, { templateName: e.target.value })}
+                                        />
+                                        <p className="text-[10px] text-gray-400">Use <code>{"{{lead.name}}"}</code> in parameters to insert the lead's name.</p>
+                                    </div>
+                                )}
+                                {action.type === "SEND_EMAIL" && (
+                                    <div className="space-y-1.5">
+                                        <input
+                                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
+                                            placeholder="Email subject"
+                                            value={action.config.subject ?? ""}
+                                            onChange={e => setActionConfig(i, { subject: e.target.value })}
+                                        />
+                                        <textarea
+                                            rows={3}
+                                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none resize-none"
+                                            placeholder={"Email body. Use {{lead.name}} for the lead's name."}
+                                            value={action.config.body ?? ""}
+                                            onChange={e => setActionConfig(i, { body: e.target.value })}
+                                        />
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -364,6 +480,21 @@ function RuleCard({ rule, users, onEdit, onDelete, onToggle }) {
                             {rule.actions.length} action{rule.actions.length > 1 ? "s" : ""}
                         </span>
                         <span className="text-gray-400">{rule._count?.logs ?? 0} runs</span>
+                        {(rule.triggerConfig?.constraints ?? []).map((c, i) => {
+                            const label =
+                                c.type === "COOLDOWN"               ? `⏱ ${c.hours ?? 24}h cooldown`
+                              : c.type === "MAX_EXECUTIONS_PER_DAY" ? `⛔ max ${c.max ?? 1}/day`
+                              : c.type === "BUSINESS_HOURS_ONLY"    ? `🕘 biz hours`
+                              : c.type === "SKIP_WEEKENDS"          ? `📅 no weekends`
+                              : c.type === "PREVENT_DUPLICATES"         ? `1× only`
+                              : c.type === "PREVENT_RECURSIVE_TRIGGERS" ? `no recursion`
+                              : c.type;
+                            return (
+                                <span key={i} className="bg-orange-50 text-orange-600 border border-orange-100 px-2 py-0.5 rounded-full font-medium text-[10px]">
+                                    {label}
+                                </span>
+                            );
+                        })}
                     </div>
                 </div>
                 <div className="flex items-center gap-2 ml-3 flex-shrink-0">
@@ -391,6 +522,8 @@ function RuleCard({ rule, users, onEdit, onDelete, onToggle }) {
                         {a.type === "CREATE_TASK"       && `Create task "${a.config.title}" in ${a.config.dueDaysFromNow ?? 1}d`}
                         {a.type === "CREATE_REMINDER"   && `Set reminder: "${a.config.message}" in ${a.config.dueHoursFromNow ?? 24}h`}
                         {a.type === "SEND_NOTIFICATION" && `Notify: "${a.config.title ?? "Alert"}"`}
+                        {a.type === "SEND_WHATSAPP"     && `Send WhatsApp template "${a.config.templateName}"`}
+                        {a.type === "SEND_EMAIL"        && `Send email "${a.config.subject ?? "(no subject)"}"`}
                     </div>
                 ))}
             </div>
@@ -464,6 +597,11 @@ export default function Automations() {
         onSuccess: invalidate,
     });
 
+    const seed = useMutation({
+        mutationFn: () => api.post("/automations/seed"),
+        onSuccess: invalidate,
+    });
+
     const handleSave = (form) => {
         if (modal?.mode === "edit") {
             update.mutate({ id: modal.rule.id, ...form });
@@ -490,13 +628,25 @@ export default function Automations() {
                             : `${activeCount} active · ${pausedCount} paused`}
                     </p>
                 </div>
-                <button
-                    onClick={() => setModal({ mode: "create" })}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors"
-                >
-                    <Plus className="h-4 w-4" />
-                    New Rule
-                </button>
+                <div className="flex gap-2">
+                    {rules.length === 0 && (
+                        <button
+                            onClick={() => seed.mutate()}
+                            disabled={seed.isPending}
+                            className="flex items-center gap-2 px-4 py-2 border border-indigo-200 text-indigo-600 text-sm font-semibold rounded-xl hover:bg-indigo-50 transition-colors disabled:opacity-50"
+                        >
+                            {seed.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                            Load Defaults
+                        </button>
+                    )}
+                    <button
+                        onClick={() => setModal({ mode: "create" })}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors"
+                    >
+                        <Plus className="h-4 w-4" />
+                        New Rule
+                    </button>
+                </div>
             </div>
 
             {/* Rules list */}
@@ -509,12 +659,22 @@ export default function Automations() {
                     <Zap className="h-10 w-10 text-gray-200 mx-auto mb-3" />
                     <p className="text-sm font-semibold text-gray-400">No automation rules yet</p>
                     <p className="text-xs text-gray-400 mt-1 mb-4">Rules run automatically when leads match your conditions.</p>
-                    <button
-                        onClick={() => setModal({ mode: "create" })}
-                        className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700"
-                    >
-                        Create first rule
-                    </button>
+                    <div className="flex items-center justify-center gap-3">
+                        <button
+                            onClick={() => seed.mutate()}
+                            disabled={seed.isPending}
+                            className="flex items-center gap-2 px-4 py-2 border border-indigo-200 text-indigo-600 text-sm font-semibold rounded-xl hover:bg-indigo-50 disabled:opacity-50"
+                        >
+                            {seed.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                            Load 3 Default Rules
+                        </button>
+                        <button
+                            onClick={() => setModal({ mode: "create" })}
+                            className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700"
+                        >
+                            Build custom rule
+                        </button>
+                    </div>
                 </div>
             ) : (
                 <div className="space-y-4">

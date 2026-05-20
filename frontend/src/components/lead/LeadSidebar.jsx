@@ -195,9 +195,7 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId 
                             </ul>
                         )}
                     </>
-                ) : (
-                    <p className="text-[11px] text-gray-400 mt-1">Transcribe a call to see score breakdown</p>
-                )}
+                ) : null}
             </div>
 
             {/* Lead Metadata */}

@@ -24,4 +24,7 @@ router.post("/sync-user", chatController.syncUserToStream);
 // Sync ALL users to Stream (run once after deployment)
 router.post("/sync-all-users", roleMiddleware(["SUPER_ADMIN"]), chatController.syncAllUsers);
 
+// Seed demo channels + messages
+router.post("/seed", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), chatController.seedDemoData);
+
 module.exports = router;

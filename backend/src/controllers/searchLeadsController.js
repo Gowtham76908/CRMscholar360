@@ -118,6 +118,11 @@ const importSearchedLeads = async (req, res) => {
             return res.status(400).json({ message: "No leads provided" });
         }
 
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { workspaceId: true }
+        });
+
         let created = 0;
         let duplicates = 0;
         const createdLeads = [];
@@ -157,7 +162,9 @@ const importSearchedLeads = async (req, res) => {
                     enquiryType,
                     score,
                     category,
-                    isSearchLead: true
+                    isSearchLead: true,
+                    assignedToId: userId,
+                    workspaceId: user?.workspaceId || null
                 }
             });
 
