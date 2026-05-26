@@ -14,6 +14,7 @@ router.put("/:platform/configure",     c.configure);
 router.post("/:platform/test",         c.testConnection);
 router.post("/:platform/sync",         c.sync);
 router.delete("/:platform/disconnect", c.disconnect);
+router.get("/all-logs",                c.getAllLogs);
 router.get("/:platform/logs",          c.getLogs);
 
 module.exports = router;

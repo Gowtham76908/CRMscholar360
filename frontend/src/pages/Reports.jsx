@@ -10,7 +10,7 @@ import { cn } from "../lib/utils";
 const Reports = () => {
     const { user: currentUser } = useAuth();
     const [dateRange, setDateRange] = useState({ from: "", to: "" });
-    const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(currentUser?.role);
+    const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "MANAGER";
 
     const { data: leadsBySource, isLoading: loadingSource } = useQuery({
         queryKey: ["leads-by-source", dateRange],

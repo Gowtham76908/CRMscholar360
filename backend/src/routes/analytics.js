@@ -12,9 +12,9 @@ router.use(authMiddleware);
 router.get("/leaderboard", leaderboardController.getLeaderboard);
 
 // Team Performance (Admin Only)
-router.get("/team-performance", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), analyticsController.getTeamPerformance);
+router.get("/team-performance", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), analyticsController.getTeamPerformance);
 
 // Response Time Stats
-router.get("/response-time", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), analyticsController.getResponseTimeAnalytics);
+router.get("/response-time", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), analyticsController.getResponseTimeAnalytics);
 
 module.exports = router;

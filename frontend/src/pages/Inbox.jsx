@@ -4,7 +4,7 @@ import api from "../api/axios";
 import { cn } from "../lib/utils";
 import {
     Inbox, Clock, MessageSquare, ArrowRight, CheckCircle,
-    Phone, Bell, Sparkles, AlertCircle, User, Loader2,
+    Phone, Bell, Sparkles, AlertCircle, User, Loader2, ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -167,7 +167,7 @@ function WhatsAppItem({ msg }) {
                     {msg.lead?.name ?? msg.phone}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
-                    {msg.message?.slice(0, 80) ?? "WhatsApp reply"} · {relTime(msg.createdAt)}
+                    {(msg.replyText || msg.messageBody)?.slice(0, 80) ?? "WhatsApp reply"} · {relTime(msg.createdAt)}
                 </p>
             </div>
             {msg.lead?.id && (
@@ -178,6 +178,38 @@ function WhatsAppItem({ msg }) {
                     View <ArrowRight className="h-3 w-3" />
                 </Link>
             )}
+        </div>
+    );
+}
+
+// ─── SLA breach card ─────────────────────────────────────────────────────────
+
+function SLAItem({ lead, breachDays }) {
+    const ref = lead.lastActivityAt ?? lead.updatedAt;
+    const days = Math.floor((Date.now() - new Date(ref).getTime()) / 86_400_000);
+    return (
+        <div className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors group">
+            <div className="h-9 w-9 rounded-full bg-red-50 border border-red-100 flex items-center justify-center flex-shrink-0">
+                <ShieldAlert className="h-4 w-4 text-red-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{lead.name}</p>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">
+                        {days}d inactive
+                    </span>
+                </div>
+                <p className="text-xs text-gray-500 truncate">
+                    {lead.phone || lead.email || "No contact"} · {lead.status?.replace("_", " ")}
+                    {lead.assignedTo && ` · ${lead.assignedTo.name}`}
+                </p>
+            </div>
+            <Link
+                to={`/leads/${lead.id}`}
+                className="flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-800 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+            >
+                View <ArrowRight className="h-3 w-3" />
+            </Link>
         </div>
     );
 }
@@ -210,12 +242,20 @@ export default function InboxPage() {
         queryFn: () => api.get("/whatsapp/messages", { params: { direction: "inbound", limit: 10 } })
             .then(r => r.data.data || r.data || []),
         staleTime: 30_000,
-        // silently fail if endpoint doesn't exist
         retry: false,
         throwOnError: false,
     });
 
-    const totalCount = followUpLeads.length + reminders.length + waReplies.length;
+    const { data: slaData = { data: [], breachDays: 7 } } = useQuery({
+        queryKey: ["inbox-sla-alerts"],
+        queryFn: () => api.get("/leads/sla-alerts").then(r => r.data),
+        staleTime: 60_000,
+        retry: false,
+        throwOnError: false,
+    });
+    const slaLeads = slaData.data ?? [];
+
+    const totalCount = followUpLeads.length + reminders.length + waReplies.length + slaLeads.length;
     const isLoading = leadsLoading || remindersLoading;
 
     return (
@@ -248,6 +288,17 @@ export default function InboxPage() {
                     </div>
                 </div>
             )}
+
+            {/* SLA breached leads */}
+            <Section
+                icon={ShieldAlert}
+                title="SLA Breached"
+                count={slaLeads.length}
+                color="text-red-500"
+                empty={`No leads inactive for more than ${slaData.breachDays} days`}
+            >
+                {slaLeads.map(lead => <SLAItem key={lead.id} lead={lead} breachDays={slaData.breachDays} />)}
+            </Section>
 
             {/* Follow-up leads */}
             <Section

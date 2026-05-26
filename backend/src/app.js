@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const cookieParser = require("cookie-parser");
 
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/user");
@@ -42,8 +43,7 @@ app.use(helmet());
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin) return callback(null, true);
-        const isAllowed = allowedOrigins.includes(origin) || 
-                          origin.endsWith(".vercel.app") || 
+        const isAllowed = allowedOrigins.includes(origin) ||
                           origin.includes("localhost");
         if (isAllowed) {
             callback(null, true);
@@ -55,6 +55,7 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Serve static files from uploads directory
 app.use("/uploads", express.static("uploads"));
@@ -154,14 +155,23 @@ app.use("/api/ai",              require("./routes/ai"));
 app.use("/api/custom-fields",   require("./routes/customField"));
 app.use("/api/facebook",        require("./routes/facebook"));
 app.use("/api/integration-hub", require("./routes/integrationHub"));
+app.use("/api/organization",      require("./routes/organization"));
+app.use("/api/distribution",     require("./routes/distribution"));
+app.use("/api/team-performance", require("./routes/teamPerformance"));
+app.use("/api/employee-report",  require("./routes/employeeReport"));
+app.use("/api/deals",            require("./routes/deal"));
+app.use("/api/email-templates",  require("./routes/emailTemplates"));
+app.use("/api/leads/:id/journey", require("./routes/journey"));
 // Public — no auth middleware (email clients load pixel without session)
 app.use("/api/email-track",     require("./routes/emailTrack"));
 
 // Global error handler — must be last middleware
-app.use((err, req, res, next) => {
+const { ApiError } = require("./utils/apiError");
+app.use((err, req, res, _next) => {
     console.error(`[ERROR] ${req.method} ${req.url} —`, err.message);
+    if (err instanceof ApiError) return res.status(err.status).json(err.toJSON());
     res.status(err.status || 500).json({
-        error: err.message || "Something went wrong. Please try again.",
+        error: { code: "INTERNAL_ERROR", message: err.message || "Something went wrong." },
     });
 });
 

@@ -6,7 +6,6 @@ const { getProvider } = require("../services/providers/registry");
 
 const DEFAULTS = [
     { platform: "meta_leads",      label: "Meta Lead Ads" },
-    { platform: "whatsapp_wati",   label: "WhatsApp (WATI)" },
     { platform: "whatsapp_cloud",  label: "WhatsApp Cloud API" },
     { platform: "google_ads",      label: "Google Ads" },
     { platform: "email_smtp",      label: "Email / SMTP" },
@@ -17,33 +16,35 @@ const DEFAULTS = [
 
 // Providers that auto-connect after configure (no OAuth needed)
 const API_KEY_PROVIDERS = new Set([
-    "whatsapp_wati", "linkedin_serper", "salestrail", "website_webhook",
+    "linkedin_serper", "salestrail", "website_webhook",
     "meta_leads", "whatsapp_cloud", "google_ads",
 ]);
 
+let _defaultsSeeded = false;
+
 async function ensureDefaults() {
+    if (_defaultsSeeded) return;
     for (const d of DEFAULTS) {
-        const existing = await prisma.integration.findUnique({ where: { platform: d.platform } });
-        if (!existing) {
-            const createData = { platform: d.platform, isConnected: false };
-            // Auto-seed linkedin_serper from env if key is available
-            if (d.platform === "linkedin_serper" && process.env.SERPER_API_KEY) {
-                createData.config = { apiKey: encrypt(process.env.SERPER_API_KEY) };
-                createData.isConnected = true;
-            }
-            await prisma.integration.create({ data: createData });
-        } else if (d.platform === "linkedin_serper" && !existing.isConnected && process.env.SERPER_API_KEY) {
-            await prisma.integration.update({
-                where: { platform: d.platform },
-                data: { config: { apiKey: encrypt(process.env.SERPER_API_KEY) }, isConnected: true },
-            });
+        const createData = { platform: d.platform, isConnected: false };
+        if (d.platform === "linkedin_serper" && process.env.SERPER_API_KEY) {
+            createData.config = { apiKey: encrypt(process.env.SERPER_API_KEY) };
+            createData.isConnected = true;
         }
+        await prisma.integration.upsert({
+            where:  { platform: d.platform },
+            create: createData,
+            update: d.platform === "linkedin_serper" && process.env.SERPER_API_KEY
+                ? { config: { apiKey: encrypt(process.env.SERPER_API_KEY) }, isConnected: true }
+                : {},
+        });
     }
+    _defaultsSeeded = true;
 }
 
 function safeIntegration(i) {
-    // Strip encrypted fields before sending to client
-    const { accessToken, refreshToken, ...rest } = i;
+    // Strip all sensitive / encrypted fields before sending to client
+    // eslint-disable-next-line no-unused-vars
+    const { accessToken, refreshToken, config, ...rest } = i;
     return rest;
 }
 
@@ -304,4 +305,20 @@ const getLogs = async (req, res) => {
     }
 };
 
-module.exports = { getAll, startOAuth, oauthCallback, configure, testConnection, sync, disconnect, getLogs, ensureIntegrationDefaults: ensureDefaults };
+const getAllLogs = async (req, res) => {
+    const limit = Math.min(Number(req.query.limit) || 100, 500);
+    try {
+        const logs = await prisma.integrationLog.findMany({
+            orderBy: { createdAt: "desc" },
+            take: limit,
+            include: {
+                integration: { select: { platform: true, metadata: true } },
+            },
+        });
+        res.json(logs);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+module.exports = { getAll, startOAuth, oauthCallback, configure, testConnection, sync, disconnect, getLogs, getAllLogs, ensureIntegrationDefaults: ensureDefaults };

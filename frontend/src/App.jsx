@@ -35,6 +35,15 @@ import WhatsAppCampaigns from "./pages/WhatsAppCampaigns";
 import WhatsAppCampaignDetail from "./pages/WhatsAppCampaignDetail";
 import WhatsAppAutoReplies from "./pages/WhatsAppAutoReplies";
 import Duplicates from "./pages/Duplicates";
+import TeamManagement from "./pages/TeamManagement";
+import UnassignedLeads from "./pages/UnassignedLeads";
+import TeamPerformance from "./pages/TeamPerformance";
+import EmployeeReport from "./pages/EmployeeReport";
+import RevenueReport from "./pages/RevenueReport";
+import LeadJourney from "./pages/LeadJourney";
+import Deals from "./pages/Deals";
+import DealPipeline from "./pages/DealPipeline";
+import DealDetail from "./pages/DealDetail";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -42,7 +51,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      staleTime: 30_000,
+      staleTime: 0,
       refetchOnWindowFocus: false,
     },
     mutations: {
@@ -71,7 +80,11 @@ function App() {
             <Route path="/sprints" element={<Sprints />} />
             <Route path="/sprint-analytics/:id" element={<SprintAnalytics />} />
             <Route path="/leads" element={<Leads />} />
+            <Route path="/deals" element={<Deals />} />
+            <Route path="/deals/pipeline" element={<DealPipeline />} />
+            <Route path="/deals/:id" element={<DealDetail />} />
             <Route path="/leads/:id" element={<LeadDetail />} />
+            <Route path="/leads/:id/journey" element={<LeadJourney />} />
             <Route path="/team" element={<Team />} />
             <Route path="/inbox" element={<Inbox />} />
             <Route path="/tasks" element={<Tasks />} />
@@ -92,6 +105,11 @@ function App() {
             <Route path="/whatsapp/campaigns/:id" element={<WhatsAppCampaignDetail />} />
             <Route path="/whatsapp/auto-replies" element={<WhatsAppAutoReplies />} />
             <Route path="/duplicates" element={<Duplicates />} />
+            <Route path="/team-management" element={<TeamManagement />} />
+            <Route path="/unassigned-leads" element={<UnassignedLeads />} />
+            <Route path="/team-performance" element={<TeamPerformance />} />
+            <Route path="/employee-report/:id" element={<EmployeeReport />} />
+            <Route path="/revenue-report" element={<RevenueReport />} />
             <Route path="*" element={<NotFound />} />
           </Route>
 

@@ -1,5 +1,13 @@
 const prisma = require("../utils/prisma");
 const { sendInvoiceEmail } = require("../services/emailService");
+const logActivity = require("../utils/activityLogger");
+
+// Resolve leadId from an invoice's dealId (if any), for timeline logging
+async function getLeadIdFromInvoice(invoice) {
+    if (!invoice.dealId) return null;
+    const deal = await prisma.deal.findUnique({ where: { id: invoice.dealId }, select: { leadId: true } });
+    return deal?.leadId ?? null;
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -68,6 +76,7 @@ const createInvoice = async (req, res) => {
             items = [],
             dueDate,
             notes,
+            dealId,
         } = req.body;
 
         if (!clientName) return res.status(400).json({ message: "Client name is required" });
@@ -75,8 +84,6 @@ const createInvoice = async (req, res) => {
 
         const { processedItems, subtotal, cgst, sgst, igst, total } = computeInvoiceTotals(items);
 
-        // Transaction ensures counter increment and invoice row are committed together.
-        // If invoice creation fails for any reason, the counter rolls back — no gaps.
         const invoice = await prisma.$transaction(async (tx) => {
             const invoiceNumber = await generateInvoiceNumber(invoiceType, tx);
             return tx.invoice.create({
@@ -96,11 +103,24 @@ const createInvoice = async (req, res) => {
                     dueDate: dueDate ? new Date(dueDate) : null,
                     notes,
                     createdById: userId,
+                    dealId: dealId ?? null,
                     items: { create: processedItems },
                 },
                 include: { items: true, payments: true, createdBy: { select: { id: true, name: true } } },
             });
         });
+
+        if (invoice.dealId) {
+            const leadId = await getLeadIdFromInvoice(invoice);
+            if (leadId) {
+                await logActivity({
+                    leadId,
+                    userId,
+                    action: "INVOICE_CREATED",
+                    metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, amount: invoice.total },
+                });
+            }
+        }
 
         res.status(201).json(invoice);
     } catch (error) {
@@ -110,10 +130,11 @@ const createInvoice = async (req, res) => {
 
 const getInvoices = async (req, res) => {
     try {
-        const { status, type } = req.query;
-        const where = {};
+        const { status, type, dealId } = req.query;
+        const where = { deletedAt: null };
         if (status) where.status = status;
         if (type) where.invoiceType = type;
+        if (dealId) where.dealId = dealId;
 
         const invoices = await prisma.invoice.findMany({
             where,
@@ -138,9 +159,10 @@ const getInvoices = async (req, res) => {
 };
 
 const getInvoice = async (req, res) => {
+    // Soft-deleted invoices are treated as not found for regular access
     try {
         const invoice = await prisma.invoice.findUnique({
-            where: { id: req.params.id },
+            where: { id: req.params.id, deletedAt: null },
             include: {
                 items: true,
                 payments: { orderBy: { paymentDate: "desc" } },
@@ -189,6 +211,18 @@ const updateInvoice = async (req, res) => {
             include: { items: true, payments: true, createdBy: { select: { id: true, name: true } } },
         });
 
+        if (invoice.dealId) {
+            const leadId = await getLeadIdFromInvoice(invoice);
+            if (leadId) {
+                await logActivity({
+                    leadId,
+                    userId: req.user.userId,
+                    action: "INVOICE_UPDATED",
+                    metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, changes: req.body },
+                });
+            }
+        }
+
         res.json(invoice);
     } catch (error) {
         res.status(500).json({ message: "Error updating invoice", error: error.message });
@@ -197,10 +231,13 @@ const updateInvoice = async (req, res) => {
 
 const deleteInvoice = async (req, res) => {
     try {
-        const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
+        const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id, deletedAt: null } });
         if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+        if (invoice.status === "PAID") {
+            return res.status(409).json({ message: "Paid invoices cannot be deleted. Cancel it first." });
+        }
 
-        await prisma.invoice.delete({ where: { id: req.params.id } });
+        await prisma.invoice.update({ where: { id: req.params.id }, data: { deletedAt: new Date() } });
         res.json({ message: "Invoice deleted successfully" });
     } catch (error) {
         res.status(500).json({ message: "Error deleting invoice", error: error.message });
@@ -269,6 +306,24 @@ const addPayment = async (req, res) => {
 
         await prisma.invoice.update({ where: { id }, data: { status: newStatus } });
 
+        if (type === "CREDIT" && invoice.dealId) {
+            const leadId = await getLeadIdFromInvoice(invoice);
+            if (leadId) {
+                await logActivity({
+                    leadId,
+                    userId: req.user.userId,
+                    action: "PAYMENT_RECEIVED",
+                    metadata: {
+                        invoiceId: id,
+                        invoiceNumber: invoice.invoiceNumber,
+                        amount: parseFloat(amount),
+                        totalPaid: parseFloat(totalPaid.toFixed(2)),
+                        status: newStatus,
+                    },
+                });
+            }
+        }
+
         res.status(201).json({ payment, totalPaid: parseFloat(totalPaid.toFixed(2)), balance: parseFloat((invoice.total - totalPaid).toFixed(2)), status: newStatus });
     } catch (error) {
         res.status(500).json({ message: "Error recording payment", error: error.message });
@@ -297,22 +352,51 @@ const deletePayment = async (req, res) => {
 
 const getBalanceSheet = async (req, res) => {
     try {
-        const invoices = await prisma.invoice.findMany({
-            where: { status: { not: "CANCELLED" } },
-            include: { payments: true },
-            orderBy: { createdAt: "desc" },
-        });
+        const page  = Math.max(1, parseInt(req.query.page  ?? 1));
+        const limit = Math.min(200, Math.max(1, parseInt(req.query.limit ?? 50)));
+        const skip  = (page - 1) * limit;
+        const where = { status: { not: "CANCELLED" }, deletedAt: null };
+        const now   = new Date();
 
-        let totalInvoiced = 0;
-        let totalReceived = 0;
-        let totalOutstanding = 0;
+        // Aggregate summary entirely in the DB — avoids loading all invoices into JS
+        const [agg, statusCounts, overdueCount, total, pageInvoices] = await Promise.all([
+            prisma.$queryRaw`
+                SELECT
+                    COALESCE(SUM(i.total), 0)                                          AS "totalInvoiced",
+                    COALESCE(SUM(p.credit), 0)                                         AS "totalReceived"
+                FROM "Invoice" i
+                LEFT JOIN LATERAL (
+                    SELECT COALESCE(SUM(pe.amount) FILTER (WHERE pe.type = 'CREDIT'), 0) AS credit
+                    FROM "PaymentEntry" pe WHERE pe."invoiceId" = i.id
+                ) p ON true
+                WHERE i.status != 'CANCELLED'
+            `,
+            prisma.invoice.groupBy({
+                by: ["status"],
+                where,
+                _count: { status: true },
+            }),
+            prisma.invoice.count({
+                where: { ...where, dueDate: { lt: now }, status: { notIn: ["PAID", "CANCELLED"] } },
+            }),
+            prisma.invoice.count({ where }),
+            prisma.invoice.findMany({
+                where,
+                include: { payments: true },
+                orderBy: { createdAt: "desc" },
+                skip,
+                take: limit,
+            }),
+        ]);
 
-        const ledger = invoices.map((inv) => {
+        const totalInvoiced    = parseFloat(Number(agg[0]?.totalInvoiced ?? 0).toFixed(2));
+        const totalReceived    = parseFloat(Number(agg[0]?.totalReceived ?? 0).toFixed(2));
+        const totalOutstanding = parseFloat((totalInvoiced - totalReceived).toFixed(2));
+        const paidCount        = statusCounts.find(s => s.status === "PAID")?._count?.status ?? 0;
+        const partialCount     = statusCounts.find(s => s.status === "PARTIALLY_PAID")?._count?.status ?? 0;
+
+        const ledger = pageInvoices.map((inv) => {
             const { totalPaid } = getPaymentSummary(inv.payments);
-            const balance = inv.total - totalPaid;
-            totalInvoiced += inv.total;
-            totalReceived += totalPaid;
-            totalOutstanding += balance;
             return {
                 id: inv.id,
                 invoiceNumber: inv.invoiceNumber,
@@ -322,26 +406,29 @@ const getBalanceSheet = async (req, res) => {
                 dueDate: inv.dueDate,
                 total: inv.total,
                 totalPaid: parseFloat(totalPaid.toFixed(2)),
-                balance: parseFloat(balance.toFixed(2)),
+                balance: parseFloat((inv.total - totalPaid).toFixed(2)),
                 status: inv.status,
                 payments: inv.payments,
             };
         });
 
         res.json({
-            summary: {
-                totalInvoiced: parseFloat(totalInvoiced.toFixed(2)),
-                totalReceived: parseFloat(totalReceived.toFixed(2)),
-                totalOutstanding: parseFloat(totalOutstanding.toFixed(2)),
-                invoiceCount: invoices.length,
-                paidCount: invoices.filter((i) => i.status === "PAID").length,
-                partialCount: invoices.filter((i) => i.status === "PARTIALLY_PAID").length,
-                overdueCount: invoices.filter((i) => i.dueDate && new Date(i.dueDate) < new Date() && i.status !== "PAID").length,
-            },
+            summary: { totalInvoiced, totalReceived, totalOutstanding, invoiceCount: total, paidCount, partialCount, overdueCount },
             ledger,
+            pagination: { page, limit, total, pages: Math.ceil(total / limit) },
         });
     } catch (error) {
         res.status(500).json({ message: "Error fetching balance sheet", error: error.message });
+    }
+};
+
+const getInvoiceStats = async (req, res) => {
+    try {
+        const { getRevenueStats } = require("../services/dealService");
+        const stats = await getRevenueStats();
+        res.json(stats);
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching invoice stats", error: error.message });
     }
 };
 
@@ -355,4 +442,7 @@ module.exports = {
     addPayment,
     deletePayment,
     getBalanceSheet,
+    getInvoiceStats,
+    computeInvoiceTotals,
+    generateInvoiceNumber,
 };

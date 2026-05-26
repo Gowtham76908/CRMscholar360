@@ -5,7 +5,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import api from "../api/axios";
-import { Loader2, User, Bell, Lock, Download, Trash2, Save, Shield, Smartphone, Eye, EyeOff, Camera, X, CheckCircle, Mail, SlidersHorizontal, Facebook, Plus, RefreshCw, Link2Off } from "lucide-react";
+import {
+    Loader2, User, Bell, Lock, Download, Trash2, Save, Shield, Smartphone,
+    Eye, EyeOff, Camera, X, CheckCircle, Mail, Layers, Plus, GripVertical, Clock,
+} from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import AuditLogs from "../components/AuditLogs";
 import SessionManager from "../components/SessionManager";
@@ -38,21 +41,21 @@ const inputCls = (disabled) => cn(
 );
 
 const TABS = [
-    { id: "profile",       icon: User,       label: "Profile" },
-    { id: "security",      icon: Lock,       label: "Security" },
-    { id: "notifications", icon: Bell,       label: "Notifications" },
-    { id: "data",          icon: Download,   label: "Data Export" },
+    { id: "profile",       icon: User,     label: "Profile" },
+    { id: "security",      icon: Lock,     label: "Security" },
+    { id: "notifications", icon: Bell,     label: "Notifications" },
+    { id: "data",          icon: Download, label: "Data Export" },
 ];
 
 const ADMIN_TABS = [
-    { id: "email",         icon: Mail,               label: "Email (SMTP)" },
-    { id: "custom-fields", icon: SlidersHorizontal,  label: "Custom Fields" },
-    { id: "facebook",      icon: Facebook,            label: "Facebook Leads" },
-    { id: "audit",         icon: Shield,              label: "Audit Logs" },
-    { id: "sessions",      icon: Smartphone,          label: "Sessions" },
+    { id: "email",       icon: Mail,       label: "Email (SMTP)" },
+    { id: "lead-fields", icon: Layers,     label: "Lead Fields" },
+    { id: "lead-sla",    icon: Clock,      label: "Lead SLA" },
+    { id: "audit",       icon: Shield,     label: "Audit Logs" },
+    { id: "sessions",    icon: Smartphone, label: "Sessions" },
 ];
 
-// ─── SMTP Settings Panel ─────────────────────────────────────────────────────
+// ─── SMTP Settings ────────────────────────────────────────────────────────────
 
 function SmtpSettings() {
     const { data: existing, isLoading } = useQuery({
@@ -118,7 +121,6 @@ function SmtpSettings() {
                 </h2>
                 <p className="text-sm text-gray-400 mt-0.5">Configure the mail server used to send emails from lead context.</p>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
                 <Field label="SMTP Host">
                     <input className={inputCls(false)} placeholder="smtp.gmail.com" value={form.smtpHost} onChange={(e) => set({ smtpHost: e.target.value })} />
@@ -132,7 +134,7 @@ function SmtpSettings() {
                 <Field label="Password / App Password">
                     <input className={inputCls(false)} type="password" placeholder="••••••••••••" value={form.smtpPass} onChange={(e) => set({ smtpPass: e.target.value })} />
                 </Field>
-                <Field label='From Name (shown as sender)'>
+                <Field label="From Name (shown as sender)">
                     <input className={inputCls(false)} placeholder="Your Company CRM" value={form.smtpFrom} onChange={(e) => set({ smtpFrom: e.target.value })} />
                 </Field>
                 <Field label="Secure (SSL/TLS — use for port 465)">
@@ -148,7 +150,6 @@ function SmtpSettings() {
                     </div>
                 </Field>
             </div>
-
             <div className="border-t border-gray-100 pt-4 space-y-3">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Test Connection</p>
                 <div className="flex gap-3">
@@ -167,7 +168,6 @@ function SmtpSettings() {
                     </button>
                 </div>
             </div>
-
             <div className="flex justify-end">
                 <button
                     onClick={() => save.mutate()}
@@ -182,19 +182,200 @@ function SmtpSettings() {
     );
 }
 
-// ─── Custom Fields Panel ──────────────────────────────────────────────────────
+// ─── Lead Fields Panel ────────────────────────────────────────────────────────
 
-const FIELD_TYPES = ["TEXT", "NUMBER", "SELECT", "DATE", "CHECKBOX"];
+const FIELD_TYPE_LABELS = {
+    TEXT: "Text", TEXTAREA: "Text Area", NUMBER: "Number",
+    SELECT: "Dropdown", DATE: "Date", CHECKBOX: "Checkbox",
+};
 
-function CustomFieldsSettings() {
+const CUSTOM_FIELD_TYPES = ["TEXT", "TEXTAREA", "NUMBER", "SELECT", "DATE", "CHECKBOX"];
+
+function Toggle({ checked, onChange }) {
+    return (
+        <button
+            type="button"
+            onClick={() => onChange(!checked)}
+            className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${checked ? "bg-indigo-500" : "bg-gray-200"}`}
+        >
+            <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
+        </button>
+    );
+}
+
+function FieldRow({ field, onUpdate, onDelete }) {
+    const [editing, setEditing] = useState(false);
+    const [label, setLabel] = useState(field.name);
     const qc = useQueryClient();
-    const [form, setForm] = useState({ name: "", fieldKey: "", type: "TEXT", options: "", required: false, order: 0 });
+
+    const update = useMutation({
+        mutationFn: (data) => api.patch(`/custom-fields/${field.id}`, data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["lead-fields"] }),
+        onError: (e) => toast.error(e.response?.data?.message || "Failed to update field"),
+    });
+
+    const handleLabelSave = () => {
+        if (label.trim() && label !== field.name) update.mutate({ name: label.trim() });
+        setEditing(false);
+    };
+
+    const handleVisibleToggle = () => update.mutate({ visible: !field.visible });
+    const handleRequiredToggle = () => update.mutate({ required: !field.required });
+
+    return (
+        <div className={cn(
+            "flex items-center gap-3 p-3 rounded-xl border transition-colors",
+            field.visible ? "border-gray-100 bg-white" : "border-gray-100 bg-gray-50 opacity-60"
+        )}>
+            <GripVertical className="h-4 w-4 text-gray-300 flex-shrink-0" />
+
+            {/* Type badge */}
+            <div className="h-7 w-7 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                style={{ background: field.isSystem ? "#EEF2FF" : "#F3F4F6", color: field.isSystem ? "#4F46E5" : "#6B7280" }}>
+                {field.isSystem ? "SYS" : (FIELD_TYPE_LABELS[field.type]?.[0] ?? "?")}
+            </div>
+
+            {/* Label */}
+            <div className="flex-1 min-w-0">
+                {editing ? (
+                    <input
+                        autoFocus
+                        value={label}
+                        onChange={e => setLabel(e.target.value)}
+                        onBlur={handleLabelSave}
+                        onKeyDown={e => { if (e.key === "Enter") handleLabelSave(); if (e.key === "Escape") { setLabel(field.name); setEditing(false); } }}
+                        className="w-full text-sm font-semibold text-gray-900 border-b border-indigo-400 outline-none bg-transparent"
+                    />
+                ) : (
+                    <button onClick={() => setEditing(true)} className="text-sm font-semibold text-gray-900 hover:text-indigo-600 text-left truncate w-full">
+                        {field.name}
+                    </button>
+                )}
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                    {field.fieldKey} · {FIELD_TYPE_LABELS[field.type] ?? field.type}
+                    {field.isSystem && " · system"}
+                </p>
+            </div>
+
+            {/* Controls */}
+            <div className="flex items-center gap-4 flex-shrink-0">
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-gray-400">Required</span>
+                    <Toggle checked={field.required} onChange={handleRequiredToggle} />
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-gray-400">Visible</span>
+                    <Toggle checked={field.visible} onChange={handleVisibleToggle} />
+                </div>
+                {!field.isSystem && (
+                    <button
+                        onClick={() => onDelete(field)}
+                        className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ─── Lead SLA Settings ────────────────────────────────────────────────────────
+
+function SlaSettings() {
+    const { data: existing, isLoading } = useQuery({
+        queryKey: ["company-settings"],
+        queryFn: () => api.get("/company-settings").then((r) => r.data),
+    });
+
+    const [form, setForm] = useState({ slaWarningDays: 3, slaBreachDays: 7 });
+
+    useEffect(() => {
+        if (existing) {
+            setForm({
+                slaWarningDays: existing.slaWarningDays ?? 3,
+                slaBreachDays:  existing.slaBreachDays  ?? 7,
+            });
+        }
+    }, [existing]);
+
+    const save = useMutation({
+        mutationFn: () => api.patch("/company-settings", {
+            slaWarningDays: Number(form.slaWarningDays),
+            slaBreachDays:  Number(form.slaBreachDays),
+        }),
+        onSuccess: () => toast.success("SLA thresholds saved"),
+        onError:   () => toast.error("Failed to save"),
+    });
+
+    if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-indigo-400" /></div>;
+
+    return (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-6">
+            <div>
+                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-indigo-500" /> Lead SLA Thresholds
+                </h2>
+                <p className="text-sm text-gray-400 mt-0.5">
+                    Leads in NEW / CONTACTED / FOLLOW_UP status with no update beyond these thresholds will show SLA badges.
+                </p>
+            </div>
+            <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        Warning threshold (days)
+                    </label>
+                    <input
+                        type="number"
+                        min="1"
+                        max="365"
+                        className={inputCls(false)}
+                        value={form.slaWarningDays}
+                        onChange={(e) => setForm((f) => ({ ...f, slaWarningDays: e.target.value }))}
+                    />
+                    <p className="text-xs text-amber-600">Shows an amber "Xd" badge on the lead card.</p>
+                </div>
+                <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        Breach threshold (days)
+                    </label>
+                    <input
+                        type="number"
+                        min="1"
+                        max="365"
+                        className={inputCls(false)}
+                        value={form.slaBreachDays}
+                        onChange={(e) => setForm((f) => ({ ...f, slaBreachDays: e.target.value }))}
+                    />
+                    <p className="text-xs text-red-500">Shows a red "SLA" badge and a red card border.</p>
+                </div>
+            </div>
+            <div className="flex justify-end">
+                <button
+                    onClick={() => save.mutate()}
+                    disabled={save.isPending}
+                    className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+                >
+                    {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Save SLA Settings
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function LeadFieldsSettings() {
+    const qc = useQueryClient();
     const [showAdd, setShowAdd] = useState(false);
+    const [form, setForm] = useState({ name: "", fieldKey: "", type: "TEXT", options: "", required: false });
 
     const { data: fields = [], isLoading } = useQuery({
-        queryKey: ["custom-fields"],
+        queryKey: ["lead-fields"],
         queryFn: () => api.get("/custom-fields").then(r => r.data),
     });
+
+    const systemFields = fields.filter(f => f.isSystem);
+    const customFields = fields.filter(f => !f.isSystem);
 
     const autoKey = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 
@@ -207,12 +388,12 @@ function CustomFieldsSettings() {
                 ? form.options.split(",").map(o => o.trim()).filter(Boolean)
                 : null,
             required: form.required,
-            order: parseInt(form.order) || 0,
+            order: customFields.length + 100,
         }),
         onSuccess: () => {
-            toast.success("Custom field created");
-            qc.invalidateQueries({ queryKey: ["custom-fields"] });
-            setForm({ name: "", fieldKey: "", type: "TEXT", options: "", required: false, order: 0 });
+            toast.success("Field created");
+            qc.invalidateQueries({ queryKey: ["lead-fields"] });
+            setForm({ name: "", fieldKey: "", type: "TEXT", options: "", required: false });
             setShowAdd(false);
         },
         onError: (e) => toast.error(e.response?.data?.message || "Failed to create field"),
@@ -222,69 +403,82 @@ function CustomFieldsSettings() {
         mutationFn: (id) => api.delete(`/custom-fields/${id}`),
         onSuccess: () => {
             toast.success("Field deleted");
-            qc.invalidateQueries({ queryKey: ["custom-fields"] });
+            qc.invalidateQueries({ queryKey: ["lead-fields"] });
         },
         onError: () => toast.error("Failed to delete field"),
     });
 
+    const handleDelete = (field) => {
+        if (confirm(`Delete field "${field.name}"? This removes it from all leads.`)) del.mutate(field.id);
+    };
+
     if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-indigo-400" /></div>;
 
     return (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="space-y-6">
+            {/* System Fields */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-4">
                 <div>
                     <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                        <SlidersHorizontal className="h-4 w-4 text-indigo-500" /> Custom Fields
+                        <Layers className="h-4 w-4 text-indigo-500" /> System Fields
                     </h2>
-                    <p className="text-sm text-gray-400 mt-0.5">Add extra data fields that appear on every lead.</p>
+                    <p className="text-sm text-gray-400 mt-0.5">
+                        Built-in lead fields. Toggle visibility and required state, or rename the label.
+                        Click a label to rename it inline.
+                    </p>
                 </div>
-                <button
-                    onClick={() => setShowAdd(v => !v)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-700 transition-colors"
-                >
-                    <Plus className="h-3.5 w-3.5" /> Add Field
-                </button>
+                <div className="space-y-2">
+                    {systemFields.map(f => (
+                        <FieldRow key={f.id} field={f} onDelete={handleDelete} />
+                    ))}
+                </div>
             </div>
 
-            {showAdd && (
-                <div className="border border-indigo-100 rounded-xl p-4 bg-indigo-50/40 space-y-3">
-                    <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider">New Field</p>
-                    <div className="grid grid-cols-2 gap-3">
-                        <Field label="Display Name">
-                            <input
-                                className={inputCls(false)}
-                                placeholder="e.g. Budget Range"
-                                value={form.name}
-                                onChange={e => setForm(f => ({ ...f, name: e.target.value, fieldKey: autoKey(e.target.value) }))}
-                            />
-                        </Field>
-                        <Field label="Field Key (auto)">
-                            <input
-                                className={inputCls(false)}
-                                placeholder="budget_range"
-                                value={form.fieldKey}
-                                onChange={e => setForm(f => ({ ...f, fieldKey: e.target.value }))}
-                            />
-                        </Field>
-                        <Field label="Type">
-                            <select
-                                className={inputCls(false)}
-                                value={form.type}
-                                onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-                            >
-                                {FIELD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                        </Field>
-                        <Field label="Order">
-                            <input
-                                type="number"
-                                className={inputCls(false)}
-                                value={form.order}
-                                onChange={e => setForm(f => ({ ...f, order: e.target.value }))}
-                            />
-                        </Field>
-                        {form.type === "SELECT" && (
-                            <div className="col-span-2">
+            {/* Custom Fields */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h2 className="text-base font-bold text-gray-900">Custom Fields</h2>
+                        <p className="text-sm text-gray-400 mt-0.5">Additional fields stored on each lead. Full control over type and options.</p>
+                    </div>
+                    <button
+                        onClick={() => setShowAdd(v => !v)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-700 transition-colors"
+                    >
+                        <Plus className="h-3.5 w-3.5" /> Add Field
+                    </button>
+                </div>
+
+                {showAdd && (
+                    <div className="border border-indigo-100 rounded-xl p-4 bg-indigo-50/40 space-y-3">
+                        <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider">New Custom Field</p>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Field label="Display Name">
+                                <input
+                                    className={inputCls(false)}
+                                    placeholder="e.g. Budget Range"
+                                    value={form.name}
+                                    onChange={e => setForm(f => ({ ...f, name: e.target.value, fieldKey: autoKey(e.target.value) }))}
+                                />
+                            </Field>
+                            <Field label="Field Key (auto)">
+                                <input
+                                    className={inputCls(false)}
+                                    placeholder="budget_range"
+                                    value={form.fieldKey}
+                                    onChange={e => setForm(f => ({ ...f, fieldKey: e.target.value }))}
+                                />
+                            </Field>
+                            <Field label="Type">
+                                <select
+                                    className={inputCls(false)}
+                                    value={form.type}
+                                    onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+                                >
+                                    {CUSTOM_FIELD_TYPES.map(t => <option key={t} value={t}>{FIELD_TYPE_LABELS[t]}</option>)}
+                                </select>
+                            </Field>
+                            {form.type === "SELECT" && (
                                 <Field label="Options (comma-separated)">
                                     <input
                                         className={inputCls(false)}
@@ -293,256 +487,44 @@ function CustomFieldsSettings() {
                                         onChange={e => setForm(f => ({ ...f, options: e.target.value }))}
                                     />
                                 </Field>
-                            </div>
-                        )}
-                        <div className="col-span-2 flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                id="cf-required"
-                                checked={form.required}
-                                onChange={e => setForm(f => ({ ...f, required: e.target.checked }))}
-                                className="rounded"
-                            />
-                            <label htmlFor="cf-required" className="text-sm text-gray-700">Required field</label>
-                        </div>
-                    </div>
-                    <div className="flex justify-end gap-2">
-                        <button onClick={() => setShowAdd(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
-                        <button
-                            onClick={() => create.mutate()}
-                            disabled={create.isPending || !form.name}
-                            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors"
-                        >
-                            {create.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                            Save Field
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {fields.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-6">No custom fields yet. Click "Add Field" to create one.</p>
-            ) : (
-                <div className="space-y-2">
-                    {fields.map(f => (
-                        <div key={f.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 hover:bg-gray-50">
-                            <div className="flex items-center gap-3">
-                                <div className="h-7 w-7 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 text-xs font-bold">
-                                    {f.type.charAt(0)}
-                                </div>
-                                <div>
-                                    <p className="text-sm font-semibold text-gray-900">{f.name}</p>
-                                    <p className="text-xs text-gray-400">{f.fieldKey} · {f.type}{f.required ? " · Required" : ""}</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => {
-                                    if (confirm(`Delete field "${f.name}"? This removes it from all leads.`)) {
-                                        del.mutate(f.id);
-                                    }
-                                }}
-                                className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                            >
-                                <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-// ─── Facebook Lead Ads Panel ──────────────────────────────────────────────────
-
-function FacebookSettings() {
-    const qc = useQueryClient();
-    const [tokenInput, setTokenInput] = useState("");
-    const [pageIdInput, setPageIdInput] = useState("");
-    const [selectedForm, setSelectedForm] = useState("");
-    const [syncing, setSyncing] = useState(false);
-    const [syncResult, setSyncResult] = useState(null);
-
-    const { data: status, isLoading: statusLoading } = useQuery({
-        queryKey: ["fb-status"],
-        queryFn: () => api.get("/facebook/status").then(r => r.data),
-    });
-
-    const { data: forms = [], isLoading: formsLoading, refetch: refetchForms } = useQuery({
-        queryKey: ["fb-forms"],
-        queryFn: () => api.get("/facebook/forms").then(r => r.data),
-        enabled: status?.connected === true,
-        retry: false,
-    });
-
-    const connect = useMutation({
-        mutationFn: () => api.post("/facebook/connect", { accessToken: tokenInput, pageId: pageIdInput }),
-        onSuccess: () => {
-            toast.success("Facebook connected successfully");
-            qc.invalidateQueries({ queryKey: ["fb-status"] });
-            qc.invalidateQueries({ queryKey: ["fb-forms"] });
-            setTokenInput(""); setPageIdInput("");
-        },
-        onError: (e) => toast.error(e.response?.data?.message || "Connection failed"),
-    });
-
-    const disconnectMut = useMutation({
-        mutationFn: () => api.post("/facebook/disconnect"),
-        onSuccess: () => {
-            toast.success("Disconnected");
-            qc.invalidateQueries({ queryKey: ["fb-status"] });
-            qc.invalidateQueries({ queryKey: ["fb-forms"] });
-            setSyncResult(null);
-        },
-        onError: () => toast.error("Failed to disconnect"),
-    });
-
-    const handleSync = async () => {
-        if (!selectedForm) return toast.error("Select a form first");
-        setSyncing(true); setSyncResult(null);
-        try {
-            const { data } = await api.post("/facebook/sync", { formId: selectedForm });
-            setSyncResult(data);
-            qc.invalidateQueries({ queryKey: ["leads"] });
-            toast.success(`Imported ${data.imported} leads`);
-        } catch (e) {
-            toast.error(e.response?.data?.message || "Sync failed");
-        } finally {
-            setSyncing(false);
-        }
-    };
-
-    if (statusLoading) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-indigo-400" /></div>;
-
-    return (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-6">
-            <div>
-                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                    <Facebook className="h-4 w-4 text-blue-600" /> Facebook Lead Ads
-                </h2>
-                <p className="text-sm text-gray-400 mt-0.5">Import leads from your Meta Lead Gen forms directly into the CRM.</p>
-            </div>
-
-            {!status?.connected ? (
-                <div className="space-y-4">
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-700 space-y-1">
-                        <p className="font-semibold">Setup instructions:</p>
-                        <ol className="list-decimal list-inside space-y-1 text-xs">
-                            <li>Go to Meta Business Suite → Integrations → CRM (or use a Page Access Token)</li>
-                            <li>Generate a <strong>Page Access Token</strong> with <code>leads_retrieval</code> permission</li>
-                            <li>Copy your Facebook <strong>Page ID</strong> (found in Page settings)</li>
-                            <li>Paste both below and click Connect</li>
-                        </ol>
-                    </div>
-                    <Field label="Page Access Token">
-                        <input
-                            className={inputCls(false)}
-                            type="password"
-                            placeholder="EAAxxxxxxxxxxxxxxxxx..."
-                            value={tokenInput}
-                            onChange={e => setTokenInput(e.target.value)}
-                        />
-                    </Field>
-                    <Field label="Facebook Page ID">
-                        <input
-                            className={inputCls(false)}
-                            placeholder="123456789012345"
-                            value={pageIdInput}
-                            onChange={e => setPageIdInput(e.target.value)}
-                        />
-                    </Field>
-                    <button
-                        onClick={() => connect.mutate()}
-                        disabled={connect.isPending || !tokenInput || !pageIdInput}
-                        className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-40 transition-colors"
-                    >
-                        {connect.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2Off className="h-4 w-4" />}
-                        Connect Facebook
-                    </button>
-                </div>
-            ) : (
-                <div className="space-y-5">
-                    <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
-                        <div>
-                            <p className="text-sm font-semibold text-emerald-800">Connected · Page ID: {status.pageId}</p>
-                            {status.lastSynced && (
-                                <p className="text-xs text-emerald-600 mt-0.5">
-                                    Last synced {new Date(status.lastSynced).toLocaleString("en-IN")}
-                                </p>
                             )}
+                            <div className="flex items-center gap-2 col-span-2">
+                                <input type="checkbox" id="cf-req" checked={form.required}
+                                    onChange={e => setForm(f => ({ ...f, required: e.target.checked }))} className="rounded" />
+                                <label htmlFor="cf-req" className="text-sm text-gray-700">Required field</label>
+                            </div>
                         </div>
-                        <button
-                            onClick={() => disconnectMut.mutate()}
-                            disabled={disconnectMut.isPending}
-                            className="text-xs text-red-500 hover:underline font-semibold"
-                        >
-                            Disconnect
-                        </button>
-                    </div>
-
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold text-gray-700">Lead Gen Forms</p>
-                            <button onClick={() => refetchForms()} className="text-xs text-indigo-500 hover:underline flex items-center gap-1">
-                                <RefreshCw className="h-3 w-3" /> Refresh
+                        <div className="flex justify-end gap-2">
+                            <button onClick={() => setShowAdd(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
+                            <button
+                                onClick={() => create.mutate()}
+                                disabled={create.isPending || !form.name}
+                                className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+                            >
+                                {create.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                                Save Field
                             </button>
                         </div>
-
-                        {formsLoading ? (
-                            <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
-                                <Loader2 className="h-4 w-4 animate-spin" /> Loading forms…
-                            </div>
-                        ) : forms.length === 0 ? (
-                            <p className="text-sm text-gray-400">No lead gen forms found on this page.</p>
-                        ) : (
-                            <div className="space-y-1.5">
-                                {forms.map(f => (
-                                    <label key={f.id} className={cn(
-                                        "flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-colors",
-                                        selectedForm === f.id ? "border-blue-400 bg-blue-50" : "border-gray-100 hover:border-gray-300"
-                                    )}>
-                                        <div className="flex items-center gap-3">
-                                            <input type="radio" name="fb-form" value={f.id} checked={selectedForm === f.id}
-                                                onChange={() => setSelectedForm(f.id)} className="accent-blue-600" />
-                                            <div>
-                                                <p className="text-sm font-semibold text-gray-900">{f.name}</p>
-                                                <p className="text-xs text-gray-400">{f.leads_count ?? "?"} leads · {f.id}</p>
-                                            </div>
-                                        </div>
-                                    </label>
-                                ))}
-                            </div>
-                        )}
-
-                        <button
-                            onClick={handleSync}
-                            disabled={syncing || !selectedForm}
-                            className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-40 transition-colors"
-                        >
-                            {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                            Sync Leads Now
-                        </button>
-
-                        {syncResult && (
-                            <div className="grid grid-cols-3 gap-3 mt-2">
-                                {[
-                                    { label: "Imported",   value: syncResult.imported,   color: "bg-emerald-50 text-emerald-700 border-emerald-100" },
-                                    { label: "Duplicates", value: syncResult.duplicates,  color: "bg-amber-50 text-amber-700 border-amber-100" },
-                                    { label: "Failed",     value: syncResult.failed,      color: "bg-red-50 text-red-700 border-red-100" },
-                                ].map(({ label, value, color }) => (
-                                    <div key={label} className={`rounded-xl border p-3 text-center ${color}`}>
-                                        <p className="text-2xl font-black">{value}</p>
-                                        <p className="text-xs font-semibold">{label}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
                     </div>
-                </div>
-            )}
+                )}
+
+                {customFields.length === 0 && !showAdd ? (
+                    <p className="text-sm text-gray-400 text-center py-6">
+                        No custom fields yet. Click "Add Field" to create your first one.
+                    </p>
+                ) : (
+                    <div className="space-y-2">
+                        {customFields.map(f => (
+                            <FieldRow key={f.id} field={f} onDelete={handleDelete} />
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
+
+// ─── Main Settings Component ──────────────────────────────────────────────────
 
 const Settings = () => {
     const { user, refreshUser } = useAuth();
@@ -644,7 +626,7 @@ const Settings = () => {
 
     const allTabs = [
         ...TABS,
-        ...(["ADMIN", "SUPER_ADMIN"].includes(user?.role) ? ADMIN_TABS : []),
+        ...(user?.role === "SUPER_ADMIN" ? ADMIN_TABS : []),
         { id: "danger", icon: Trash2, label: "Danger Zone", danger: true },
     ];
 
@@ -652,11 +634,10 @@ const Settings = () => {
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Settings</h1>
-                <p className="text-sm text-gray-500">Manage your account preferences</p>
+                <p className="text-sm text-gray-500">Manage your account and workspace preferences</p>
             </div>
 
             <div className="flex flex-col md:flex-row gap-6">
-                {/* Sidebar */}
                 <nav className="md:w-52 flex-shrink-0">
                     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-2 space-y-0.5">
                         {allTabs.map(tab => (
@@ -677,9 +658,7 @@ const Settings = () => {
                     </div>
                 </nav>
 
-                {/* Content */}
                 <div className="flex-1 min-w-0">
-                    {/* Feedback banner */}
                     {message.text && (
                         <div className={cn(
                             "mb-4 flex items-center gap-2 p-3.5 rounded-xl text-sm font-medium",
@@ -690,7 +669,6 @@ const Settings = () => {
                         </div>
                     )}
 
-                    {/* Profile */}
                     {activeTab === "profile" && (
                         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-6">
                             <div className="flex items-center justify-between">
@@ -701,8 +679,6 @@ const Settings = () => {
                                     </button>
                                 )}
                             </div>
-
-                            {/* Avatar */}
                             <div className="flex items-center gap-5 pb-5 border-b border-gray-100">
                                 <div className="relative">
                                     {photoPreview
@@ -730,8 +706,6 @@ const Settings = () => {
                                     )}
                                 </div>
                             </div>
-
-                            {/* Form */}
                             <form onSubmit={handleProfileSubmit(onProfileSubmit)} className="space-y-4">
                                 <Field label="Display Name">
                                     <input {...registerProfile("name")} disabled={!isEditMode} className={inputCls(!isEditMode)} />
@@ -764,19 +738,18 @@ const Settings = () => {
                         </div>
                     )}
 
-                    {/* Security */}
                     {activeTab === "security" && (
                         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
                             <h2 className="text-base font-bold text-gray-900 mb-5">Change Password</h2>
                             <form onSubmit={handlePassSubmit(onPasswordSubmit)} className="space-y-4 max-w-md">
                                 {[
-                                    { label: "Current Password", name: "currentPassword", show: showCurrentPass, setShow: setShowCurrentPass, reg: registerPass },
-                                    { label: "New Password",     name: "newPassword",     show: showNewPass,     setShow: setShowNewPass,     reg: registerPass },
-                                    { label: "Confirm Password", name: "confirmPassword", show: showConfirmPass, setShow: setShowConfirmPass, reg: registerPass },
-                                ].map(({ label, name, show, setShow, reg }) => (
+                                    { label: "Current Password", name: "currentPassword", show: showCurrentPass, setShow: setShowCurrentPass },
+                                    { label: "New Password",     name: "newPassword",     show: showNewPass,     setShow: setShowNewPass },
+                                    { label: "Confirm Password", name: "confirmPassword", show: showConfirmPass, setShow: setShowConfirmPass },
+                                ].map(({ label, name, show, setShow }) => (
                                     <Field key={name} label={label} error={passErrors[name]?.message}>
                                         <div className="relative">
-                                            <input type={show ? "text" : "password"} {...reg(name)} className={cn(inputCls(false), "pr-10")} />
+                                            <input type={show ? "text" : "password"} {...registerPass(name)} className={cn(inputCls(false), "pr-10")} />
                                             <button type="button" onClick={() => setShow(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                                                 {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                             </button>
@@ -794,16 +767,15 @@ const Settings = () => {
                         </div>
                     )}
 
-                    {/* Notifications */}
                     {activeTab === "notifications" && (
                         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
                             <h2 className="text-base font-bold text-gray-900 mb-5">Notification Preferences</h2>
                             <div className="space-y-3">
                                 {[
-                                    { label: "New Lead Alerts",  desc: "Get notified when a new lead arrives",      defaultChecked: true },
-                                    { label: "Task Reminders",   desc: "Receive reminders for upcoming tasks",       defaultChecked: true },
-                                    { label: "Follow-up Alerts", desc: "Alerts when leads need follow-up",           defaultChecked: false },
-                                    { label: "Team Activity",    desc: "Activity from team members on your leads",   defaultChecked: false },
+                                    { label: "New Lead Alerts",  desc: "Get notified when a new lead arrives",     defaultChecked: true },
+                                    { label: "Task Reminders",   desc: "Receive reminders for upcoming tasks",      defaultChecked: true },
+                                    { label: "Follow-up Alerts", desc: "Alerts when leads need follow-up",          defaultChecked: false },
+                                    { label: "Team Activity",    desc: "Activity from team members on your leads",  defaultChecked: false },
                                 ].map(({ label, desc, defaultChecked }) => (
                                     <div key={label} className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors">
                                         <div>
@@ -820,7 +792,6 @@ const Settings = () => {
                         </div>
                     )}
 
-                    {/* Data Export */}
                     {activeTab === "data" && (
                         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
                             <h2 className="text-base font-bold text-gray-900 mb-2">Data Export</h2>
@@ -839,14 +810,12 @@ const Settings = () => {
                         </div>
                     )}
 
-                    {/* Admin tabs */}
-                    {activeTab === "email"         && ["ADMIN","SUPER_ADMIN"].includes(user?.role) && <SmtpSettings />}
-                    {activeTab === "custom-fields" && ["ADMIN","SUPER_ADMIN"].includes(user?.role) && <CustomFieldsSettings />}
-                    {activeTab === "facebook"      && ["ADMIN","SUPER_ADMIN"].includes(user?.role) && <FacebookSettings />}
-                    {activeTab === "audit"         && ["ADMIN","SUPER_ADMIN"].includes(user?.role) && <AuditLogs />}
-                    {activeTab === "sessions"      && ["ADMIN","SUPER_ADMIN"].includes(user?.role) && <SessionManager />}
+                    {activeTab === "email"       && user?.role === "SUPER_ADMIN" && <SmtpSettings />}
+                    {activeTab === "lead-fields" && user?.role === "SUPER_ADMIN" && <LeadFieldsSettings />}
+                    {activeTab === "lead-sla"    && user?.role === "SUPER_ADMIN" && <SlaSettings />}
+                    {activeTab === "audit"       && user?.role === "SUPER_ADMIN" && <AuditLogs />}
+                    {activeTab === "sessions"    && user?.role === "SUPER_ADMIN" && <SessionManager />}
 
-                    {/* Danger Zone */}
                     {activeTab === "danger" && (
                         <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-6">
                             <h2 className="text-base font-bold text-red-700 mb-1">Danger Zone</h2>

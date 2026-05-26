@@ -9,7 +9,8 @@ import {
     ArrowLeft, Phone, Mail, MessageSquare, Plus, CheckCircle, Circle,
     Calendar, User, Loader2, PhoneCall, FileText, Activity,
     ChevronDown, ChevronRight, Play, Clock, AlertCircle, ChevronLeft,
-    Zap, Users, Save, SlidersHorizontal, Eye, MousePointerClick,
+    Zap, Users, Save, SlidersHorizontal, Eye, MousePointerClick, GitBranch,
+    TrendingUp, IndianRupee,
 } from "lucide-react";
 import { Modal } from "../components/Modal";
 import AddTaskForm from "../components/AddTaskForm";
@@ -103,8 +104,9 @@ const initials = (name = "") =>
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function StatusDropdown({ leadId, currentStatus }) {
+function StatusDropdown({ leadId, currentStatus, lead }) {
     const [open, setOpen] = useState(false);
+    const [gateWarning, setGateWarning] = useState(null); // status pending gate confirmation
     const queryClient = useQueryClient();
 
     const mutation = useMutation({
@@ -112,8 +114,23 @@ function StatusDropdown({ leadId, currentStatus }) {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
             setOpen(false);
+            setGateWarning(null);
+        },
+        onError: (err) => {
+            const msg = err.response?.data?.message || "Failed to update status";
+            setGateWarning({ status: null, error: msg });
         },
     });
+
+    const handleSelect = (s) => {
+        if (s === currentStatus) { setOpen(false); return; }
+        if (s === "CONVERTED" && !lead?.phone && !lead?.email) {
+            setGateWarning({ status: s });
+            setOpen(false);
+            return;
+        }
+        mutation.mutate(s);
+    };
 
     return (
         <div className="relative">
@@ -124,6 +141,36 @@ function StatusDropdown({ leadId, currentStatus }) {
                 {STATUS_LABEL[currentStatus]}
                 <ChevronDown className="h-3 w-3" />
             </button>
+
+            {/* Stage gate warning */}
+            {gateWarning && (
+                <div className="absolute top-full mt-1 left-0 z-30 bg-white border border-amber-200 rounded-xl shadow-lg p-3 w-64">
+                    <p className="text-xs font-semibold text-amber-800 mb-1">
+                        {gateWarning.error ?? "This lead has no phone or email. Add contact info before converting."}
+                    </p>
+                    {!gateWarning.error && (
+                        <div className="flex gap-2 mt-2">
+                            <button
+                                onClick={() => { mutation.mutate(gateWarning.status); }}
+                                disabled={mutation.isPending}
+                                className="flex-1 text-xs font-bold px-2 py-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50"
+                            >
+                                Convert anyway
+                            </button>
+                            <button
+                                onClick={() => setGateWarning(null)}
+                                className="flex-1 text-xs font-bold px-2 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    )}
+                    {gateWarning.error && (
+                        <button onClick={() => setGateWarning(null)} className="mt-1 text-xs text-gray-400 hover:text-gray-600">Dismiss</button>
+                    )}
+                </div>
+            )}
+
             {open && (
                 <>
                     <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
@@ -131,7 +178,7 @@ function StatusDropdown({ leadId, currentStatus }) {
                         {STATUS_OPTIONS.map(s => (
                             <button
                                 key={s}
-                                onClick={() => mutation.mutate(s)}
+                                onClick={() => handleSelect(s)}
                                 disabled={mutation.isPending}
                                 className={`w-full text-left px-3 py-2 text-xs font-semibold transition-colors hover:bg-gray-50
                                     ${s === currentStatus ? "opacity-40 cursor-default" : ""}`}
@@ -474,44 +521,75 @@ function TaskRow({ task, leadId, compact = false }) {
     );
 }
 
-// ─── Custom Fields Panel ──────────────────────────────────────────────────────
+// ─── All Fields Panel (system + custom) ──────────────────────────────────────
 
-function CustomFieldsPanel({ leadId, initialValues }) {
+const SYSTEM_KEYS = new Set([
+    "name", "phone", "email", "company", "source",
+    "enquiryType", "biodata", "jobTitle", "linkedinUrl", "category",
+]);
+
+const ENUM_LABELS = {
+    FACEBOOK: "Facebook", INSTAGRAM: "Instagram", GMAIL: "Gmail",
+    WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn",
+    PRODUCT: "Product", WHITE_LABEL: "White Label", LMS: "LMS", SERVICES: "Services",
+};
+
+function CustomFieldsPanel({ leadId, lead }) {
     const qc = useQueryClient();
     const [editing, setEditing] = useState(false);
     const [values, setValues] = useState({});
 
-    const { data: fieldDefs = [] } = useQuery({
-        queryKey: ["custom-fields"],
+    const { data: allDefs = [] } = useQuery({
+        queryKey: ["lead-fields"],
         queryFn: () => api.get("/custom-fields").then(r => r.data),
         staleTime: 5 * 60_000,
     });
 
-    // Initialise local values when we enter edit mode
+    // Only show visible fields; skip the ones already prominently shown in the header (name, status, source)
+    const HEADER_KEYS = new Set(["name", "source", "status"]);
+    const visibleFields = allDefs.filter(d => d.visible && !HEADER_KEYS.has(d.fieldKey));
+
+    const getLeadValue = (def) => {
+        if (SYSTEM_KEYS.has(def.fieldKey)) return lead[def.fieldKey] ?? "";
+        return lead.customFields?.[def.fieldKey] ?? "";
+    };
+
     const handleEdit = () => {
-        setValues(initialValues || {});
+        const init = {};
+        visibleFields.forEach(def => { init[def.fieldKey] = getLeadValue(def); });
+        setValues(init);
         setEditing(true);
     };
 
     const save = useMutation({
-        mutationFn: () => api.patch(`/leads/${leadId}/custom-fields`, { fields: values }),
+        mutationFn: async () => {
+            const systemPatch = {};
+            const customPatch = {};
+            visibleFields.forEach(def => {
+                const v = values[def.fieldKey];
+                if (SYSTEM_KEYS.has(def.fieldKey)) systemPatch[def.fieldKey] = v ?? null;
+                else customPatch[def.fieldKey] = v ?? null;
+            });
+            const ops = [];
+            if (Object.keys(systemPatch).length) ops.push(api.patch(`/leads/${leadId}`, systemPatch));
+            if (Object.keys(customPatch).length) ops.push(api.patch(`/leads/${leadId}/custom-fields`, { fields: customPatch }));
+            await Promise.all(ops);
+        },
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["lead", leadId] });
             setEditing(false);
         },
-        onError: () => toast.error("Failed to save custom fields"),
+        onError: () => toast.error("Failed to save fields"),
     });
 
-    if (fieldDefs.length === 0) return null;
-
-    const displayValues = editing ? values : (initialValues || {});
+    if (visibleFields.length === 0) return null;
 
     return (
         <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-1.5">
                     <SlidersHorizontal className="h-3.5 w-3.5 text-gray-400" />
-                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Custom Fields</h3>
+                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Lead Fields</h3>
                 </div>
                 {!editing ? (
                     <button onClick={handleEdit} className="text-xs text-indigo-500 hover:underline font-semibold">Edit</button>
@@ -530,13 +608,17 @@ function CustomFieldsPanel({ leadId, initialValues }) {
                 )}
             </div>
             <div className="space-y-2.5">
-                {fieldDefs.map(def => {
-                    const val = displayValues[def.fieldKey] ?? "";
+                {visibleFields.map(def => {
+                    const displayVal = editing ? (values[def.fieldKey] ?? "") : getLeadValue(def);
                     return (
                         <div key={def.id}>
                             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">{def.name}</p>
                             {!editing ? (
-                                <p className="text-sm text-gray-800">{val !== "" && val !== null && val !== undefined ? String(val) : <span className="text-gray-300">—</span>}</p>
+                                <p className="text-sm text-gray-800 break-words">
+                                    {displayVal !== "" && displayVal !== null && displayVal !== undefined
+                                        ? (ENUM_LABELS[displayVal] ?? String(displayVal))
+                                        : <span className="text-gray-300">—</span>}
+                                </p>
                             ) : def.type === "SELECT" ? (
                                 <select
                                     className="w-full h-8 px-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400"
@@ -544,8 +626,15 @@ function CustomFieldsPanel({ leadId, initialValues }) {
                                     onChange={e => setValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
                                 >
                                     <option value="">— Select —</option>
-                                    {(def.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                                    {(def.options || []).map(o => <option key={o} value={o}>{ENUM_LABELS[o] ?? o}</option>)}
                                 </select>
+                            ) : def.type === "TEXTAREA" ? (
+                                <textarea
+                                    rows={3}
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 resize-none"
+                                    value={values[def.fieldKey] ?? ""}
+                                    onChange={e => setValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
+                                />
                             ) : def.type === "CHECKBOX" ? (
                                 <input
                                     type="checkbox"
@@ -569,6 +658,189 @@ function CustomFieldsPanel({ leadId, initialValues }) {
     );
 }
 
+// ─── Deal Stage helpers ───────────────────────────────────────────────────────
+
+const DEAL_STAGE_STYLE = {
+    NEW:         "bg-blue-100 text-blue-800",
+    NEGOTIATION: "bg-orange-100 text-orange-800",
+    WON:         "bg-green-100 text-green-800",
+    LOST:        "bg-red-100 text-red-800",
+};
+
+const CURRENCY_SYMBOL = { INR: "₹", USD: "$", EUR: "€", GBP: "£" };
+function fmtAmt(amount, currency = "INR") {
+    return `${CURRENCY_SYMBOL[currency] ?? currency}${Number(amount).toLocaleString("en-IN")}`;
+}
+
+// ─── ConvertToDealModal ───────────────────────────────────────────────────────
+
+function ConvertToDealModal({ leadId, leadName, onClose, onSuccess }) {
+    const [form, setForm] = useState({ title: "", amount: "", stage: "NEW", currency: "INR", notes: "", assignedEmployeeId: "" });
+    const [error, setError] = useState("");
+
+    const { data: teamMembers = [] } = useQuery({
+        queryKey: ["team-members-light"],
+        queryFn: () => api.get("/team").then(r => r.data?.users ?? r.data ?? []),
+        staleTime: 300_000,
+    });
+
+    const mutation = useMutation({
+        mutationFn: (data) => api.post("/deals", data),
+        onSuccess,
+        onError: (err) => setError(err?.response?.data?.message || "Failed to create deal"),
+    });
+
+    const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+    const cls = "w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none";
+
+    const submit = (e) => {
+        e.preventDefault();
+        if (!form.title.trim()) { setError("Deal title is required"); return; }
+        setError("");
+        mutation.mutate({
+            leadId,
+            title: form.title.trim(),
+            amount: parseFloat(form.amount) || 0,
+            stage: form.stage,
+            currency: form.currency,
+            notes: form.notes.trim() || undefined,
+            assignedEmployeeId: form.assignedEmployeeId || undefined,
+        });
+    };
+
+    return (
+        <Modal isOpen onClose={onClose} title="Convert To Deal">
+            <p className="text-sm text-gray-500 mb-4">
+                Creating a deal for <span className="font-semibold text-gray-800">{leadName}</span>
+            </p>
+            <form onSubmit={submit} className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Deal Title <span className="text-red-500">*</span></label>
+                    <input className={cls} placeholder="e.g. Website Development" value={form.title} onChange={e => set("title", e.target.value)} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                        <input type="number" min="0" step="0.01" className={cls} placeholder="0" value={form.amount} onChange={e => set("amount", e.target.value)} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                        <select className={cls} value={form.currency} onChange={e => set("currency", e.target.value)}>
+                            <option value="INR">INR ₹</option>
+                            <option value="USD">USD $</option>
+                            <option value="EUR">EUR €</option>
+                            <option value="GBP">GBP £</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Assign To</label>
+                    <select className={cls} value={form.assignedEmployeeId} onChange={e => set("assignedEmployeeId", e.target.value)}>
+                        <option value="">Unassigned (me)</option>
+                        {teamMembers.map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Stage</label>
+                    <select className={cls} value={form.stage} onChange={e => set("stage", e.target.value)}>
+                        <option value="NEW">New</option>
+                        <option value="NEGOTIATION">Negotiation</option>
+                        <option value="WON">Won</option>
+                        <option value="LOST">Lost</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                    <textarea className={`${cls} resize-none`} rows={3} placeholder="Optional notes…" value={form.notes} onChange={e => set("notes", e.target.value)} />
+                </div>
+
+                {error && <p className="text-sm text-red-600">{error}</p>}
+
+                <div className="flex justify-end gap-3 pt-1">
+                    <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                        Cancel
+                    </button>
+                    <button type="submit" disabled={mutation.isPending} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-violet-600 border border-transparent rounded-lg hover:bg-violet-700 disabled:opacity-60">
+                        {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
+                        Create Deal
+                    </button>
+                </div>
+            </form>
+        </Modal>
+    );
+}
+
+// ─── DealsPanel ───────────────────────────────────────────────────────────────
+
+function DealsPanel({ deals, loading, onAdd }) {
+    const totalValue = deals.reduce((s, d) => s + d.amount, 0);
+    const wonDeals = deals.filter(d => d.stage === "WON");
+
+    return (
+        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <TrendingUp className="h-3.5 w-3.5 text-violet-500" />
+                    Deals {deals.length > 0 && <span className="text-violet-600">({deals.length})</span>}
+                </h3>
+                <button onClick={onAdd} className="text-violet-600 hover:text-violet-800 transition-colors" title="New deal">
+                    <Plus className="h-3.5 w-3.5" />
+                </button>
+            </div>
+
+            {loading ? (
+                <div className="flex justify-center py-2"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /></div>
+            ) : deals.length === 0 ? (
+                <div className="text-center py-3">
+                    <p className="text-xs text-gray-400 mb-2">No deals yet</p>
+                    <button onClick={onAdd} className="text-xs text-violet-600 hover:underline font-medium">
+                        + Convert to deal
+                    </button>
+                </div>
+            ) : (
+                <>
+                    {deals.length > 0 && (
+                        <div className="flex gap-3 mb-3 p-2 bg-violet-50 rounded-lg">
+                            <div className="flex-1">
+                                <p className="text-[10px] text-gray-500">Pipeline</p>
+                                <p className="text-sm font-black text-violet-700">{fmtAmt(totalValue)}</p>
+                            </div>
+                            {wonDeals.length > 0 && (
+                                <div className="flex-1">
+                                    <p className="text-[10px] text-gray-500">Won</p>
+                                    <p className="text-sm font-black text-green-700">{fmtAmt(wonDeals.reduce((s, d) => s + d.amount, 0))}</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <div className="space-y-2">
+                        {deals.map(deal => (
+                            <div key={deal.id} className="flex items-start justify-between gap-2 py-1 border-b border-gray-100 last:border-0">
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-gray-800 truncate">{deal.title}</p>
+                                    <p className="text-[11px] text-gray-500">{fmtAmt(deal.amount, deal.currency)}</p>
+                                </div>
+                                <span className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${DEAL_STAGE_STYLE[deal.stage] ?? "bg-gray-100 text-gray-600"}`}>
+                                    {deal.stage}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                    <Link to="/deals" className="block text-center text-[11px] text-violet-600 hover:underline mt-2">
+                        View all deals →
+                    </Link>
+                </>
+            )}
+        </div>
+    );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function LeadDetail() {
@@ -577,15 +849,17 @@ export default function LeadDetail() {
     const queryClient = useQueryClient();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(user?.role);
+    const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
 
     const [noteText, setNoteText] = useState("");
     const [showTaskModal, setShowTaskModal] = useState(false);
     const [showWaModal, setShowWaModal] = useState(false);
     const [showPostCall, setShowPostCall] = useState(false);
     const [showEmailModal, setShowEmailModal] = useState(false);
+    const [showDealModal, setShowDealModal] = useState(false);
     const [lastCallId, setLastCallId] = useState(null);
     const [timelineFilter, setTimelineFilter] = useState("all");
+    const [expandedGroups, setExpandedGroups] = useState(new Set());
     const noteRef = useRef(null);
 
     // ─── Queries (all parallel) ───────────────────────────────────────────────
@@ -645,6 +919,12 @@ export default function LeadDetail() {
         enabled: !!lead,
     });
 
+    const { data: leadDeals = [], isLoading: dealsLoading } = useQuery({
+        queryKey: ["lead-deals", id],
+        queryFn: () => api.get("/deals", { params: { leadId: id, limit: 50 } }).then(r => r.data.data ?? []),
+        enabled: !!lead,
+    });
+
     const { data: automationsRaw = [] } = useQuery({
         queryKey: ["automations-active"],
         queryFn: () => api.get("/automations").then(r => r.data.data || r.data || []),
@@ -697,14 +977,37 @@ export default function LeadDetail() {
 
         const filtered = timelineFilter === "all" ? allItems : allItems.filter(i => i._type === timelineFilter);
 
+        const now = Date.now();
+        const MS_7D = 7 * 86_400_000;
+        const MS_30D = 30 * 86_400_000;
+
+        const groupKey = (item) => {
+            const age = now - item._date.getTime();
+            if (age < MS_7D) return { key: dayLabel(item._date), recent: true };
+            if (age < MS_30D) return { key: "Earlier this month", recent: false };
+            return {
+                key: item._date.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
+                recent: false,
+            };
+        };
+
         const groups = new Map();
         filtered.forEach(item => {
-            const key = dayLabel(item._date);
-            if (!groups.has(key)) groups.set(key, []);
-            groups.get(key).push(item);
+            const { key, recent } = groupKey(item);
+            if (!groups.has(key)) groups.set(key, { items: [], recent });
+            groups.get(key).items.push(item);
         });
-        return [...groups.entries()];
+        return [...groups.entries()].map(([key, { items, recent }]) => ({ key, items, recent }));
     }, [activities, notes, calls, waMessages, emailLogs, timelineFilter]);
+
+    // Seed expanded state when groups change: auto-expand recent groups
+    const prevGroupKeysRef = useRef(null);
+    useMemo(() => {
+        const keys = timelineGroups.map(g => g.key).join("|");
+        if (keys === prevGroupKeysRef.current) return;
+        prevGroupKeysRef.current = keys;
+        setExpandedGroups(new Set(timelineGroups.filter(g => g.recent).map(g => g.key)));
+    }, [timelineGroups]);
 
     // ─── Initiating call via click2call ──────────────────────────────────────
     const initiateCall = useMutation({
@@ -825,7 +1128,7 @@ export default function LeadDetail() {
                     <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-1">
                             <h1 className="text-xl font-black text-gray-900 truncate">{lead.name}</h1>
-                            <StatusDropdown leadId={id} currentStatus={lead.status} />
+                            <StatusDropdown leadId={id} currentStatus={lead.status} lead={lead} />
                             {lead.category && (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-100 uppercase tracking-wide">
                                     {lead.category}
@@ -920,6 +1223,20 @@ export default function LeadDetail() {
                         </button>
                     )}
 
+                    <Link
+                        to={`/leads/${id}/journey`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-900 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
+                    >
+                        <GitBranch className="h-3.5 w-3.5" /> Journey
+                    </Link>
+
+                    <button
+                        onClick={() => setShowDealModal(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
+                    >
+                        <TrendingUp className="h-3.5 w-3.5" /> Convert To Deal
+                    </button>
+
                     <div className="ml-auto flex items-center gap-3 text-[11px] text-gray-400">
                         {calls.length > 0 && (
                             <span className="flex items-center gap-1">
@@ -993,13 +1310,27 @@ export default function LeadDetail() {
                                 <p className="text-sm text-gray-400 text-center py-8">No activity yet.</p>
                             ) : (
                                 <div className="space-y-5">
-                                    {timelineGroups.map(([day, items]) => (
+                                    {timelineGroups.map(({ key: day, items, recent }) => {
+                                        const isOpen = expandedGroups.has(day);
+                                        const toggle = () => setExpandedGroups(prev => {
+                                            const next = new Set(prev);
+                                            isOpen ? next.delete(day) : next.add(day);
+                                            return next;
+                                        });
+                                        return (
                                         <div key={day}>
-                                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={toggle}
+                                                className="w-full text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2 hover:text-gray-600 transition-colors"
+                                            >
                                                 <span>{day}</span>
                                                 <span className="flex-1 h-px bg-gray-100" />
-                                            </div>
-                                            <div className="space-y-1">
+                                                <span className="text-gray-300 font-normal normal-case tracking-normal text-[10px]">
+                                                    {isOpen ? "▲" : `▼ ${items.length} item${items.length !== 1 ? "s" : ""}`}
+                                                </span>
+                                            </button>
+                                            {isOpen && <div className="space-y-1">
                                                 {items.map((item) => (
                                                     item._type === "call" ? (
                                                         <CallItem key={item.id} call={item} leadId={id} />
@@ -1059,9 +1390,10 @@ export default function LeadDetail() {
                                                         <TimelineItem key={item.id} item={item} />
                                                     )
                                                 ))}
-                                            </div>
+                                            </div>}
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -1080,7 +1412,10 @@ export default function LeadDetail() {
                     />
 
                     {/* ── Custom Fields ───────────────────────────────────────── */}
-                    <CustomFieldsPanel leadId={id} initialValues={lead.customFields} />
+                    <CustomFieldsPanel leadId={id} lead={lead} />
+
+                    {/* ── Deals ───────────────────────────────────────────────── */}
+                    <DealsPanel deals={leadDeals} loading={dealsLoading} onAdd={() => setShowDealModal(true)} />
 
                     {/* ── Open Tasks ──────────────────────────────────────────── */}
                     <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
@@ -1204,6 +1539,19 @@ export default function LeadDetail() {
                     leadId={id}
                     defaultTo={lead?.email || ""}
                     onClose={() => setShowEmailModal(false)}
+                />
+            )}
+
+            {showDealModal && (
+                <ConvertToDealModal
+                    leadId={id}
+                    leadName={lead?.name}
+                    onClose={() => setShowDealModal(false)}
+                    onSuccess={() => {
+                        setShowDealModal(false);
+                        queryClient.invalidateQueries({ queryKey: ["lead-deals", id] });
+                        queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
+                    }}
                 />
             )}
         </div>

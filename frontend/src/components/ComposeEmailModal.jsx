@@ -1,12 +1,34 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { X, Send, Mail, Loader2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { X, Send, Mail, Loader2, ChevronDown, FileText } from "lucide-react";
 import { toast } from "sonner";
 import api from "../api/axios";
 
-export default function ComposeEmailModal({ leadId, defaultTo = "", onClose }) {
+const LEAD_VARS = {
+    "{{lead.name}}":    "name",
+    "{{lead.phone}}":   "phone",
+    "{{lead.email}}":   "email",
+    "{{lead.company}}": "company",
+};
+
+function applyVars(text, lead) {
+    if (!text || !lead) return text;
+    return Object.entries(LEAD_VARS).reduce(
+        (t, [placeholder, field]) => t.replaceAll(placeholder, lead[field] ?? ""),
+        text
+    );
+}
+
+export default function ComposeEmailModal({ leadId, lead, defaultTo = "", onClose }) {
     const qc = useQueryClient();
-    const [form, setForm] = useState({ toEmail: defaultTo, subject: "", body: "" });
+    const [form, setForm] = useState({ toEmail: defaultTo || lead?.email || "", subject: "", body: "" });
+    const [tplOpen, setTplOpen] = useState(false);
+
+    const { data: templates = [] } = useQuery({
+        queryKey: ["email-templates"],
+        queryFn: () => api.get("/email-templates").then(r => r.data),
+        staleTime: 5 * 60_000,
+    });
 
     const send = useMutation({
         mutationFn: (data) => api.post(`/leads/${leadId}/emails`, data).then((r) => r.data),
@@ -20,6 +42,28 @@ export default function ComposeEmailModal({ leadId, defaultTo = "", onClose }) {
             toast.error(err.response?.data?.message || "Failed to send email");
         },
     });
+
+    const saveTemplate = useMutation({
+        mutationFn: () => api.post("/email-templates", {
+            name: form.subject || "Untitled template",
+            subject: form.subject,
+            body: form.body,
+        }),
+        onSuccess: () => {
+            toast.success("Saved as template");
+            qc.invalidateQueries({ queryKey: ["email-templates"] });
+        },
+        onError: () => toast.error("Failed to save template"),
+    });
+
+    const applyTemplate = (tpl) => {
+        setForm(f => ({
+            ...f,
+            subject: applyVars(tpl.subject, lead),
+            body: applyVars(tpl.body, lead),
+        }));
+        setTplOpen(false);
+    };
 
     const canSend = form.toEmail.trim() && form.subject.trim() && form.body.trim();
 
@@ -38,6 +82,37 @@ export default function ComposeEmailModal({ leadId, defaultTo = "", onClose }) {
                         <X className="h-4 w-4" />
                     </button>
                 </div>
+
+                {/* Template picker */}
+                {templates.length > 0 && (
+                    <div className="px-5 pt-3 relative">
+                        <button
+                            onClick={() => setTplOpen(v => !v)}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-2.5 py-1.5 rounded-lg hover:bg-indigo-50 border border-indigo-100 transition-colors"
+                        >
+                            <FileText className="h-3.5 w-3.5" />
+                            Use template
+                            <ChevronDown className="h-3 w-3" />
+                        </button>
+                        {tplOpen && (
+                            <>
+                                <div className="fixed inset-0 z-10" onClick={() => setTplOpen(false)} />
+                                <div className="absolute top-full mt-1 left-5 z-20 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[240px] max-h-52 overflow-y-auto">
+                                    {templates.map(tpl => (
+                                        <button
+                                            key={tpl.id}
+                                            onClick={() => applyTemplate(tpl)}
+                                            className="w-full text-left px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                                        >
+                                            <p className="text-sm font-semibold text-gray-800">{tpl.name}</p>
+                                            <p className="text-xs text-gray-400 truncate">{tpl.subject}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
 
                 {/* Fields */}
                 <div className="px-5 py-4 space-y-3">
@@ -75,9 +150,20 @@ export default function ComposeEmailModal({ leadId, defaultTo = "", onClose }) {
 
                 {/* Footer */}
                 <div className="px-5 pb-5 flex items-center justify-between">
-                    <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-600">
-                        Cancel
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-600">
+                            Cancel
+                        </button>
+                        {form.subject.trim() && form.body.trim() && (
+                            <button
+                                onClick={() => saveTemplate.mutate()}
+                                disabled={saveTemplate.isPending}
+                                className="text-xs text-indigo-500 hover:text-indigo-700 font-medium"
+                            >
+                                {saveTemplate.isPending ? "Saving…" : "Save as template"}
+                            </button>
+                        )}
+                    </div>
                     <button
                         onClick={() => send.mutate(form)}
                         disabled={!canSend || send.isPending}

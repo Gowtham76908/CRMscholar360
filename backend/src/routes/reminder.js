@@ -7,5 +7,6 @@ router.use(authMiddleware);
 
 router.post("/", reminderController.createReminder);
 router.get("/", reminderController.getMyReminders);
+router.patch("/:id", reminderController.dismissReminder);
 
 module.exports = router;

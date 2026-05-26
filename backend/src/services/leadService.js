@@ -1,4 +1,5 @@
 const prisma = require("../utils/prisma");
+const { getTeamMemberIds } = require("./organizationService");
 
 /**
  * Get leads with pagination, filtering, searching, and sorting
@@ -14,18 +15,33 @@ const getLeads = async ({
     sortOrder = "desc"
 }) => {
     // 1. Build Where Clause
-    const where = {};
+    // MERGED leads are terminal (absorbed into another lead) — exclude from all normal views
+    const where = { status: { not: "MERGED" } };
 
-    // Role-based access control or My Leads filter
+    // Role-based visibility:
+    // EMPLOYEE    — own leads only
+    // MANAGER     — team leads (employees where managerId = userId); falls back to all if no team
+    // SUPER_ADMIN — everything
     if (role === "EMPLOYEE" || filters.mine) {
         where.assignedToId = userId;
+    } else if (role === "MANAGER" && !filters.assignedTo) {
+        const teamIds = await getTeamMemberIds(userId);
+        if (teamIds.length > 0) {
+            // Show team leads plus unassigned leads the admin can claim
+            where.OR = [
+                { assignedToId: { in: teamIds } },
+                { assignedToId: null },
+            ];
+        }
+        // If no team yet, admin sees all (backward compat for unseeded managers)
     } else if (filters.assignedTo) {
         where.assignedToId = filters.assignedTo;
     }
 
-    // Exact match filters
+    // Exact match filters — support comma-separated multi-value (e.g. "FOLLOW_UP,CONTACTED")
     if (filters.status) {
-        where.status = filters.status; // assuming status is string or enum
+        const statuses = filters.status.split(",").map(s => s.trim()).filter(Boolean);
+        where.status = statuses.length === 1 ? statuses[0] : { in: statuses };
     }
 
     if (filters.isSearchLead !== undefined) {
@@ -53,12 +69,19 @@ const getLeads = async ({
     }
 
     // Search filter (Case-insensitive)
+    // Use AND to preserve any existing where.OR scope (e.g. manager team filter)
     if (search) {
-        where.OR = [
+        const searchOr = [
             { name: { contains: search, mode: "insensitive" } },
             { phone: { contains: search, mode: "insensitive" } },
-            { email: { contains: search, mode: "insensitive" } }
+            { email: { contains: search, mode: "insensitive" } },
         ];
+        if (where.OR) {
+            where.AND = [{ OR: where.OR }, { OR: searchOr }];
+            delete where.OR;
+        } else {
+            where.OR = searchOr;
+        }
     }
 
     // 2. Build Order By

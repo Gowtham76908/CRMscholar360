@@ -28,18 +28,43 @@ export default function WhatsAppModal({ leadId, lead, onClose }) {
         },
     });
 
-    // Count {{N}} placeholders in a template body
     const countVars = (body = "") => {
         const matches = body.match(/\{\{\d+\}\}/g);
         return matches ? matches.length : 0;
     };
 
+    // Detect which lead field best matches a variable by scanning context in template body
+    const inferField = (body, varIndex) => {
+        const placeholder = `{{${varIndex + 1}}}`;
+        const idx = body.indexOf(placeholder);
+        if (idx === -1) return null;
+        const ctx = body.slice(Math.max(0, idx - 60), idx + 60).toLowerCase();
+        if (/phone|mobile|number|contact|call/.test(ctx)) return "phone";
+        if (/email|mail/.test(ctx)) return "email";
+        if (/company|org|business|firm/.test(ctx)) return "company";
+        if (/name|dear|hi |hello/.test(ctx)) return "name";
+        return null;
+    };
+
+    const POSITIONAL = ["name", "phone", "email", "company"];
+
+    const getLeadValue = (field) => {
+        switch (field) {
+            case "name":    return lead?.name    ?? "";
+            case "phone":   return lead?.phone   ?? "";
+            case "email":   return lead?.email   ?? "";
+            case "company": return lead?.company ?? "";
+            default:        return "";
+        }
+    };
+
     const handleTemplateSelect = (tpl) => {
         setSelectedTemplate(tpl);
         const varCount = countVars(tpl.body);
-        // Pre-fill first var with lead name as a convenience
-        const prefilled = Array(varCount).fill("");
-        if (varCount >= 1) prefilled[0] = lead?.name ?? "";
+        const prefilled = Array.from({ length: varCount }, (_, i) => {
+            const inferred = inferField(tpl.body, i);
+            return getLeadValue(inferred ?? POSITIONAL[i] ?? "");
+        });
         setParams(prefilled);
         setOpen(false);
     };
@@ -84,10 +109,10 @@ export default function WhatsAppModal({ leadId, lead, onClose }) {
                             </div>
                         ) : tplError ? (
                             <div className="flex items-center gap-1.5 text-xs text-red-500">
-                                <AlertCircle className="h-3.5 w-3.5" /> Failed to load templates. Check WATI credentials.
+                                <AlertCircle className="h-3.5 w-3.5" /> Failed to load templates. Check WhatsApp Cloud API credentials.
                             </div>
                         ) : templates.length === 0 ? (
-                            <p className="text-xs text-gray-400">No approved templates found in WATI.</p>
+                            <p className="text-xs text-gray-400">No approved templates found.</p>
                         ) : (
                             <div className="relative">
                                 <button
@@ -123,10 +148,16 @@ export default function WhatsAppModal({ leadId, lead, onClose }) {
                     {/* Variable inputs */}
                     {selectedTemplate && params.length > 0 && (
                         <div className="space-y-2">
-                            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide">
-                                Variables
-                            </label>
-                            {params.map((val, i) => (
+                            <div className="flex items-center justify-between">
+                                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide">
+                                    Variables
+                                </label>
+                                <span className="text-[10px] text-gray-400">Auto-filled from lead</span>
+                            </div>
+                            {params.map((val, i) => {
+                                const inferred = inferField(selectedTemplate.body, i);
+                                const hint = inferred ?? POSITIONAL[i];
+                                return (
                                 <div key={i} className="flex items-center gap-2">
                                     <span className="text-xs font-bold text-gray-400 w-8">{`{{${i + 1}}}`}</span>
                                     <input
@@ -136,11 +167,12 @@ export default function WhatsAppModal({ leadId, lead, onClose }) {
                                             next[i] = e.target.value;
                                             setParams(next);
                                         }}
-                                        placeholder={`Variable ${i + 1}`}
+                                        placeholder={hint ? `e.g. ${hint}` : `Variable ${i + 1}`}
                                         className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                                     />
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
 

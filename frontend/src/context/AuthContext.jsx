@@ -16,49 +16,32 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
     const navigate = useNavigate();
     const [user, setUser] = useState(null);
-    const [token, setToken] = useState(localStorage.getItem("token"));
     const [loading, setLoading] = useState(true);
     const [onlineStatus, setOnlineStatus] = useState("OFFLINE");
     const [statusLoading, setStatusLoading] = useState(false);
 
+    // On mount, restore non-sensitive user profile from sessionStorage.
+    // The JWT is in an httpOnly cookie — never touches JS.
     useEffect(() => {
-        const storedUser = localStorage.getItem("user");
-        const tokenExpiry = localStorage.getItem("tokenExpiry");
-
-        if (token && tokenExpiry) {
-            const now = new Date().getTime();
-            if (now > parseInt(tokenExpiry)) {
-                console.log("Token expired, logging out");
-                localStorage.removeItem("token");
-                localStorage.removeItem("user");
-                localStorage.removeItem("tokenExpiry");
-                setToken(null);
-                setUser(null);
-                setLoading(false);
-                return;
+        const storedUser = sessionStorage.getItem("user");
+        if (storedUser) {
+            try {
+                const parsed = JSON.parse(storedUser);
+                setUser(parsed);
+                setOnlineStatus(parsed.onlineStatus || "OFFLINE");
+            } catch {
+                sessionStorage.removeItem("user");
             }
         }
-
-        if (token && storedUser) {
-            const parsed = JSON.parse(storedUser);
-            setUser(parsed);
-            setOnlineStatus(parsed.onlineStatus || "OFFLINE");
-        }
         setLoading(false);
-    }, [token]);
+    }, []);
 
     const login = async (email, password) => {
         try {
             const data = await loginApi({ email, password });
-            const { token, user } = data;
-
-            const expiryTime = new Date().getTime() + (7 * 24 * 60 * 60 * 1000);
-
-            localStorage.setItem("token", token);
-            localStorage.setItem("user", JSON.stringify(user));
-            localStorage.setItem("tokenExpiry", expiryTime.toString());
-
-            setToken(token);
+            const { user } = data;
+            // JWT is stored in httpOnly cookie by the server — not accessible here
+            sessionStorage.setItem("user", JSON.stringify(user));
             setUser(user);
             setOnlineStatus(user.onlineStatus || "OFFLINE");
             return { success: true };
@@ -70,12 +53,10 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const logout = useCallback(() => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        localStorage.removeItem("tokenExpiry");
-        localStorage.removeItem("streamToken");
-        setToken(null);
+    const logout = useCallback(async () => {
+        try { await api.post("/auth/logout"); } catch { /* ignore */ }
+        sessionStorage.removeItem("user");
+        sessionStorage.removeItem("streamToken");
         setUser(null);
         setOnlineStatus("OFFLINE");
         navigate("/login", { replace: true });
@@ -97,7 +78,7 @@ export const AuthProvider = ({ children }) => {
             const updatedUser = { ...user, onlineStatus: status, breakStartedAt: res.data.user.breakStartedAt };
             setUser(updatedUser);
             setOnlineStatus(status);
-            localStorage.setItem("user", JSON.stringify(updatedUser));
+            sessionStorage.setItem("user", JSON.stringify(updatedUser));
         } catch (error) {
             console.error("Failed to update status:", error);
         } finally {
@@ -110,16 +91,15 @@ export const AuthProvider = ({ children }) => {
         const merged = { ...user, ...updatedUser };
         setUser(merged);
         setOnlineStatus(merged.onlineStatus || onlineStatus);
-        localStorage.setItem("user", JSON.stringify(merged));
+        sessionStorage.setItem("user", JSON.stringify(merged));
     }, [user, onlineStatus]);
 
     const value = {
         user,
-        token,
         loading,
         login,
         logout,
-        isAuthenticated: !!token,
+        isAuthenticated: !!user,
         onlineStatus,
         updateStatus,
         statusLoading,

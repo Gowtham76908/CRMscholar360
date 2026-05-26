@@ -35,7 +35,7 @@ const getSettings = async (req, res) => {
         if (!settings) {
             settings = await prisma.companySettings.create({ data: DEFAULT_SETTINGS });
         }
-        const isPrivileged = ["SUPER_ADMIN", "ADMIN"].includes(req.user?.role);
+        const isPrivileged = req.user?.role === "SUPER_ADMIN";
         res.json(isPrivileged ? settings : stripSensitive(settings));
     } catch (error) {
         res.status(500).json({ message: "Error fetching settings", error: error.message });
@@ -47,6 +47,7 @@ const ALLOWED_UPDATE_FIELDS = [
     "phone", "email", "website", "placeOfSupply", "bankName", "accountNo", "ifsc",
     "branch", "defaultTaxRate", "defaultNotes", "logoUrl", "currency",
     "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpSecure", "smtpFrom",
+    "slaWarningDays", "slaBreachDays",
 ];
 
 const updateSettings = async (req, res) => {

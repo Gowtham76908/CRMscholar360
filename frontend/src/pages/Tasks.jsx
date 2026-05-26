@@ -28,7 +28,7 @@ const Tasks = () => {
     const limit = 20;
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const { user } = useAuth();
-    const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(user?.role);
+    const isAdmin = user?.role === "SUPER_ADMIN";
 
     const { data: tasksData, isLoading, error } = useQuery({
         queryKey: ["tasks", page, filter],

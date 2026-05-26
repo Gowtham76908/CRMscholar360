@@ -12,6 +12,7 @@ const {
     addPayment,
     deletePayment,
     getBalanceSheet,
+    getInvoiceStats,
 } = require("../controllers/invoiceController");
 const validate = require("../middleware/validate");
 const { createInvoiceSchema, addPaymentSchema } = require("../middleware/schemas");
@@ -19,6 +20,7 @@ const { createInvoiceSchema, addPaymentSchema } = require("../middleware/schemas
 router.use(authMiddleware);
 
 router.get("/balance-sheet", getBalanceSheet);
+router.get("/stats", getInvoiceStats);
 router.get("/", getInvoices);
 router.post("/", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(createInvoiceSchema), createInvoice);
 router.get("/:id", getInvoice);

@@ -69,6 +69,27 @@ const sendMessage = async (req, res) => {
     }
 };
 
+// GET /api/whatsapp/messages?direction=inbound&limit=10
+const getInboundMessages = async (req, res) => {
+    try {
+        const { direction, limit = 20 } = req.query;
+        const where = {};
+        if (direction) where.direction = direction.toUpperCase();
+
+        const messages = await prisma.whatsAppMessage.findMany({
+            where,
+            orderBy: { createdAt: "desc" },
+            take: Math.min(parseInt(limit) || 20, 100),
+            include: {
+                lead: { select: { id: true, name: true } },
+            },
+        });
+        res.json({ data: messages });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to fetch messages", error: err.message });
+    }
+};
+
 // GET /api/whatsapp/:leadId/messages
 const getMessages = async (req, res) => {
     try {
@@ -200,4 +221,4 @@ const watiWebhook = async (req, res) => {
     }
 };
 
-module.exports = { listTemplates, sendMessage, getMessages, watiWebhook };
+module.exports = { listTemplates, sendMessage, getMessages, getInboundMessages, watiWebhook };

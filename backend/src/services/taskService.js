@@ -15,9 +15,11 @@ const getTasks = async ({ userId, role, page, limit, filter, leadId }) => {
     // leadId scope: caller's lead access was already verified in the controller
     const rbacWhere = leadId
         ? { leadId }
-        : ["EMPLOYEE", "AGENT"].includes(role)
+        : role === "EMPLOYEE"
             ? { assignedToId: userId }
-            : {};
+            : role === "MANAGER"
+                ? { assignedTo: { managerId: userId } }
+                : {};
 
     // Filter on top of RBAC
     const filterWhere = { ...rbacWhere };

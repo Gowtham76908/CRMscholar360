@@ -117,7 +117,7 @@ const getTasks = async (req, res) => {
                 select: { assignedToId: true }
             });
             if (!lead) return res.status(404).json({ message: "Lead not found" });
-            if (["EMPLOYEE", "AGENT"].includes(role) && lead.assignedToId !== userId) {
+            if (role === "EMPLOYEE" && lead.assignedToId !== userId) {
                 return res.status(403).json({ message: "Access denied" });
             }
         }
@@ -204,18 +204,16 @@ const updateTaskStatus = async (req, res) => {
 
         res.json({ message: "Task status updated", task: updatedTask });
 
-        // Notify all admins when a task is completed
+        // Notify the assignee's direct manager when a task is completed
         if (status === "COMPLETED" && updatedTask.assignedTo?.id) {
-            const admins = await prisma.user.findMany({
-                where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, isActive: true },
-                select: { id: true }
-            });
             const assigneeId = updatedTask.assignedTo.id;
-            for (const admin of admins) {
-                // Don't notify the assignee if they happen to be an admin too
-                if (admin.id === assigneeId) continue;
+            const assignee = await prisma.user.findUnique({
+                where: { id: assigneeId },
+                select: { managerId: true },
+            });
+            if (assignee?.managerId && assignee.managerId !== assigneeId) {
                 createNotification({
-                    userId:  admin.id,
+                    userId:  assignee.managerId,
                     title:   "✅ Task Completed",
                     message: `The task "${updatedTask.title}" has been marked as completed.`,
                     type:    "TASK_COMPLETED",
@@ -308,7 +306,7 @@ const deleteComment = async (req, res) => {
 
         const comment = await prisma.taskComment.findUnique({ where: { id: commentId } });
         if (!comment) return res.status(404).json({ message: "Comment not found" });
-        if (comment.userId !== userId && !["SUPER_ADMIN", "ADMIN"].includes(role)) {
+        if (comment.userId !== userId && role !== "SUPER_ADMIN") {
             return res.status(403).json({ message: "Not authorized to delete this comment" });
         }
 

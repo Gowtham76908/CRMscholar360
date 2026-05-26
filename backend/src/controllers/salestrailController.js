@@ -122,18 +122,24 @@ const salestrailWebhook = async (req, res) => {
 const getCalls = async (req, res) => {
     try {
         const {
-            page      = 1,
-            limit     = 50,
+            page        = 1,
+            limit       = 50,
             direction,
             status,
             search,
-            from,   // date from  YYYY-MM-DD
-            to,     // date to    YYYY-MM-DD
+            from,         // date from  YYYY-MM-DD
+            to,           // date to    YYYY-MM-DD
+            agentEmails,  // comma-separated list to scope to specific agents
         } = req.query;
+
+        const emailScope = agentEmails
+            ? agentEmails.split(",").map(e => e.trim()).filter(Boolean)
+            : null;
 
         const where = {};
         if (direction) where.direction = direction;
         if (status)    where.status    = status;
+        if (emailScope?.length) where.agentEmail = { in: emailScope };
         if (from || to) {
             where.startedAt = {};
             if (from) where.startedAt.gte = new Date(from);
@@ -170,51 +176,116 @@ const getCalls = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════
 const getStats = async (req, res) => {
     try {
-        const { days = 30 } = req.query;
-        const since = new Date();
-        since.setDate(since.getDate() - parseInt(days));
+        const { days = 30, agentEmails } = req.query;
+        const daysInt   = parseInt(days);
+        const since     = new Date();
+        since.setDate(since.getDate() - daysInt);
+        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
 
-        const all = await prisma.salestrailCall.findMany({
-            where:   { startedAt: { gte: since } },
-            orderBy: { startedAt: "asc" },
-            select:  { direction: true, status: true, duration: true, startedAt: true },
-        });
+        const emailScope = agentEmails
+            ? agentEmails.split(",").map(e => e.trim()).filter(Boolean)
+            : null;
 
-        const totalCalls    = all.length;
-        const answered      = all.filter((c) => c.status === "answered").length;
-        const missed        = all.filter((c) => ["missed", "no_answer", "busy"].includes(c.status)).length;
-        const outgoing      = all.filter((c) => c.direction === "outgoing").length;
-        const incoming      = all.filter((c) => c.direction === "incoming").length;
-        const totalDuration = all.reduce((s, c) => s + c.duration, 0);
+        // Build a parameterised email filter clause for raw SQL
+        // Prisma doesn't support conditional fragments cleanly, so we branch here.
+        let summaryRow, perDayRows;
+        if (emailScope?.length) {
+            [summaryRow, perDayRows] = await Promise.all([
+                prisma.$queryRaw`
+                    SELECT
+                        COUNT(*)::int                                                              AS "totalCalls",
+                        COUNT(*) FILTER (WHERE status = 'answered')::int                          AS answered,
+                        COUNT(*) FILTER (WHERE status IN ('missed','no_answer','busy'))::int       AS missed,
+                        COUNT(*) FILTER (WHERE direction = 'outgoing')::int                       AS outgoing,
+                        COUNT(*) FILTER (WHERE direction = 'incoming')::int                       AS incoming,
+                        COALESCE(SUM(duration),0)::int                                            AS "totalDuration",
+                        COUNT(*) FILTER (WHERE "startedAt" >= ${todayStart})::int                 AS today
+                    FROM "SalestrailCall"
+                    WHERE "startedAt" >= ${since}
+                      AND "agentEmail" = ANY(${emailScope})
+                `,
+                prisma.$queryRaw`
+                    SELECT
+                        DATE("startedAt")::text                                                    AS date,
+                        COUNT(*)::int                                                              AS total,
+                        COUNT(*) FILTER (WHERE status = 'answered')::int                          AS answered,
+                        COUNT(*) FILTER (WHERE status IN ('missed','no_answer','busy'))::int       AS missed,
+                        COUNT(*) FILTER (WHERE direction = 'outgoing')::int                       AS outgoing,
+                        COUNT(*) FILTER (WHERE direction = 'incoming')::int                       AS incoming,
+                        COALESCE(SUM(duration),0)::int                                            AS duration
+                    FROM "SalestrailCall"
+                    WHERE "startedAt" >= ${since}
+                      AND "agentEmail" = ANY(${emailScope})
+                    GROUP BY DATE("startedAt")
+                    ORDER BY DATE("startedAt")
+                `,
+            ]);
+        } else {
+            [summaryRow, perDayRows] = await Promise.all([
+                prisma.$queryRaw`
+                    SELECT
+                        COUNT(*)::int                                                              AS "totalCalls",
+                        COUNT(*) FILTER (WHERE status = 'answered')::int                          AS answered,
+                        COUNT(*) FILTER (WHERE status IN ('missed','no_answer','busy'))::int       AS missed,
+                        COUNT(*) FILTER (WHERE direction = 'outgoing')::int                       AS outgoing,
+                        COUNT(*) FILTER (WHERE direction = 'incoming')::int                       AS incoming,
+                        COALESCE(SUM(duration),0)::int                                            AS "totalDuration",
+                        COUNT(*) FILTER (WHERE "startedAt" >= ${todayStart})::int                 AS today
+                    FROM "SalestrailCall"
+                    WHERE "startedAt" >= ${since}
+                `,
+                prisma.$queryRaw`
+                    SELECT
+                        DATE("startedAt")::text                                                    AS date,
+                        COUNT(*)::int                                                              AS total,
+                        COUNT(*) FILTER (WHERE status = 'answered')::int                          AS answered,
+                        COUNT(*) FILTER (WHERE status IN ('missed','no_answer','busy'))::int       AS missed,
+                        COUNT(*) FILTER (WHERE direction = 'outgoing')::int                       AS outgoing,
+                        COUNT(*) FILTER (WHERE direction = 'incoming')::int                       AS incoming,
+                        COALESCE(SUM(duration),0)::int                                            AS duration
+                    FROM "SalestrailCall"
+                    WHERE "startedAt" >= ${since}
+                    GROUP BY DATE("startedAt")
+                    ORDER BY DATE("startedAt")
+                `,
+            ]);
+        }
+
+        const s = summaryRow[0] ?? {};
+        const totalCalls    = Number(s.totalCalls    ?? 0);
+        const totalDuration = Number(s.totalDuration ?? 0);
         const avgDuration   = totalCalls ? Math.round(totalDuration / totalCalls) : 0;
 
-        // Today's calls
-        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-        const today = all.filter((c) => c.startedAt && new Date(c.startedAt) >= todayStart).length;
-
-        // Calls per day (last N days)
-        const dayMap = {};
-        for (let i = parseInt(days) - 1; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
+        // Build a full date spine so days with 0 calls still appear in the chart
+        const dayIndex = new Map(perDayRows.map(r => [r.date, r]));
+        const perDay = [];
+        for (let i = daysInt - 1; i >= 0; i--) {
+            const d = new Date(); d.setDate(d.getDate() - i);
             const key = d.toISOString().split("T")[0];
-            dayMap[key] = { date: key, total: 0, answered: 0, missed: 0, outgoing: 0, incoming: 0, duration: 0 };
-        }
-        for (const c of all) {
-            if (!c.startedAt) continue;
-            const key = new Date(c.startedAt).toISOString().split("T")[0];
-            if (!dayMap[key]) continue;
-            dayMap[key].total++;
-            dayMap[key].duration += c.duration;
-            if (c.status === "answered")                                           dayMap[key].answered++;
-            if (["missed","no_answer","busy"].includes(c.status))                  dayMap[key].missed++;
-            if (c.direction === "outgoing")                                        dayMap[key].outgoing++;
-            if (c.direction === "incoming")                                        dayMap[key].incoming++;
+            const r = dayIndex.get(key);
+            perDay.push({
+                date:     key,
+                total:    Number(r?.total    ?? 0),
+                answered: Number(r?.answered ?? 0),
+                missed:   Number(r?.missed   ?? 0),
+                outgoing: Number(r?.outgoing ?? 0),
+                incoming: Number(r?.incoming ?? 0),
+                duration: Number(r?.duration ?? 0),
+            });
         }
 
         res.json({
-            summary: { totalCalls, answered, missed, outgoing, incoming, totalDuration, avgDuration, today },
-            perDay:  Object.values(dayMap),
+            summary: {
+                totalCalls,
+                answered:      Number(s.answered    ?? 0),
+                missed:        Number(s.missed      ?? 0),
+                outgoing:      Number(s.outgoing    ?? 0),
+                incoming:      Number(s.incoming    ?? 0),
+                totalDuration,
+                avgDuration,
+                today:         Number(s.today       ?? 0),
+            },
+            perDay,
         });
     } catch (err) {
         res.status(500).json({ message: "Error fetching stats", error: err.message });

@@ -328,20 +328,10 @@ async function runRulesForLead(triggerType, lead, context = null) {
         }
 
         const conditionsMet = matchesAllConditions(lead, rule.conditions);
-        if (!conditionsMet) {
-            await prisma.automationLog.create({
-                data: { ruleId: rule.id, leadId: lead.id, status: "SKIPPED", details: { reason: "conditions_not_met", chainId: ctx.chainId } }
-            });
-            continue;
-        }
+        if (!conditionsMet) continue;
 
         const constraintCheck = await checkConstraints(rule, lead, ctx);
-        if (!constraintCheck.allowed) {
-            await prisma.automationLog.create({
-                data: { ruleId: rule.id, leadId: lead.id, status: "SKIPPED", details: { reason: constraintCheck.reason, chainId: ctx.chainId } }
-            });
-            continue;
-        }
+        if (!constraintCheck.allowed) continue;
 
         const results = [];
         let failed = false;

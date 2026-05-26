@@ -8,7 +8,7 @@ const { createTaskSchema, updateTaskSchema, updateTaskStatusSchema, updateKanban
 
 router.use(authMiddleware);
 
-const adminOnly = roleMiddleware(["SUPER_ADMIN", "ADMIN"]);
+const adminOnly = roleMiddleware(["SUPER_ADMIN", "MANAGER"]);
 
 // ── Task CRUD ─────────────────────────────────────────────────────────────────
 router.get("/tasks", tc.getTasks);

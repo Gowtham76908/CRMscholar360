@@ -66,10 +66,10 @@ export function getModeFromPath(pathname) {
 export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = {} }) {
     const location = useLocation();
     const { user, onlineStatus } = useAuth();
-    const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(user?.role);
-    const activeMode = getModeFromPath(location.pathname);
+    const isSuperAdmin = user?.role === "SUPER_ADMIN";
+    const activeMode   = getModeFromPath(location.pathname);
 
-    const visibleModes = MODES.filter(m => !m.adminOnly || isAdmin);
+    const visibleModes = MODES.filter(m => !m.adminOnly || isSuperAdmin);
 
     // Keyboard shortcuts 1–5 for mode switching
     useEffect(() => {

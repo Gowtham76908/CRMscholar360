@@ -12,8 +12,8 @@ const createUser = async (req, res) => {
             return res.status(400).json({ message: "User already exists" });
         }
 
-        if (role === "ADMIN" && req.user.role !== "SUPER_ADMIN") {
-            return res.status(403).json({ message: "Only Super Admins can create Admins" });
+        if (role === "MANAGER" && req.user.role !== "SUPER_ADMIN") {
+            return res.status(403).json({ message: "Only Super Admins can create Managers" });
         }
 
         if (role === "SUPER_ADMIN") {
@@ -33,6 +33,13 @@ const createUser = async (req, res) => {
             }
         }
 
+        const { managerId } = req.body;
+        if (managerId) {
+            const { validateManagerAssignment } = require("../services/organizationService");
+            const check = await validateManagerAssignment("__new__", managerId);
+            if (!check.ok) return res.status(400).json({ message: check.message });
+        }
+
         const newUser = await prisma.user.create({
             data: {
                 name,
@@ -40,9 +47,10 @@ const createUser = async (req, res) => {
                 phone,
                 password: hashedPassword,
                 role: role || "EMPLOYEE",
-                department, // Keep string for backward compatibility or display
-                departmentId, // Link to actual Department model
+                department,
+                departmentId,
                 jobTitle: req.body.jobTitle,
+                managerId: managerId || null,
                 isActive: true
             }
         });
@@ -75,7 +83,9 @@ const getTeam = async (req, res) => {
                 jobTitle: true,
                 createdAt: true,
                 onlineStatus: true,
-                breakStartedAt: true
+                breakStartedAt: true,
+                managerId: true,
+                manager: { select: { id: true, name: true } },
             },
             orderBy: { createdAt: "desc" }
         });
@@ -111,13 +121,19 @@ const toggleUserAccess = async (req, res) => {
 const updateUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, phone, role, department, jobTitle } = req.body;
+        const { name, phone, role, department, jobTitle, managerId } = req.body;
 
         if (role === "SUPER_ADMIN") {
             return res.status(403).json({ message: "Cannot assign SUPER_ADMIN role" });
         }
-        if (role === "ADMIN" && req.user.role !== "SUPER_ADMIN") {
-            return res.status(403).json({ message: "Only Super Admins can assign the Admin role" });
+        if (role === "MANAGER" && req.user.role !== "SUPER_ADMIN") {
+            return res.status(403).json({ message: "Only Super Admins can assign the Manager role" });
+        }
+
+        if (managerId !== undefined && managerId !== null) {
+            const { validateManagerAssignment } = require("../services/organizationService");
+            const check = await validateManagerAssignment(id, managerId);
+            if (!check.ok) return res.status(400).json({ message: check.message });
         }
 
         // Find department ID if department name is provided
@@ -139,7 +155,8 @@ const updateUser = async (req, res) => {
                 role,
                 department,
                 departmentId,
-                jobTitle
+                jobTitle,
+                ...(managerId !== undefined && { managerId: managerId || null }),
             },
             select: {
                 id: true,
@@ -149,7 +166,9 @@ const updateUser = async (req, res) => {
                 role: true,
                 isActive: true,
                 department: true,
-                jobTitle: true
+                jobTitle: true,
+                managerId: true,
+                manager: { select: { id: true, name: true } },
             }
         });
 

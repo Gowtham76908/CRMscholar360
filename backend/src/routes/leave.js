@@ -14,9 +14,9 @@ router.get("/my", leaveController.getMyLeaves);
 router.get("/stats", leaveController.getLeaveStats);
 
 // Admin routes
-router.get("/pending", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), leaveController.getPendingLeaves);
-router.get("/all", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), leaveController.getAllLeaves);
-router.post("/approve/:id", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(approveRejectLeaveSchema), leaveController.approveLeave);
-router.post("/reject/:id", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(approveRejectLeaveSchema), leaveController.rejectLeave);
+router.get("/pending", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), leaveController.getPendingLeaves);
+router.get("/all", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), leaveController.getAllLeaves);
+router.post("/approve/:id", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), validate(approveRejectLeaveSchema), leaveController.approveLeave);
+router.post("/reject/:id", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), validate(approveRejectLeaveSchema), leaveController.rejectLeave);
 
 module.exports = router;

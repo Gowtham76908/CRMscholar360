@@ -1,8 +1,8 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Search, Filter, Edit, Plus, Upload, Phone, PhoneCall, Play, Pause, SearchCheck, Users, History, Mail, ChevronLeft, ChevronRight as ChevronRightIcon, LayoutGrid, List } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Search, Filter, Edit, Plus, Upload, Phone, PhoneCall, Play, Pause, SearchCheck, Users, History, Mail, ChevronLeft, ChevronRight as ChevronRightIcon, LayoutGrid, List, Zap } from "lucide-react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import api from "../api/axios";
 import { Loader2, Merge } from "lucide-react";
 import { Modal } from "../components/Modal";
@@ -10,14 +10,17 @@ import AddLeadForm from "../components/AddLeadForm";
 import MergeLeadModal from "../components/MergeLeadModal";
 import LeadActivityModal from "../components/LeadActivityModal";
 import CallDetailModal from "../components/CallDetailModal";
+import ImportLeadsModal from "../components/ImportLeadsModal";
 import { useAuth } from "../context/AuthContext";
 import { LeadsSkeleton } from "../components/ui/Skeleton";
 
-function getSLAStatus(lead) {
+function getSLAStatus(lead, warningDays = 3, breachDays = 7) {
     if (!["NEW", "CONTACTED", "FOLLOW_UP"].includes(lead.status)) return null;
-    const days = (Date.now() - new Date(lead.updatedAt).getTime()) / 86_400_000;
-    if (days > 7) return "breach";
-    if (days > 3) return "warning";
+    const ref = lead.lastActivityAt ?? lead.updatedAt;
+    const days = (Date.now() - new Date(ref).getTime()) / 86_400_000;
+    const daysRounded = Math.floor(days);
+    if (days > breachDays) return { level: "breach", days: daysRounded };
+    if (days > warningDays) return { level: "warning", days: daysRounded };
     return null;
 }
 
@@ -83,9 +86,9 @@ const Leads = () => {
     const limit = 20;
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingLead, setEditingLead] = useState(null);
-    const [isImporting, setIsImporting] = useState(false);
-    const csvInputRef = useRef(null);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const queryClient = useQueryClient();
+    const { user } = useAuth();
 
     const { data: leadsData, isLoading, isFetching } = useQuery({
         queryKey: ["leads", page, searchTerm, statusFilter, activeTab, sortBy, sortOrder, scoreMin, mineFilter],
@@ -106,6 +109,14 @@ const Leads = () => {
         },
         placeholderData: (prev) => prev,
     });
+
+    const { data: orgSettings } = useQuery({
+        queryKey: ["company-settings"],
+        queryFn: () => api.get("/company-settings").then((r) => r.data),
+        staleTime: 5 * 60_000,
+    });
+    const slaWarningDays = orgSettings?.slaWarningDays ?? 3;
+    const slaBreachDays  = orgSettings?.slaBreachDays  ?? 7;
 
     const leads = leadsData?.data || [];
     const meta = leadsData?.meta || { total: 0, totalPages: 0 };
@@ -171,6 +182,18 @@ const Leads = () => {
         }
     };
 
+    const isManager = ["SUPER_ADMIN", "MANAGER"].includes(user?.role);
+
+    const smartAssignMutation = useMutation({
+        mutationFn: (leadIds) => api.post("/leads/bulk-smart-assign", { leadIds }).then((r) => r.data),
+        onSuccess: (data) => {
+            toast.success(data.message || `Smart-assigned ${data.assigned} leads`);
+            queryClient.invalidateQueries({ queryKey: ["leads"] });
+            setSelectedLeads([]);
+        },
+        onError: (e) => toast.error(e.response?.data?.message || "Smart assign failed"),
+    });
+
     const handleBulkUpdate = async (status) => {
         if (!confirm(`Update ${selectedLeads.length} leads to ${status}?`)) return;
         try {
@@ -192,7 +215,6 @@ const Leads = () => {
     const [selectedLeadForCalls, setSelectedLeadForCalls] = useState(null);
 
     // Click2Call state
-    const { user } = useAuth();
     const [callingLeadId, setCallingLeadId] = useState(null);
     const [playingRecording, setPlayingRecording] = useState(null);
     const audioRef = useRef(null);
@@ -238,33 +260,13 @@ const Leads = () => {
         }
     };
 
-    // CSV Import
-    const handleImportCSV = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        e.target.value = "";
-
-        setIsImporting(true);
-        try {
-            const formData = new FormData();
-            formData.append("csv", file);
-            const res = await api.post("/leads/import", formData, {
-                headers: { "Content-Type": "multipart/form-data" }
-            });
-            queryClient.invalidateQueries({ queryKey: ["leads"] });
-            toast.success(res.data.message);
-        } catch (error) {
-            toast.error(error.response?.data?.message || "Failed to import CSV");
-        } finally {
-            setIsImporting(false);
-        }
-    };
 
     if (isLoading) {
         return <LeadsSkeleton />;
     }
 
     return (
+        <>
         <div className="space-y-5">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
@@ -275,23 +277,11 @@ const Leads = () => {
                     <p className="text-sm text-gray-500">{meta.total} leads · Manage your pipeline</p>
                 </div>
                 <div className="flex gap-2">
-                    <input
-                        ref={csvInputRef}
-                        type="file"
-                        accept=".csv"
-                        className="hidden"
-                        onChange={handleImportCSV}
-                    />
                     <button
-                        onClick={() => csvInputRef.current?.click()}
-                        disabled={isImporting}
-                        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-60"
+                        onClick={() => setIsImportModalOpen(true)}
+                        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                     >
-                        {isImporting ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                            <Upload className="h-4 w-4 mr-2" />
-                        )}
+                        <Upload className="h-4 w-4 mr-2" />
                         Import File
                     </button>
                     <button
@@ -386,6 +376,19 @@ const Leads = () => {
                             </button>
                         )}
 
+                        {isManager && (
+                            <button
+                                onClick={() => smartAssignMutation.mutate(selectedLeads)}
+                                disabled={smartAssignMutation.isPending}
+                                className="inline-flex items-center text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 rounded-lg shadow-sm gap-1.5"
+                            >
+                                {smartAssignMutation.isPending
+                                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                                    : <Zap className="h-3 w-3" />}
+                                Smart Re-assign
+                            </button>
+                        )}
+
                         <select
                             className="text-sm border-gray-300 rounded-lg focus:ring-indigo-500 py-1.5"
                             onChange={(e) => { if (e.target.value) handleBulkUpdate(e.target.value); }}
@@ -471,11 +474,11 @@ const Leads = () => {
                             COLD: "bg-blue-100 text-blue-700",
                         };
                         const isSelected = selectedLeads.includes(lead.id);
-                        const sla = getSLAStatus(lead);
+                        const sla = getSLAStatus(lead, slaWarningDays, slaBreachDays);
                         return (
                             <div
                                 key={lead.id}
-                                className={`relative bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all duration-200 flex flex-col group ${isSelected ? "border-indigo-400 ring-2 ring-indigo-100" : sla === "breach" ? "border-red-200" : "border-gray-200"}`}
+                                className={`relative bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all duration-200 flex flex-col group ${isSelected ? "border-indigo-400 ring-2 ring-indigo-100" : sla?.level === "breach" ? "border-red-200" : "border-gray-200"}`}
                             >
                                 {/* Selection checkbox */}
                                 <div className="absolute top-3 left-3 z-10">
@@ -497,11 +500,11 @@ const Leads = () => {
                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusColors[lead.status] ?? "bg-gray-100 text-gray-500"}`}>
                                             {lead.status?.replace("_", " ")}
                                         </span>
-                                        {sla === "breach" && (
-                                            <span title="No activity for 7+ days" className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">SLA</span>
+                                        {sla?.level === "breach" && (
+                                            <span title={`No activity for ${sla.days} days`} className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">{sla.days}d inactive</span>
                                         )}
-                                        {sla === "warning" && (
-                                            <span title="No activity for 3+ days" className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-600 border border-amber-200">3d</span>
+                                        {sla?.level === "warning" && (
+                                            <span title={`No activity for ${sla.days} days`} className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-600 border border-amber-200">{sla.days}d inactive</span>
                                         )}
                                     </div>
                                 </Link>
@@ -748,6 +751,10 @@ const Leads = () => {
                 </div>
             )}
         </div>
+        {isImportModalOpen && (
+            <ImportLeadsModal onClose={() => setIsImportModalOpen(false)} />
+        )}
+        </>
     );
 };
 

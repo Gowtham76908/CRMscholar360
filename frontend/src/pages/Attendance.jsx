@@ -789,7 +789,7 @@ const AdminReportsPanel = () => {
 
 const Attendance = () => {
     const { user } = useAuth();
-    const isAdmin = ["ADMIN", "SUPER_ADMIN"].includes(user?.role);
+    const isAdmin = user?.role === "SUPER_ADMIN";
     const [activeTab, setActiveTab] = useState("dashboard");
 
     return (

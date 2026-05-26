@@ -102,7 +102,7 @@ const TaskDrawer = ({ task, onClose, onEdit, onDelete }) => {
     const { user } = useAuth();
     const queryClient = useQueryClient();
     const [comment, setComment] = useState("");
-    const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(user?.role);
+    const isAdmin = user?.role === "SUPER_ADMIN";
 
     const commentMutation = useMutation({
         mutationFn: () => api.post(`/tasks/${task.id}/comments`, { content: comment }),
@@ -276,7 +276,7 @@ const MetaItem = ({ icon, label, value, highlight }) => (
 const Kanban = () => {
     const { user } = useAuth();
     const queryClient = useQueryClient();
-    const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(user?.role);
+    const isAdmin = user?.role === "SUPER_ADMIN";
 
     const [filterAssignee, setFilterAssignee] = useState("ALL");
     const [filterPriority, setFilterPriority] = useState("ALL");

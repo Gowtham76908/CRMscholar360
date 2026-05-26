@@ -12,7 +12,7 @@ import { cn } from "../lib/utils";
 
 const ROLE_STYLES = {
     SUPER_ADMIN: "bg-indigo-100 text-indigo-700",
-    ADMIN:       "bg-violet-100 text-violet-700",
+    MANAGER:     "bg-orange-100 text-orange-700",
     EMPLOYEE:    "bg-gray-100 text-gray-600",
 };
 
@@ -22,7 +22,7 @@ const Team = () => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState(null);
-    const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(currentUser?.role);
+    const isAdmin = currentUser?.role === "SUPER_ADMIN";
 
     const { data: team, isLoading, error: teamError } = useQuery({
         queryKey: ["team"],
@@ -54,7 +54,7 @@ const Team = () => {
                 <Shield className="h-7 w-7 text-gray-400" />
             </div>
             <h2 className="text-lg font-bold text-gray-900">Access Denied</h2>
-            <p className="text-sm text-gray-500 mt-1">Only Admins can manage the team.</p>
+            <p className="text-sm text-gray-500 mt-1">Only Super Admins can manage the team.</p>
         </div>
     );
 
@@ -62,7 +62,7 @@ const Team = () => {
     if (teamError) return <div className="text-center py-20 text-red-500">{teamError.response?.data?.message || "Failed to load team."}</div>;
 
     const active = team?.filter(m => m.isActive).length ?? 0;
-    const admins = team?.filter(m => ["ADMIN","SUPER_ADMIN"].includes(m.role)).length ?? 0;
+    const admins = team?.filter(m => ["MANAGER","SUPER_ADMIN"].includes(m.role)).length ?? 0;
 
     return (
         <div className="space-y-6">
@@ -133,18 +133,18 @@ const Team = () => {
                                 {/* Admin toggle — super admin only */}
                                 {currentUser.role === "SUPER_ADMIN" ? (
                                     <button
-                                        onClick={() => roleMutation.mutate({ userId: member.id, role: member.role === "ADMIN" ? "EMPLOYEE" : "ADMIN" })}
-                                        title="Toggle Admin"
+                                        onClick={() => roleMutation.mutate({ userId: member.id, role: member.role === "MANAGER" ? "EMPLOYEE" : "MANAGER" })}
+                                        title="Toggle Manager"
                                         className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-indigo-600 transition-colors"
                                     >
-                                        {member.role === "ADMIN"
-                                            ? <ToggleRight className="h-5 w-5 text-indigo-500" />
+                                        {member.role === "MANAGER"
+                                            ? <ToggleRight className="h-5 w-5 text-orange-500" />
                                             : <ToggleLeft className="h-5 w-5 text-gray-300" />
                                         }
-                                        <span>{member.role === "ADMIN" ? "Admin" : "Employee"}</span>
+                                        <span>{member.role === "MANAGER" ? "Manager" : "Employee"}</span>
                                     </button>
                                 ) : (
-                                    <span className="text-xs text-gray-400">{member.role === "ADMIN" ? "Has admin access" : "Standard access"}</span>
+                                    <span className="text-xs text-gray-400">{member.role === "MANAGER" ? "Manager access" : "Standard access"}</span>
                                 )}
 
                                 <div className="flex items-center gap-1.5">

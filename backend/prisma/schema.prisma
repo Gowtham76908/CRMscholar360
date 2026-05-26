@@ -30,6 +30,9 @@ model User {
   lastSeen          DateTime?
   resetToken        String?
   resetTokenExpiry  DateTime?
+  managerId      String?
+  manager        User?           @relation("ManagerEmployees", fields: [managerId], references: [id])
+  employees      User[]          @relation("ManagerEmployees")
   activities       Activity[]
   attendances      Attendance[]
   leads            Lead[]
@@ -42,12 +45,45 @@ model User {
   sessions       Session[]
   tasks          Task[]
   invoices       Invoice[]       @relation("CreatedInvoices")
+  createdDeals   Deal[]          @relation("CreatedDeals")
+  assignedDeals  Deal[]          @relation("AssignedDeals")
   sentEmails     EmailLog[]      @relation("SentEmails")
+  emailTemplates EmailTemplate[]
   departmentRel  Department?     @relation(fields: [departmentId], references: [id])
   workspace      Workspace?      @relation(fields: [workspaceId], references: [id])
   statusLogs     UserStatusLog[]
+  assignmentHistoriesAsEmployee  AssignmentHistory[] @relation("HistoryEmployee")
+  assignmentHistoriesAsPrevious  AssignmentHistory[] @relation("HistoryPrevEmployee")
+  employeeProfile    EmployeeProfile?
+  notesAuthored      ManagerNote[] @relation("NoteAuthor")
+  notesReceived      ManagerNote[] @relation("NoteSubject")
+  importJobs         ImportJob[]
 
   @@index([phoneNormalized])
+  @@index([managerId])
+}
+
+model EmployeeProfile {
+  id                   String             @id @default(uuid())
+  employeeId           String             @unique
+  employee             User               @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  availabilityStatus   AvailabilityStatus @default(ONLINE)
+  maxDailyLeads        Int                @default(20)
+  currentLeadLoad      Int                @default(0)
+  lastAssignedAt       DateTime?
+  responseSpeed        Float              @default(1.0)
+  // Derived from sub-scores via calculatePerformanceScore()
+  performanceScore     Float              @default(0.5)
+  // Sub-score components (0-1 each)
+  leadEffectiveness    Float              @default(0.5)
+  responseQuality      Float              @default(0.5)
+  followupDiscipline   Float              @default(0.5)
+  attendanceReliability Float             @default(0.5)
+  isAcceptingLeads     Boolean            @default(true)
+  updatedAt            DateTime           @updatedAt
+
+  @@index([availabilityStatus])
+  @@index([isAcceptingLeads])
 }
 
 model UserStatusLog {
@@ -68,7 +104,7 @@ model Lead {
   phone           String?
   phoneNormalized String?     @db.VarChar(15)
   source          LeadSource
-  enquiryType     EnquiryType
+  enquiryType     EnquiryType?
   status          LeadStatus  @default(NEW)
   assignedToId    String?
   createdAt       DateTime    @default(now())
@@ -76,8 +112,9 @@ model Lead {
   score            Int         @default(0)
   scoreExplanation Json?
   category        String?
-  firstResponseAt DateTime?
-  workspaceId     String?
+  firstResponseAt  DateTime?
+  nextFollowUpAt   DateTime?
+  workspaceId      String?
   isSearchLead    Boolean     @default(false)
   linkedinUrl     String?
   jobTitle        String?
@@ -87,18 +124,29 @@ model Lead {
   activities      Activity[]
   callLogs        CallLog[]
   salestrailCalls SalestrailCall[]
+  assignedAt      DateTime?
   assignedTo      User?       @relation(fields: [assignedToId], references: [id])
   workspace       Workspace?  @relation(fields: [workspaceId], references: [id])
   notes           Note[]
   tasks           Task[]
+  deals           Deal[]
   automationLogs  AutomationLog[]
+  assignmentHistories AssignmentHistory[]
   whatsappMessages WhatsAppMessage[]
   whatsappCampaignRecipients WhatsAppCampaignRecipient[]
   whatsappOptIn   Boolean   @default(false)
   whatsappOptInAt DateTime?
   emails          EmailLog[]
 
+  lastActivityAt  DateTime?
+
   @@index([phoneNormalized])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([assignedToId, status])
+  @@index([assignedToId, createdAt])
+  @@index([lastActivityAt])
 }
 
 model AutomationRule {
@@ -155,6 +203,21 @@ model Note {
   lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([leadId])
+}
+
+model AssignmentHistory {
+  id                 String   @id @default(uuid())
+  leadId             String
+  employeeId         String
+  previousEmployeeId String?
+  reason             String?
+  createdAt          DateTime @default(now())
+  lead               Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  employee           User     @relation("HistoryEmployee", fields: [employeeId], references: [id])
+  previousEmployee   User?    @relation("HistoryPrevEmployee", fields: [previousEmployeeId], references: [id])
+
+  @@index([leadId])
+  @@index([employeeId])
 }
 
 model Sprint {
@@ -266,13 +329,14 @@ model Activity {
 }
 
 model Reminder {
-  id       String   @id @default(uuid())
-  leadId   String?
-  taskId   String?
-  userId   String
-  remindAt DateTime
-  message  String
-  isSent   Boolean  @default(false)
+  id        String   @id @default(uuid())
+  leadId    String?
+  taskId    String?
+  userId    String
+  remindAt  DateTime
+  message   String
+  isSent    Boolean  @default(false)
+  dismissed Boolean  @default(false)
 
   @@index([remindAt, isSent])
 }
@@ -409,6 +473,7 @@ model Notification {
 enum Role {
   SUPER_ADMIN
   ADMIN
+  MANAGER
   EMPLOYEE
   TEAM_LEAD
   AGENT
@@ -436,6 +501,7 @@ enum LeadStatus {
   FOLLOW_UP
   CONVERTED
   LOST
+  MERGED
 }
 
 enum AttendanceStatus {
@@ -483,6 +549,12 @@ enum Priority {
   LOW
 }
 
+enum AvailabilityStatus {
+  ONLINE
+  OFFLINE
+  ON_LEAVE
+}
+
 enum TaskType {
   EPIC
   STORY
@@ -498,6 +570,40 @@ enum KanbanStatus {
   IN_REVIEW
   DONE
   BLOCKED
+}
+
+model Deal {
+  id                 String     @id @default(uuid())
+  leadId             String
+  title              String
+  amount             Float      @default(0)
+  stage              DealStage  @default(NEW)
+  currency           String     @default("INR")
+  createdById        String
+  assignedEmployeeId String?
+  closedAt           DateTime?
+  invoiceId          String?
+  notes              String?
+  deletedAt          DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  lead               Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  createdBy          User       @relation("CreatedDeals", fields: [createdById], references: [id])
+  assignedEmployee   User?      @relation("AssignedDeals", fields: [assignedEmployeeId], references: [id])
+  invoices           Invoice[]  @relation("DealInvoices")
+
+  @@index([leadId])
+  @@index([createdById])
+  @@index([assignedEmployeeId])
+  @@index([stage])
+  @@index([deletedAt])
+}
+
+enum DealStage {
+  NEW
+  NEGOTIATION
+  WON
+  LOST
 }
 
 model Invoice {
@@ -520,11 +626,17 @@ model Invoice {
   emailSentAt   DateTime?
   emailSentTo   String?
   createdById   String
+  dealId        String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
   items         InvoiceItem[]
   payments      PaymentEntry[]
   createdBy     User          @relation("CreatedInvoices", fields: [createdById], references: [id])
+  deal          Deal?         @relation("DealInvoices", fields: [dealId], references: [id], onDelete: SetNull)
+
+  @@index([dealId])
+  @@index([deletedAt])
 }
 
 model InvoiceItem {
@@ -597,8 +709,22 @@ model CompanySettings {
   smtpUser      String?
   smtpPass      String?
   smtpFrom      String?
-  smtpSecure    Boolean  @default(false)
-  updatedAt     DateTime @updatedAt
+  smtpSecure      Boolean  @default(false)
+  slaWarningDays  Int      @default(3)
+  slaBreachDays   Int      @default(7)
+  updatedAt       DateTime @updatedAt
+}
+
+model EmailTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  subject     String
+  body        String
+  isShared    Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
 }
 
 model EmailLog {
@@ -625,6 +751,8 @@ model CustomFieldDef {
   type      String   @default("TEXT")
   options   Json?
   required  Boolean  @default(false)
+  visible   Boolean  @default(true)
+  isSystem  Boolean  @default(false)
   order     Int      @default(0)
   createdAt DateTime @default(now())
 }
@@ -730,4 +858,39 @@ model SalestrailCall {
   createdAt     DateTime  @default(now())
   leadId        String?
   lead          Lead?     @relation(fields: [leadId], references: [id])
+}
+
+model ImportJob {
+  id          String   @id @default(uuid())
+  status      String   @default("queued")   // queued | processing | done | failed
+  stage       String   @default("queued")   // queued | parsing | deduping | inserting | assigning | complete
+  progress    Int      @default(0)           // 0-100
+  total       Int      @default(0)
+  imported    Int      @default(0)
+  duplicates  Int      @default(0)
+  skipped     Int      @default(0)
+  failed      Int      @default(0)
+  assigned    Int      @default(0)
+  errors      Json     @default("[]")
+  message     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  @@index([createdById])
+}
+
+model ManagerNote {
+  id        String   @id @default(uuid())
+  authorId  String
+  subjectId String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  author    User     @relation("NoteAuthor",  fields: [authorId],  references: [id], onDelete: Cascade)
+  subject   User     @relation("NoteSubject", fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@index([subjectId])
+  @@index([authorId])
 }

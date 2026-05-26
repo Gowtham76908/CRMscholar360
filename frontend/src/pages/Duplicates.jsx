@@ -164,10 +164,14 @@ export default function Duplicates() {
             )}
 
             {!isLoading && !isError && groups.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-16 gap-3 bg-white border border-gray-200 rounded-xl">
-                    <GitMerge className="h-10 w-10 text-gray-300" />
-                    <p className="text-sm font-semibold text-gray-500">No duplicate leads found</p>
-                    <p className="text-xs text-gray-400">All leads have unique phone numbers and emails.</p>
+                <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white border border-gray-200 rounded-xl">
+                    <div className="h-16 w-16 rounded-full bg-green-50 flex items-center justify-center">
+                        <GitMerge className="h-8 w-8 text-green-400" />
+                    </div>
+                    <p className="text-base font-semibold text-gray-800">Your data is clean</p>
+                    <p className="text-sm text-gray-400 text-center max-w-xs">
+                        No duplicate phone numbers or emails found across all leads.
+                    </p>
                 </div>
             )}
 

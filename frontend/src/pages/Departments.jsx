@@ -29,7 +29,7 @@ const Departments = () => {
     const queryClient = useQueryClient();
     const [isAdding, setIsAdding] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
-    const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(user?.role);
+    const isAdmin = user?.role === "SUPER_ADMIN";
 
     const { data: departments, isLoading, error } = useQuery({
         queryKey: ["departments"],

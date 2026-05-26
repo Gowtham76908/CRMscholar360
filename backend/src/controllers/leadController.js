@@ -7,6 +7,8 @@ const { getLeadsSchema } = require("../validations/lead.validation");
 const normalizePhone = require("../utils/normalizePhone");
 const { runRulesForLead } = require("../services/automationEngine");
 const { getSuggestionsForLead, dismissSuggestion } = require("../services/followUpSuggestionService");
+const { adjustLeadLoad, assignLeads: smartAssignLeads, batchAssignLeads } = require("../services/leadDistributionEngine");
+const XLSX = require("xlsx");
 
 // Get Leads
 const getLeads = async (req, res) => {
@@ -108,17 +110,41 @@ const updateLead = async (req, res) => {
     try {
         const { userId } = req.user;
         const { id } = req.params;
-        const { status, name, email, phone, source, enquiryType, assignedToId } = req.body;
+        const { status, name, email, phone, source, enquiryType, assignedToId, nextFollowUpAt } = req.body;
 
-        // Fetch current lead to calculate delta for scoring if needed
         const currentLead = await prisma.lead.findUnique({ where: { id } });
         if (!currentLead) return res.status(404).json({ message: "Lead not found" });
+
+        // Stage gate: CONVERTED requires at least phone or email
+        if (status === "CONVERTED" && currentLead.status !== "CONVERTED") {
+            const phone = req.body.phone ?? currentLead.phone;
+            const email = req.body.email ?? currentLead.email;
+            if (!phone && !email) {
+                return res.status(422).json({
+                    code: "STAGE_GATE",
+                    message: "Cannot convert a lead without a phone number or email address.",
+                });
+            }
+        }
 
         // Merge existing with updates for scoring
         const leadForScoring = { ...currentLead, ...req.body };
         const { score, category } = calculateLeadScore(leadForScoring);
 
         // Build clean update object, explicitly ignoring undefined to support partial PATCH
+        // Auto-set nextFollowUpAt to 3 days out when transitioning to FOLLOW_UP and no date given
+        let resolvedFollowUpAt = nextFollowUpAt !== undefined
+            ? (nextFollowUpAt ? new Date(nextFollowUpAt) : null)
+            : undefined;
+        if (
+            status === "FOLLOW_UP" &&
+            currentLead.status !== "FOLLOW_UP" &&
+            resolvedFollowUpAt === undefined &&
+            !currentLead.nextFollowUpAt
+        ) {
+            resolvedFollowUpAt = new Date(Date.now() + 3 * 86_400_000);
+        }
+
         const updateData = {
             ...(status !== undefined && { status }),
             ...(name !== undefined && { name }),
@@ -127,6 +153,7 @@ const updateLead = async (req, res) => {
             ...(source !== undefined && { source }),
             ...(enquiryType !== undefined && { enquiryType }),
             ...(assignedToId !== undefined && { assignedToId }),
+            ...(resolvedFollowUpAt !== undefined && { nextFollowUpAt: resolvedFollowUpAt }),
             score,
             category
         };
@@ -156,6 +183,14 @@ const updateLead = async (req, res) => {
         const incomingAssignee = req.body.assignedToId;
         if (incomingAssignee && incomingAssignee !== currentLead.assignedToId) {
             runRulesForLead("LEAD_ASSIGNED", updatedLead).catch(console.error);
+        }
+
+        // Decrement load when lead leaves the active pool
+        const terminalStatuses = ["CONVERTED", "LOST", "CLOSED"];
+        const wasActive = !terminalStatuses.includes(currentLead.status);
+        const isNowTerminal = terminalStatuses.includes(status);
+        if (status && wasActive && isNowTerminal && updatedLead.assignedToId) {
+            adjustLeadLoad(updatedLead.assignedToId, -1).catch(console.error);
         }
 
         // Trigger Commission if status changed to CONVERTED — idempotency guarded
@@ -297,14 +332,11 @@ const mergeLeads = async (req, res) => {
                 data: { leadId: primaryLeadId }
             });
 
-            // Soft Delete Secondary (Mark as LOST or special MERGED status if exist, using LOST for now based on enum)
-            // or we can delete? Prompt said "Soft delete (status = MERGED)".
-            // My Enum LeadStatus doesn't have MERGED. I should add it or use LOST. 
-            // I'll stick to LOST with a note, or better, I should have added MERGED to enum.
-            // For now, I'll update it to 'LOST' and add a note.
+            // Stamp secondary as MERGED so it is excluded from conversion analytics
+            // while remaining auditable. MERGED is a terminal status — not LOST.
             await prisma.lead.update({
                 where: { id: secondaryLeadId },
-                data: { status: "LOST", name: `[MERGED] ${primaryLeadId}` }
+                data: { status: "MERGED", assignedToId: null }
             });
 
             // Log Merge on Primary
@@ -328,6 +360,7 @@ const mergeLeads = async (req, res) => {
 const getLead = async (req, res) => {
     try {
         const { id } = req.params;
+        const { userId, role } = req.user;
         const lead = await prisma.lead.findUnique({
             where: { id },
             include: {
@@ -349,6 +382,9 @@ const getLead = async (req, res) => {
             },
         });
         if (!lead) return res.status(404).json({ message: "Lead not found" });
+        if (role === "EMPLOYEE" && lead.assignedToId !== userId) {
+            return res.status(403).json({ message: "Access denied" });
+        }
         res.json(lead);
     } catch (error) {
         res.status(500).json({ message: "Error fetching lead", error: error.message });
@@ -359,6 +395,12 @@ const getLead = async (req, res) => {
 const getLeadActivities = async (req, res) => {
     try {
         const { id } = req.params;
+        const { userId, role } = req.user;
+        if (role === "EMPLOYEE") {
+            const lead = await prisma.lead.findUnique({ where: { id }, select: { assignedToId: true } });
+            if (!lead) return res.status(404).json({ message: "Lead not found" });
+            if (lead.assignedToId !== userId) return res.status(403).json({ message: "Access denied" });
+        }
         const activities = await prisma.activity.findMany({
             where: { leadId: id },
             orderBy: { createdAt: "desc" },
@@ -420,21 +462,19 @@ const exportLeads = async (req, res) => {
 // Normalize a header string for flexible matching
 const normalizeHeader = (h) => h.toLowerCase().replace(/[\s_\-\.#()]+/g, "").replace(/no$/, "").replace(/number$/, "").replace(/id$/, "");
 
-// Map of normalized patterns to our field names
 const HEADER_ALIASES = {
-    name: ["name", "leadname", "fullname", "contactname", "customername", "firstname", "contact", "customer", "lead"],
-    email: ["email", "emailaddress", "emailid", "mail", "contactemail", "emailadd"],
-    phone: ["phone", "phonenumber", "mobile", "mobilenumber", "contact", "contactnumber", "cell", "cellphone", "telephone", "tel", "mob", "mobileno", "phoneno", "contactno", "whatsapp"],
-    source: ["source", "leadsource", "channel", "platform", "leadfrom", "from", "medium"],
-    enquiryType: ["type", "enquirytype", "enquiry", "category", "producttype", "servicetype", "leadtype", "interest"],
+    name:         ["name", "leadname", "fullname", "contactname", "customername", "firstname", "contact", "customer", "lead"],
+    email:        ["email", "emailaddress", "emailid", "mail", "contactemail", "emailadd"],
+    phone:        ["phone", "phonenumber", "mobile", "mobilenumber", "contact", "contactnumber", "cell", "cellphone", "telephone", "tel", "mob", "mobileno", "phoneno", "contactno", "whatsapp"],
+    source:       ["source", "leadsource", "channel", "platform", "leadfrom", "from", "medium"],
+    enquiryType:  ["type", "enquirytype", "enquiry", "category", "producttype", "servicetype", "leadtype", "interest"],
+    assignedTo:   ["assignedto", "assignee", "employee", "agent", "salesrep", "owner", "assignedemployee", "rep", "salesperson"],
 };
 
-// Find the best matching field for a given header
 const matchHeader = (normalizedHeader, headerAliases) => {
     for (const [field, aliases] of Object.entries(headerAliases)) {
         if (aliases.includes(normalizedHeader)) return field;
     }
-    // Partial match fallback
     for (const [field, aliases] of Object.entries(headerAliases)) {
         for (const alias of aliases) {
             if (normalizedHeader.includes(alias) || alias.includes(normalizedHeader)) return field;
@@ -443,118 +483,148 @@ const matchHeader = (normalizedHeader, headerAliases) => {
     return null;
 };
 
-// Import Leads from CSV
-const importLeads = async (req, res) => {
+// Parse CSV or Excel buffer → array of row-objects keyed by mapped field name
+function parseFileBuffer(buffer, originalname) {
+    const isExcel = /\.(xlsx|xls)$/i.test(originalname);
+
+    let rows; // string[][]
+    if (isExcel) {
+        const wb = XLSX.read(buffer, { type: "buffer" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    } else {
+        // plain CSV parser
+        const content = buffer.toString("utf-8");
+        const parsed = [];
+        let currentRow = [], currentField = "", inQuotes = false;
+        for (let i = 0; i < content.length; i++) {
+            const c = content[i], n = content[i + 1];
+            if (c === '"' && inQuotes && n === '"') { currentField += '"'; i++; }
+            else if (c === '"') { inQuotes = !inQuotes; }
+            else if (c === "," && !inQuotes) { currentRow.push(currentField.trim()); currentField = ""; }
+            else if ((c === "\r" || c === "\n") && !inQuotes) {
+                if (currentField || currentRow.length > 0) { currentRow.push(currentField.trim()); parsed.push(currentRow); currentField = ""; currentRow = []; }
+                if (c === "\r" && n === "\n") i++;
+            } else { currentField += c; }
+        }
+        if (currentField || currentRow.length > 0) { currentRow.push(currentField.trim()); parsed.push(currentRow); }
+        rows = parsed;
+    }
+    return rows;
+}
+
+// Build a fieldMap from raw header row: { colIndex → fieldName }
+function buildFieldMap(headerRow) {
+    const map = {};
+    headerRow.forEach((h, idx) => {
+        const norm = normalizeHeader(String(h ?? ""));
+        const field = matchHeader(norm, HEADER_ALIASES);
+        if (field) map[idx] = field;
+    });
+    return map;
+}
+
+// Preview — parse file, return metadata without touching the DB
+const previewImport = async (req, res) => {
     try {
-        const { userId } = req.user;
+        if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
-        if (!req.file) {
-            return res.status(400).json({ message: "No CSV file uploaded" });
-        }
+        const rows = parseFileBuffer(req.file.buffer, req.file.originalname);
+        if (rows.length < 2) return res.status(400).json({ message: "File is empty or has no data rows" });
 
-        const csvContent = req.file.buffer.toString("utf-8");
-        const parseCSV = (content) => {
-            const rows = [];
-            let currentRow = [];
-            let currentField = "";
-            let inQuotes = false;
+        const fieldMap = buildFieldMap(rows[0]);
+        const hasAssignmentColumn = Object.values(fieldMap).includes("assignedTo");
+        const columnHeaders = rows[0].map(String);
 
-            for (let i = 0; i < content.length; i++) {
-                const char = content[i];
-                const nextChar = content[i + 1];
+        const previewRows = rows.slice(1, 6).map(values => {
+            const obj = {};
+            Object.entries(fieldMap).forEach(([idx, field]) => { obj[field] = String(values[idx] ?? ""); });
+            return obj;
+        });
 
-                if (char === '"' && inQuotes && nextChar === '"') {
-                    currentField += '"';
-                    i++;
-                } else if (char === '"') {
-                    inQuotes = !inQuotes;
-                } else if (char === "," && !inQuotes) {
-                    currentRow.push(currentField.trim());
-                    currentField = "";
-                } else if ((char === "\r" || char === "\n") && !inQuotes) {
-                    if (currentField || currentRow.length > 0) {
-                        currentRow.push(currentField.trim());
-                        rows.push(currentRow);
-                        currentField = "";
-                        currentRow = [];
-                    }
-                    if (char === "\r" && nextChar === "\n") i++;
-                } else {
-                    currentField += char;
-                }
-            }
-            if (currentField || currentRow.length > 0) {
-                currentRow.push(currentField.trim());
-                rows.push(currentRow);
-            }
-            return rows;
-        };
+        res.json({
+            totalRows: rows.length - 1,
+            hasAssignmentColumn,
+            columnHeaders,
+            previewRows,
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Error parsing file", error: err.message });
+    }
+};
 
-        const allRows = parseCSV(csvContent);
-        if (allRows.length < 2) {
-            return res.status(400).json({ message: "CSV file is empty or has no data rows" });
-        }
+const VALID_SOURCES = ["FACEBOOK", "INSTAGRAM", "GMAIL", "WEBSITE", "PHONE_CALL"];
+const VALID_ENQUIRY = ["PRODUCT", "WHITE_LABEL", "LMS", "SERVICES"];
+const IMPORT_ERROR_CAP = 50; // max errors stored in ImportJob.errors JSON
 
-        const headers = allRows[0].map(h => h.toLowerCase().replace(/[^\w]/g, ""));
+// ── Background import worker ──────────────────────────────────────────────────
+// Runs after the HTTP response is already sent. Updates the ImportJob record
+// at each stage so the frontend can poll for progress.
+async function runImportJob(jobId, { buffer, originalname, allocationMode, userId, role }) {
+    // Helper: silently update job (never throws — a failed progress update
+    // must not mask the real import error).
+    const updateJob = (data) =>
+        prisma.importJob.update({ where: { id: jobId }, data }).catch(() => {});
 
-        const validSources = ["FACEBOOK", "INSTAGRAM", "GMAIL", "WEBSITE", "PHONE_CALL"];
-        const validEnquiryTypes = ["PRODUCT", "WHITE_LABEL", "LMS", "SERVICES"];
+    try {
+        // ── Stage: parsing ────────────────────────────────────────────────
+        await updateJob({ status: "processing", stage: "parsing", progress: 10 });
 
-        const results = { imported: 0, skipped: 0, duplicates: 0, duplicatesFromRace: 0, failed: 0, errors: [] };
+        const rows = parseFileBuffer(buffer, originalname);
+        const fieldMap = buildFieldMap(rows[0]);
+        const counts = { imported: 0, skipped: 0, duplicates: 0, duplicatesFromRace: 0, failed: 0 };
+        const errors = [];
 
-        // ── Pass 1: parse every data row so we can bulk-check duplicates upfront ──
+        // Pass 1 — validate rows
         const parsedRows = [];
-        for (let i = 1; i < allRows.length; i++) {
-            const values = allRows[i];
+        for (let i = 1; i < rows.length; i++) {
+            const values = rows[i];
             const row = {};
-            headers.forEach((h, idx) => { row[h] = values[idx] || ""; });
+            Object.entries(fieldMap).forEach(([idx, field]) => { row[field] = String(values[idx] ?? "").trim(); });
 
-            const firstCell = values[0] || "";
-            if (values.length < 2 || (firstCell.includes("/") && values.slice(1).every(v => !v))) {
-                results.skipped++;
-                continue;
-            }
+            if (values.length < 2 || values.every(v => !String(v ?? "").trim())) { counts.skipped++; continue; }
 
-            const name = row["name"] || row["leadname"] || row["fullname"] || "";
-            const email = row["email"] || "";
-            let phone = row["phone"] || row["phonenumber"] || row["mobile"] || "";
-            phone = phone.replace(/^p:\s*/i, "").trim();
-
-            let source = (row["source"] || "WEBSITE").toUpperCase().replace(/[\s]+/g, "_");
-            let enquiryType = (row["type"] || row["enquirytype"] || "PRODUCT").toUpperCase().replace(/[\s]+/g, "_");
-            if (!validSources.includes(source)) source = "WEBSITE";
-            if (!validEnquiryTypes.includes(enquiryType)) enquiryType = "PRODUCT";
+            const name  = row.name  || "";
+            const email = row.email || "";
+            let   phone = (row.phone || "").replace(/^p:\s*/i, "").trim();
+            let source      = (row.source      || "WEBSITE").toUpperCase().replace(/\s+/g, "_");
+            let enquiryType = (row.enquiryType || "PRODUCT").toUpperCase().replace(/\s+/g, "_");
+            if (!VALID_SOURCES.includes(source))       source      = "WEBSITE";
+            if (!VALID_ENQUIRY.includes(enquiryType))  enquiryType = "PRODUCT";
 
             if (!name || !phone) {
-                results.failed++;
-                results.errors.push(`Row ${i + 1}: Missing required fields (name="${name}", phone="${phone}")`);
+                counts.failed++;
+                if (errors.length < IMPORT_ERROR_CAP)
+                    errors.push(`Row ${i + 1}: Missing required fields (name="${name}", phone="${phone}")`);
                 continue;
             }
-
-            parsedRows.push({ rowNum: i + 1, name, email, phone, source, enquiryType });
+            parsedRows.push({ rowNum: i + 1, name, email, phone, source, enquiryType, assignedToRaw: row.assignedTo || "" });
         }
 
-        // ── Pass 2: bulk duplicate check — one query for all normalized phones ──
-        const allNormalized = parsedRows.map(r => normalizePhone(r.phone)).filter(Boolean);
+        // ── Stage: deduping ───────────────────────────────────────────────
+        await updateJob({ stage: "deduping", progress: 25 });
 
+        // Chunk the IN query to avoid oversized PostgreSQL parameters (>2000 at once)
+        const allNormalized = parsedRows.map(r => normalizePhone(r.phone)).filter(Boolean);
         const existingPhones = new Set();
-        if (allNormalized.length > 0) {
+        const DEDUP_CHUNK = 2000;
+        for (let i = 0; i < allNormalized.length; i += DEDUP_CHUNK) {
             const existing = await prisma.lead.findMany({
-                where: { phoneNormalized: { in: allNormalized } },
-                select: { phoneNormalized: true }
+                where: { phoneNormalized: { in: allNormalized.slice(i, i + DEDUP_CHUNK) } },
+                select: { phoneNormalized: true },
             });
             existing.forEach(l => existingPhones.add(l.phoneNormalized));
         }
 
-        // ── Pass 3: split into duplicates (for UX reporting) and new rows (for bulk insert) ──
+        // Pass 3 — dedupe + score
         const seenInBatch = new Set();
         const newRows = [];
-
         for (const r of parsedRows) {
             const normalized = normalizePhone(r.phone);
             if (normalized && (existingPhones.has(normalized) || seenInBatch.has(normalized))) {
-                results.duplicates++;
-                results.errors.push(`Row ${r.rowNum}: Duplicate phone ${r.phone} — skipped`);
+                counts.duplicates++;
+                if (errors.length < IMPORT_ERROR_CAP)
+                    errors.push(`Row ${r.rowNum}: Duplicate phone ${r.phone} — skipped`);
                 continue;
             }
             const { score, category } = calculateLeadScore({ source: r.source, phone: r.phone, email: r.email });
@@ -562,69 +632,220 @@ const importLeads = async (req, res) => {
             if (normalized) seenInBatch.add(normalized);
         }
 
-        // ── Pass 4: bulk insert + activity logging in one transaction ──
-        if (newRows.length > 0) {
-            const insertedAt = new Date();
+        if (newRows.length === 0) {
+            await updateJob({
+                status: "done", stage: "complete", progress: 100,
+                imported: 0, duplicates: counts.duplicates, skipped: counts.skipped,
+                failed: counts.failed, assigned: 0, errors,
+                message: `Import complete: 0 imported, ${counts.duplicates} duplicate(s) skipped, ${counts.failed} failed`,
+            });
+            return;
+        }
+
+        // ── Stage: resolving "keep" employee map ──────────────────────────
+        let employeeByName  = new Map();
+        let employeeByEmail = new Map();
+        if (allocationMode === "keep") {
+            const rawNames = [...new Set(newRows.map(r => r.assignedToRaw).filter(Boolean))];
+            if (rawNames.length > 0) {
+                const employees = await prisma.user.findMany({
+                    where: {
+                        isActive: true,
+                        OR: [
+                            { name:  { in: rawNames, mode: "insensitive" } },
+                            { email: { in: rawNames, mode: "insensitive" } },
+                        ],
+                    },
+                    select: { id: true, name: true, email: true },
+                });
+                employees.forEach(e => {
+                    employeeByName.set(e.name.toLowerCase(), e.id);
+                    if (e.email) employeeByEmail.set(e.email.toLowerCase(), e.id);
+                });
+            }
+        }
+
+        // ── Stage: inserting ──────────────────────────────────────────────
+        await updateJob({ stage: "inserting", progress: 40 });
+
+        const INSERT_CHUNK = 500; // rows per createMany batch
+        const insertedAt = new Date();
+        let createdLeadIds = [];
+
+        // Chunk inserts so a single giant createMany never risks a statement
+        // timeout or exceeds Prisma's parameter limit on very large files.
+        for (let i = 0; i < newRows.length; i += INSERT_CHUNK) {
+            const chunk = newRows.slice(i, i + INSERT_CHUNK);
 
             await prisma.$transaction(async (tx) => {
                 const { count } = await tx.lead.createMany({
-                    data: newRows.map(r => ({
-                        name: r.name,
-                        email: r.email || null,
-                        phone: r.phone,
-                        phoneNormalized: r.normalized,
-                        source: r.source,
-                        enquiryType: r.enquiryType,
-                        score: r.score,
-                        category: r.category
-                    })),
-                    skipDuplicates: true  // DB-level guard catches races the app check missed
+                    data: chunk.map(r => {
+                        let assignedToId = null;
+                        if (allocationMode === "keep" && r.assignedToRaw) {
+                            assignedToId =
+                                employeeByName.get(r.assignedToRaw.toLowerCase()) ||
+                                employeeByEmail.get(r.assignedToRaw.toLowerCase()) ||
+                                null;
+                        }
+                        return {
+                            name: r.name,
+                            email: r.email || null,
+                            phone: r.phone,
+                            phoneNormalized: r.normalized,
+                            source: r.source,
+                            enquiryType: r.enquiryType,
+                            score: r.score,
+                            category: r.category,
+                            ...(assignedToId ? { assignedToId, assignedAt: new Date() } : {}),
+                        };
+                    }),
+                    skipDuplicates: true,
                 });
 
-                results.imported = count;
-                // Rows the app approved but the DB rejected (concurrent import race)
-                results.duplicatesFromRace = newRows.length - count;
-                results.duplicates += results.duplicatesFromRace;
+                counts.imported += count;
+                const raceSkipped = chunk.length - count;
+                counts.duplicatesFromRace += raceSkipped;
+                counts.duplicates += raceSkipped;
 
                 if (count > 0) {
-                    const createdLeads = await tx.lead.findMany({
+                    const created = await tx.lead.findMany({
                         where: {
-                            phoneNormalized: { in: newRows.map(r => r.normalized).filter(Boolean) },
-                            createdAt: { gte: insertedAt }
+                            phoneNormalized: { in: chunk.map(r => r.normalized).filter(Boolean) },
+                            createdAt: { gte: insertedAt },
                         },
-                        select: { id: true }
+                        select: { id: true },
                     });
+                    const ids = created.map(l => l.id);
+                    createdLeadIds.push(...ids);
 
-                    if (createdLeads.length > 0) {
+                    if (ids.length > 0) {
                         await tx.activity.createMany({
-                            data: createdLeads.map(l => ({
-                                leadId: l.id,
+                            data: ids.map(id => ({
+                                leadId: id,
                                 userId,
                                 action: "LEAD_CREATED",
-                                metadata: { source: "CSV_IMPORT" }
-                            }))
+                                metadata: { source: "FILE_IMPORT" },
+                            })),
                         });
                     }
                 }
             });
+
+            // Update progress proportionally through the insert phase (40→70)
+            const insertProgress = Math.round(40 + ((i + INSERT_CHUNK) / newRows.length) * 30);
+            await updateJob({ stage: "inserting", progress: Math.min(70, insertProgress), imported: counts.imported });
         }
 
-        const raceLine = results.duplicatesFromRace > 0
-            ? `, ${results.duplicatesFromRace} caught by DB race guard`
-            : "";
+        // ── Stage: smart batch assignment ─────────────────────────────────
+        let assignedCount = 0;
+        if (allocationMode === "smart" && createdLeadIds.length > 0) {
+            await updateJob({ stage: "assigning", progress: 75 });
+            try {
+                const assignOpts = role === "MANAGER"
+                    ? { managerId: userId, actorId: userId }
+                    : { actorId: userId };
+                const result = await batchAssignLeads(createdLeadIds, assignOpts);
+                assignedCount = result.assigned;
+                if (result.failed > 0 && errors.length < IMPORT_ERROR_CAP) {
+                    errors.push(`Smart allocation: ${result.failed} lead(s) could not be assigned (no available capacity)`);
+                }
+            } catch (err) {
+                if (errors.length < IMPORT_ERROR_CAP)
+                    errors.push(`Smart allocation warning: ${err.message}`);
+            }
+        }
 
-        res.json({
-            message: `Import complete: ${results.imported} imported, ${results.duplicates} duplicate(s) skipped${raceLine}, ${results.failed} failed`,
-            imported: results.imported,
-            duplicates: results.duplicates,
-            duplicatesFromRace: results.duplicatesFromRace,
-            skipped: results.skipped,
-            failed: results.failed,
-            errors: results.errors.slice(0, 20)
+        // ── Done ──────────────────────────────────────────────────────────
+        const raceLine = counts.duplicatesFromRace > 0
+            ? `, ${counts.duplicatesFromRace} caught by DB race guard` : "";
+        await updateJob({
+            status: "done", stage: "complete", progress: 100,
+            imported: counts.imported, duplicates: counts.duplicates,
+            skipped: counts.skipped, failed: counts.failed,
+            assigned: assignedCount, errors,
+            message: `Import complete: ${counts.imported} imported, ${counts.duplicates} duplicate(s) skipped${raceLine}, ${counts.failed} failed`,
         });
+    } catch (err) {
+        console.error(`ImportJob ${jobId} failed:`, err);
+        await updateJob({ status: "failed", stage: "failed", message: err.message });
+    }
+}
+
+// POST /leads/import
+// Validates the file, creates an ImportJob record, responds immediately with
+// the jobId, then spawns runImportJob in the background via setImmediate.
+const importLeads = async (req, res) => {
+    try {
+        const { userId, role } = req.user;
+
+        if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+        const allocationMode = req.body?.allocationMode ?? "unassigned";
+
+        // Hold buffer reference — multer may free req.file after the handler returns
+        const buffer       = req.file.buffer;
+        const originalname = req.file.originalname;
+
+        // Quick structural check (header row only) before accepting the job
+        const headerRows = parseFileBuffer(buffer, originalname);
+        if (headerRows.length < 2) return res.status(400).json({ message: "File is empty or has no data rows" });
+        const estimatedTotal = headerRows.length - 1;
+
+        const job = await prisma.importJob.create({
+            data: { createdById: userId, total: estimatedTotal, status: "queued", stage: "queued" },
+        });
+
+        // Respond immediately — client will poll /import/status/:jobId
+        res.json({ jobId: job.id, total: estimatedTotal, message: "Import queued — poll /leads/import/status/:jobId for progress" });
+
+        // Full parse + all DB work happens after the HTTP response is flushed,
+        // so the CPU-bound CSV/XLSX parsing doesn't add latency to the 200 response.
+        setImmediate(() => runImportJob(job.id, { buffer, originalname, allocationMode, userId, role }));
     } catch (error) {
-        console.error("CSV Import error:", error);
-        res.status(500).json({ message: "Error importing leads", error: error.message });
+        console.error("Import error:", error);
+        res.status(500).json({ message: "Error starting import", error: error.message });
+    }
+};
+
+// GET /leads/import/status/:jobId
+const getImportStatus = async (req, res) => {
+    try {
+        const job = await prisma.importJob.findUnique({ where: { id: req.params.jobId } });
+        if (!job) return res.status(404).json({ message: "Import job not found" });
+
+        // Only the creator or an admin can see the job
+        const { userId, role } = req.user;
+        if (job.createdById !== userId && !["SUPER_ADMIN", "ADMIN"].includes(role)) {
+            return res.status(403).json({ message: "Forbidden" });
+        }
+
+        res.json(job);
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching import status", error: error.message });
+    }
+};
+
+const getOverdueFollowUps = async (req, res) => {
+    try {
+        const { userId, role } = req.user;
+        const leadWhere = role === "EMPLOYEE" ? { assignedToId: userId } : {};
+        const leads = await prisma.lead.findMany({
+            where: {
+                ...leadWhere,
+                nextFollowUpAt: { lt: new Date() },
+                status: { notIn: ["CONVERTED", "LOST", "MERGED"] },
+            },
+            select: {
+                id: true, name: true, phone: true, email: true,
+                status: true, nextFollowUpAt: true,
+                assignedTo: { select: { id: true, name: true } },
+            },
+            orderBy: { nextFollowUpAt: "asc" },
+            take: 15,
+        });
+        res.json(leads);
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching overdue follow-ups", error: error.message });
     }
 };
 
@@ -637,12 +858,20 @@ const getDashboardStats = async (req, res) => {
         const leadWhere = role === "EMPLOYEE" ? { assignedToId: userId } : {};
         const taskWhere = role === "EMPLOYEE" ? { assignedToId: userId, status: "PENDING" } : { status: "PENDING" };
 
-        const [total, newLeadsToday, converted, followUp, pendingTasks] = await prisma.$transaction([
+        const now = new Date();
+        const overdueWhere = {
+            ...leadWhere,
+            nextFollowUpAt: { lt: now },
+            status: { notIn: ["CONVERTED", "LOST", "MERGED"] },
+        };
+
+        const [total, newLeadsToday, converted, followUp, pendingTasks, overdueFollowUps] = await prisma.$transaction([
             prisma.lead.count({ where: leadWhere }),
             prisma.lead.count({ where: { ...leadWhere, createdAt: { gte: today } } }),
             prisma.lead.count({ where: { ...leadWhere, status: "CONVERTED" } }),
             prisma.lead.count({ where: { ...leadWhere, status: "FOLLOW_UP" } }),
-            prisma.task.count({ where: taskWhere })
+            prisma.task.count({ where: taskWhere }),
+            prisma.lead.count({ where: overdueWhere }),
         ]);
 
         res.json({
@@ -651,6 +880,7 @@ const getDashboardStats = async (req, res) => {
             converted,
             followUp,
             pendingTasks,
+            overdueFollowUps,
             conversionRate: total > 0 ? Math.round((converted / total) * 100) : 0
         });
     } catch (error) {
@@ -738,7 +968,7 @@ const getDuplicates = async (req, res) => {
 const getTeamStats = async (req, res) => {
     try {
         const { role } = req.user;
-        if (!["ADMIN", "SUPER_ADMIN", "TEAM_LEAD"].includes(role)) {
+        if (!["SUPER_ADMIN", "MANAGER"].includes(role)) {
             return res.status(403).json({ message: "Forbidden" });
         }
 
@@ -810,20 +1040,121 @@ const dismissLeadSuggestion = async (req, res) => {
     }
 };
 
+// Reassign Lead with history tracking
+const reassignLead = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { employeeId, reason } = req.body;
+        const { userId, role } = req.user;
+
+        if (!employeeId) return res.status(400).json({ message: "employeeId is required" });
+
+        const { canReassignLeadTo } = require("../services/permissionService");
+        const allowed = await canReassignLeadTo(userId, role, employeeId);
+        if (!allowed) {
+            return res.status(403).json({ message: "You can only assign leads to members of your team" });
+        }
+
+        const lead = await prisma.lead.findUnique({ where: { id } });
+        if (!lead) return res.status(404).json({ message: "Lead not found" });
+
+        // MANAGER: current lead assignee must also be in same team
+        if (role === "MANAGER" && lead.assignedToId) {
+            const assignee = await prisma.user.findUnique({
+                where: { id: lead.assignedToId },
+                select: { managerId: true },
+            });
+            if (assignee?.managerId !== userId) {
+                return res.status(403).json({ message: "You can only reassign leads currently assigned to your team members" });
+            }
+        }
+
+        const employee = await prisma.user.findUnique({ where: { id: employeeId } });
+        if (!employee) return res.status(404).json({ message: "Employee not found" });
+
+        const previousEmployeeId = lead.assignedToId || null;
+
+        const [updatedLead] = await prisma.$transaction([
+            prisma.lead.update({
+                where: { id },
+                data: { assignedToId: employeeId, assignedAt: new Date() },
+                include: { assignedTo: { select: { id: true, name: true, email: true } } },
+            }),
+            prisma.assignmentHistory.create({
+                data: { leadId: id, employeeId, previousEmployeeId, reason: reason || null },
+            }),
+            prisma.activity.create({
+                data: {
+                    leadId: id,
+                    userId,
+                    action: previousEmployeeId ? "LEAD_REASSIGNED" : "LEAD_ASSIGNED",
+                    metadata: {
+                        newEmployeeId: employeeId,
+                        newEmployeeName: employee.name,
+                        previousEmployeeId,
+                        reason: reason || null,
+                    },
+                },
+            }),
+        ]);
+
+        res.json({ message: "Lead reassigned successfully", lead: updatedLead });
+    } catch (error) {
+        res.status(500).json({ message: "Error reassigning lead", error: error.message });
+    }
+};
+
+const getSLAAlerts = async (req, res) => {
+    try {
+        const { userId, role } = req.user;
+        const settings = await prisma.companySettings.findFirst();
+        const breachDays = settings?.slaBreachDays ?? 7;
+        const cutoff = new Date(Date.now() - breachDays * 86_400_000);
+
+        const where = {
+            status: { in: ["NEW", "CONTACTED", "FOLLOW_UP"] },
+            OR: [
+                { lastActivityAt: { lt: cutoff } },
+                { lastActivityAt: null, updatedAt: { lt: cutoff } },
+            ],
+        };
+        if (role === "EMPLOYEE") where.assignedToId = userId;
+
+        const leads = await prisma.lead.findMany({
+            where,
+            orderBy: [{ lastActivityAt: "asc" }, { updatedAt: "asc" }],
+            take: 20,
+            select: {
+                id: true, name: true, phone: true, email: true,
+                status: true, lastActivityAt: true, updatedAt: true,
+                assignedTo: { select: { id: true, name: true } },
+            },
+        });
+        res.json({ data: leads, breachDays });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
 module.exports = {
     getLeads,
     getLead,
     createLead,
     updateLead,
     assignLead,
+    reassignLead,
     exportLeads,
+    previewImport,
     importLeads,
+    getImportStatus,
     checkDuplicate,
     mergeLeads,
     getLeadActivities,
     getDashboardStats,
+    getOverdueFollowUps,
     getDuplicates,
     getTeamStats,
     getLeadSuggestions,
     dismissLeadSuggestion,
+    getSLAAlerts,
 };

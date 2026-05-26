@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
-const { listTemplates, sendMessage, getMessages, watiWebhook } = require("../controllers/whatsappController");
+const { listTemplates, sendMessage, getMessages, getInboundMessages, watiWebhook } = require("../controllers/whatsappController");
 const {
     createCampaign,
     startCampaign,
@@ -35,6 +35,7 @@ router.use(authMiddleware);
 // Single message (any authenticated user)
 router.get("/templates", listTemplates);
 router.post("/send", sendMessage);
+router.get("/messages", getInboundMessages);
 router.get("/:leadId/messages", getMessages);
 
 // Campaigns — write operations restricted to ADMIN+

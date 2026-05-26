@@ -10,7 +10,7 @@ import { toast } from "sonner";
 const editUserSchema = z.object({
     name: z.string().min(2, "Name is required"),
     phone: z.string().optional(),
-    role: z.enum(["SUPER_ADMIN", "ADMIN", "EMPLOYEE"]),
+    role: z.enum(["SUPER_ADMIN", "MANAGER", "EMPLOYEE"]),
     department: z.string().optional(),
     jobTitle: z.string().optional(),
 });
@@ -94,7 +94,7 @@ const EditUserForm = ({ user, onClose }) => {
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                 >
                     <option value="EMPLOYEE">Employee</option>
-                    <option value="ADMIN">Admin</option>
+                    <option value="MANAGER">Manager</option>
                     <option value="SUPER_ADMIN">Super Admin</option>
                 </select>
             </div>

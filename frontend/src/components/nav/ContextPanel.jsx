@@ -6,9 +6,9 @@ import { useAuth } from "../../context/AuthContext";
 import {
     LayoutDashboard, Inbox, Plus, Users, KanbanSquare, Star,
     MessageSquare, Send, Zap as ZapIcon, Bot, CheckSquare,
-    BarChart, Trophy, Settings2, UserCog, Building, Receipt,
+    BarChart, Trophy, UserCog, Building, Receipt,
     PhoneCall, SearchCheck, Linkedin, Puzzle, Settings,
-    Clock, Calendar, ChevronRight,
+    Clock, Calendar, ChevronRight, TrendingUp, IndianRupee, AlertCircle,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -114,6 +114,11 @@ function CRMPanel() {
                 {/* <PanelLink to="/kanban" icon={KanbanSquare} label="Kanban Board" /> */}
                 <PanelLink to="/search-leads" icon={SearchCheck} label="Search Leads" />
                 <PanelLink to="/linkedin-leads" icon={Linkedin} label="LinkedIn Leads" />
+            </PanelSection>
+
+            <PanelSection title="Deals">
+                <PanelLink to="/deals" icon={TrendingUp} label="All Deals" />
+                <PanelLink to="/deals/pipeline" icon={KanbanSquare} label="Pipeline" />
             </PanelSection>
 
             <div className="px-2.5 pt-1">
@@ -223,6 +228,9 @@ function AutomatePanel() {
 }
 
 function AdminPanel() {
+    const { user } = useAuth();
+    const isManager = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
+
     return (
         <>
             <PanelSection title="People">
@@ -237,12 +245,22 @@ function AdminPanel() {
             </PanelSection>
 
             <PanelSection title="Leads">
-                <PanelLink to="/salestrail"    icon={PhoneCall}  label="Salestrail Calls" />
+                <PanelLink to="/salestrail" icon={PhoneCall} label="Salestrail Calls" />
+                {isManager && <PanelLink to="/unassigned-leads" icon={AlertCircle} label="Unassigned Leads" />}
             </PanelSection>
 
+            {isManager && (
+                <PanelSection title="Analytics">
+                    <PanelLink to="/team-performance"  icon={TrendingUp}   label="Team Performance" />
+                    <PanelLink to="/revenue-report"    icon={IndianRupee}  label="Revenue Report" />
+                    <PanelLink to="/leaderboard"       icon={Trophy}       label="Leaderboard" />
+                    <PanelLink to="/reports"           icon={BarChart}     label="Reports" />
+                </PanelSection>
+            )}
+
             <PanelSection title="System">
-                <PanelLink to="/integrations" icon={Puzzle}    label="Integrations" />
-                <PanelLink to="/settings"     icon={Settings}  label="Settings" />
+                <PanelLink to="/integrations" icon={Puzzle}   label="Integrations" />
+                <PanelLink to="/settings"     icon={Settings} label="Settings" />
             </PanelSection>
         </>
     );

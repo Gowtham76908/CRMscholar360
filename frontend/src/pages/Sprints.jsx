@@ -316,7 +316,7 @@ const Sprints = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(user?.role);
+    const isAdmin = user?.role === "SUPER_ADMIN";
 
     const [sprintModal, setSprintModal] = useState(null); // null | "create" | sprint-object
     const [taskModal, setTaskModal] = useState(null);     // null | "create" | task-object

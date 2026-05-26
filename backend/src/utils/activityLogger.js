@@ -11,16 +11,16 @@ const prisma = require("./prisma");
 const logActivity = async ({ leadId, userId, action, metadata }) => {
     try {
         await prisma.activity.create({
-            data: {
-                leadId,
-                userId,
-                action,
-                metadata
-            }
+            data: { leadId, userId, action, metadata }
         });
+        if (leadId) {
+            await prisma.lead.update({
+                where: { id: leadId },
+                data: { lastActivityAt: new Date() },
+            }).catch(() => {}); // ignore if lead doesn't exist
+        }
     } catch (error) {
         console.error("Failed to log activity:", error);
-        // Don't crash the app if logging fails, just error log
     }
 };
 

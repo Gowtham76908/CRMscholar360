@@ -2,14 +2,12 @@ const MetaProvider = require("./MetaProvider");
 const WhatsAppProvider = require("./WhatsAppProvider");
 const GoogleAdsProvider = require("./GoogleAdsProvider");
 const EmailProvider = require("./EmailProvider");
-const WATIProvider = require("./WATIProvider");
 const LinkedInProvider = require("./LinkedInProvider");
 const SalestrailProvider = require("./SalestrailProvider");
 const WebhookProvider = require("./WebhookProvider");
 
 const PROVIDERS = {
     meta_leads:      MetaProvider,
-    whatsapp_wati:   WATIProvider,
     whatsapp_cloud:  WhatsAppProvider,
     google_ads:      GoogleAdsProvider,
     email_smtp:      EmailProvider,

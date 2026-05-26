@@ -37,4 +37,23 @@ const getMyReminders = async (req, res) => {
     }
 };
 
-module.exports = { createReminder, getMyReminders };
+const dismissReminder = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { id } = req.params;
+
+        const reminder = await prisma.reminder.findUnique({ where: { id } });
+        if (!reminder) return res.status(404).json({ message: "Reminder not found" });
+        if (reminder.userId !== userId) return res.status(403).json({ message: "Access denied" });
+
+        const updated = await prisma.reminder.update({
+            where: { id },
+            data: { dismissed: true },
+        });
+        res.json(updated);
+    } catch (error) {
+        res.status(500).json({ message: "Error dismissing reminder", error: error.message });
+    }
+};
+
+module.exports = { createReminder, getMyReminders, dismissReminder };

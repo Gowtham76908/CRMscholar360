@@ -18,10 +18,8 @@ const SearchLeads = () => {
     const [importResult, setImportResult] = useState(null);
     const [hasSearched, setHasSearched] = useState(false);
 
-    const handleSearch = async (e) => {
-        e.preventDefault();
-        if (!query.trim()) return;
-
+    const runSearch = async (q) => {
+        if (!q.trim()) return;
         setLoading(true);
         setError("");
         setResults([]);
@@ -29,9 +27,8 @@ const SearchLeads = () => {
         setImportedIds(new Set());
         setImportResult(null);
         setHasSearched(true);
-
         try {
-            const res = await api.post("/search-leads", { query: query.trim() });
+            const res = await api.post("/search-leads", { query: q.trim() });
             setResults(res.data.leads || []);
         } catch (err) {
             setError(err.response?.data?.message || "Search failed. Please try again.");
@@ -39,6 +36,8 @@ const SearchLeads = () => {
             setLoading(false);
         }
     };
+
+    const handleSearch = (e) => { e.preventDefault(); runSearch(query); };
 
     const toggleSelect = (id) => {
         setSelected((prev) => {
@@ -405,23 +404,46 @@ const SearchLeads = () => {
                 </>
             )}
 
-            {/* Empty state */}
+            {/* Empty state — searched but no results */}
             {!loading && hasSearched && results.length === 0 && !error && (
-                <div className="text-center py-16 text-gray-400">
-                    <Search className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                    <p className="text-lg font-medium text-gray-500">No results found</p>
-                    <p className="text-sm mt-1">Try a different search term or location.</p>
+                <div className="flex flex-col items-center py-20 gap-3">
+                    <div className="h-16 w-16 rounded-full bg-gray-50 flex items-center justify-center">
+                        <Search className="h-8 w-8 text-gray-300" />
+                    </div>
+                    <p className="text-base font-semibold text-gray-600">No businesses found</p>
+                    <p className="text-sm text-gray-400 text-center max-w-xs">
+                        Try a different keyword, add a city name, or broaden your search.
+                    </p>
+                    <button
+                        onClick={() => { setQuery(""); setHasSearched(false); document.querySelector("input[type=text]")?.focus(); }}
+                        className="mt-1 text-sm text-indigo-600 hover:underline font-medium"
+                    >
+                        Start a new search
+                    </button>
                 </div>
             )}
 
-            {/* Initial state */}
+            {/* Initial state — nothing searched yet */}
             {!loading && !hasSearched && (
-                <div className="text-center py-16 text-gray-400">
-                    <Building2 className="h-12 w-12 mx-auto mb-3 opacity-20" />
-                    <p className="text-base font-medium text-gray-400">Search for businesses to find leads</p>
-                    <p className="text-sm mt-1 text-gray-300">
-                        Try: "real estate companies in Coimbatore" or "hospitals in Bangalore"
+                <div className="flex flex-col items-center py-20 gap-3">
+                    <div className="h-16 w-16 rounded-full bg-indigo-50 flex items-center justify-center">
+                        <Building2 className="h-8 w-8 text-indigo-300" />
+                    </div>
+                    <p className="text-base font-semibold text-gray-600">Find businesses, turn them into leads</p>
+                    <p className="text-sm text-gray-400 text-center max-w-sm">
+                        Search by industry and city — select the ones you want and add them to your pipeline in one click.
                     </p>
+                    <div className="mt-2 flex flex-wrap gap-2 justify-center">
+                        {["Real estate in Chennai", "IT companies in Bangalore", "Hospitals in Coimbatore"].map(hint => (
+                            <button
+                                key={hint}
+                                onClick={() => { setQuery(hint); runSearch(hint); }}
+                                className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-500 rounded-full transition-colors"
+                            >
+                                {hint}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>

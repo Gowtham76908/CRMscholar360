@@ -1,5 +1,6 @@
 const prisma = require("../utils/prisma");
 const logActivity = require("../utils/activityLogger");
+const { batchAssignLeads } = require("../services/leadDistributionEngine");
 
 const bulkUpdateLeads = async (req, res) => {
     try {
@@ -66,4 +67,23 @@ const bulkAssignLeads = async (req, res) => {
     }
 };
 
-module.exports = { bulkUpdateLeads, bulkAssignLeads };
+const bulkSmartAssignLeads = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { leadIds } = req.body;
+
+        if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
+            return res.status(400).json({ message: "Lead IDs are required" });
+        }
+
+        const result = await batchAssignLeads(leadIds, { actorId: userId });
+        res.json({
+            message: `Smart-assigned ${result.assigned} of ${result.total} leads`,
+            ...result,
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Smart assign failed", error: error.message });
+    }
+};
+
+module.exports = { bulkUpdateLeads, bulkAssignLeads, bulkSmartAssignLeads };

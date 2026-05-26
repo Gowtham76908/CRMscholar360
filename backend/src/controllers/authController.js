@@ -5,6 +5,7 @@ const bcrypt = require("bcrypt");
 const { notifyIfLeaderboardWinner } = require("../services/notificationService");
 const { toSafeUser } = require("../utils/safeUser");
 const { sendEmail } = require("../services/emailService");
+const { ERROR_CODES } = require("../utils/apiError");
 
 const RESET_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const MIN_RESPONSE_MS   = 400;             // constant-time floor for forgot-password
@@ -18,17 +19,17 @@ const login = async (req, res) => {
         const user = await prisma.user.findUnique({ where: { email } });
 
         if (!user) {
-            return res.status(401).json({ message: "Invalid credentials" });
+            return res.status(401).json({ error: { code: ERROR_CODES.AUTH_INVALID_CREDENTIALS, message: "Invalid credentials" } });
         }
 
         if (!user.isActive) {
-            return res.status(403).json({ message: "Access denied. User is inactive." });
+            return res.status(403).json({ error: { code: ERROR_CODES.AUTH_ACCOUNT_INACTIVE, message: "Account is inactive. Contact your administrator." } });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
-            return res.status(401).json({ message: "Invalid credentials" });
+            return res.status(401).json({ error: { code: ERROR_CODES.AUTH_INVALID_CREDENTIALS, message: "Invalid credentials" } });
         }
 
         const jwtSecret = process.env.JWT_SECRET;
@@ -40,7 +41,16 @@ const login = async (req, res) => {
             { expiresIn: "7d" }
         );
 
-        res.json({ message: "Login successful", token, user: toSafeUser(user) });
+        const isProd = process.env.NODE_ENV === "production";
+        res.cookie("token", token, {
+            httpOnly: true,
+            secure:   isProd,
+            sameSite: isProd ? "none" : "lax",
+            maxAge:   7 * 24 * 60 * 60 * 1000,
+            path:     "/",
+        });
+
+        res.json({ message: "Login successful", user: toSafeUser(user) });
 
         // Fire-and-forget: on the 1st of every month, notify the winner of last month's leaderboard
         notifyIfLeaderboardWinner(user.id).catch(err =>
@@ -179,4 +189,15 @@ const _delay = (start) => {
     return new Promise((r) => setTimeout(r, wait));
 };
 
-module.exports = { login, forgotPassword, resetPassword };
+const logout = (req, res) => {
+    const isProd = process.env.NODE_ENV === "production";
+    res.clearCookie("token", {
+        httpOnly: true,
+        secure:   isProd,
+        sameSite: isProd ? "none" : "lax",
+        path:     "/",
+    });
+    res.json({ message: "Logged out" });
+};
+
+module.exports = { login, logout, forgotPassword, resetPassword };

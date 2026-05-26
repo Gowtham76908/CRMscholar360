@@ -37,7 +37,7 @@ const Leave = () => {
             const res = await api.get("/leave/pending");
             return res.data;
         },
-        enabled: ["ADMIN", "SUPER_ADMIN"].includes(user?.role)
+        enabled: user?.role === "SUPER_ADMIN" || user?.role === "MANAGER"
     });
 
     const getStatusBadge = (status) => {
@@ -100,7 +100,7 @@ const Leave = () => {
                 </div>
 
                 {/* Pending Approvals (Admin Only) */}
-                {["ADMIN", "SUPER_ADMIN"].includes(user?.role) && pendingLeaves.length > 0 && (
+                {user?.role === "SUPER_ADMIN" || user?.role === "MANAGER" && pendingLeaves.length > 0 && (
                     <div className="bg-white rounded-xl shadow-lg overflow-hidden">
                         <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-red-50">
                             <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -217,7 +217,7 @@ const ApplyLeaveModal = ({ onClose, onSuccess, leaveType = "LEAVE" }) => {
         queryKey: ["admins"],
         queryFn: async () => {
             const res = await api.get("/users");
-            return res.data.filter(u => ["ADMIN", "SUPER_ADMIN"].includes(u.role));
+            return res.data.filter(u => u.role === "SUPER_ADMIN" || u.role === "MANAGER");
         }
     });
 
