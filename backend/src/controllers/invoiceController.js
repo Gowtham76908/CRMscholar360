@@ -1,6 +1,7 @@
 const prisma = require("../utils/prisma");
 const { sendInvoiceEmail } = require("../services/emailService");
 const logActivity = require("../utils/activityLogger");
+const paginate = require("../utils/paginate");
 
 // Resolve leadId from an invoice's dealId (if any), for timeline logging
 async function getLeadIdFromInvoice(invoice) {
@@ -63,7 +64,7 @@ const getPaymentSummary = (payments) => {
 
 // ─── Controllers ────────────────────────────────────────────────────────────
 
-const createInvoice = async (req, res) => {
+const createInvoice = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const {
@@ -79,8 +80,8 @@ const createInvoice = async (req, res) => {
             dealId,
         } = req.body;
 
-        if (!clientName) return res.status(400).json({ message: "Client name is required" });
-        if (!items.length) return res.status(400).json({ message: "At least one item is required" });
+        if (!clientName) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Client name is required");
+        if (!items.length) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "At least one item is required");
 
         const { processedItems, subtotal, cgst, sgst, igst, total } = computeInvoiceTotals(items);
 
@@ -124,41 +125,65 @@ const createInvoice = async (req, res) => {
 
         res.status(201).json(invoice);
     } catch (error) {
-        res.status(500).json({ message: "Error creating invoice", error: error.message });
+        return next(error);
     }
 };
 
-const getInvoices = async (req, res) => {
+const getInvoices = async (req, res, next) => {
     try {
+        const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
+        const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 100));
         const { status, type, dealId } = req.query;
+
         const where = { deletedAt: null };
         if (status) where.status = status;
-        if (type) where.invoiceType = type;
+        if (type)   where.invoiceType = type;
         if (dealId) where.dealId = dealId;
 
-        const invoices = await prisma.invoice.findMany({
-            where,
-            include: {
-                items: true,
-                payments: { orderBy: { paymentDate: "desc" } },
-                createdBy: { select: { id: true, name: true } },
-            },
-            orderBy: { createdAt: "desc" },
-        });
+        // items are not needed in the list view — only in detail view (getInvoice)
+        const [total, invoices] = await prisma.$transaction([
+            prisma.invoice.count({ where }),
+            prisma.invoice.findMany({
+                where,
+                select: {
+                    id: true,
+                    invoiceNumber: true,
+                    invoiceType: true,
+                    clientName: true,
+                    clientEmail: true,
+                    clientPhone: true,
+                    clientAddress: true,
+                    clientGstin: true,
+                    total: true,
+                    status: true,
+                    dueDate: true,
+                    createdAt: true,
+                    updatedAt: true,
+                    dealId: true,
+                    payments: {
+                        select: { amount: true, type: true },
+                        orderBy: { paymentDate: "desc" },
+                    },
+                    createdBy: { select: { id: true, name: true } },
+                },
+                orderBy: { createdAt: "desc" },
+                skip: (page - 1) * limit,
+                take: limit,
+            }),
+        ]);
 
-        // Attach balance info to each invoice
         const enriched = invoices.map((inv) => {
             const { totalPaid } = getPaymentSummary(inv.payments);
             return { ...inv, totalPaid: parseFloat(totalPaid.toFixed(2)), balance: parseFloat((inv.total - totalPaid).toFixed(2)) };
         });
 
-        res.json(enriched);
+        res.json(paginate(enriched, total, page, limit));
     } catch (error) {
-        res.status(500).json({ message: "Error fetching invoices", error: error.message });
+        return next(error);
     }
 };
 
-const getInvoice = async (req, res) => {
+const getInvoice = async (req, res, next) => {
     // Soft-deleted invoices are treated as not found for regular access
     try {
         const invoice = await prisma.invoice.findUnique({
@@ -169,16 +194,16 @@ const getInvoice = async (req, res) => {
                 createdBy: { select: { id: true, name: true } },
             },
         });
-        if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+        if (!invoice) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Invoice not found");
 
         const { totalPaid } = getPaymentSummary(invoice.payments);
         res.json({ ...invoice, totalPaid: parseFloat(totalPaid.toFixed(2)), balance: parseFloat((invoice.total - totalPaid).toFixed(2)) });
     } catch (error) {
-        res.status(500).json({ message: "Error fetching invoice", error: error.message });
+        return next(error);
     }
 };
 
-const updateInvoice = async (req, res) => {
+const updateInvoice = async (req, res, next) => {
     try {
         const { id } = req.params;
         const {
@@ -187,8 +212,8 @@ const updateInvoice = async (req, res) => {
         } = req.body;
 
         const existing = await prisma.invoice.findUnique({ where: { id } });
-        if (!existing) return res.status(404).json({ message: "Invoice not found" });
-        if (existing.status === "PAID") return res.status(400).json({ message: "Cannot edit a paid invoice" });
+        if (!existing) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Invoice not found");
+        if (existing.status === "PAID") throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot edit a paid invoice");
 
         const updateData = { clientName, clientEmail, clientPhone, clientAddress, clientGstin, notes, status };
         if (dueDate) updateData.dueDate = new Date(dueDate);
@@ -225,37 +250,37 @@ const updateInvoice = async (req, res) => {
 
         res.json(invoice);
     } catch (error) {
-        res.status(500).json({ message: "Error updating invoice", error: error.message });
+        return next(error);
     }
 };
 
-const deleteInvoice = async (req, res) => {
+const deleteInvoice = async (req, res, next) => {
     try {
         const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id, deletedAt: null } });
-        if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+        if (!invoice) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Invoice not found");
         if (invoice.status === "PAID") {
-            return res.status(409).json({ message: "Paid invoices cannot be deleted. Cancel it first." });
+            throw new ApiError(409, ERROR_CODES.DUPLICATE_ENTRY, "Paid invoices cannot be deleted. Cancel it first.");
         }
 
         await prisma.invoice.update({ where: { id: req.params.id }, data: { deletedAt: new Date() } });
         res.json({ message: "Invoice deleted successfully" });
     } catch (error) {
-        res.status(500).json({ message: "Error deleting invoice", error: error.message });
+        return next(error);
     }
 };
 
-const sendEmail = async (req, res) => {
+const sendEmail = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { recipientEmail } = req.body;
 
-        if (!recipientEmail) return res.status(400).json({ message: "Recipient email is required" });
+        if (!recipientEmail) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Recipient email is required");
 
         const [invoice, company] = await Promise.all([
             prisma.invoice.findUnique({ where: { id }, include: { items: true } }),
             prisma.companySettings.findFirst(),
         ]);
-        if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+        if (!invoice) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Invoice not found");
 
         await sendInvoiceEmail({ to: recipientEmail, invoice, items: invoice.items, company });
 
@@ -270,22 +295,22 @@ const sendEmail = async (req, res) => {
 
         res.json({ message: "Invoice sent successfully", sentTo: recipientEmail });
     } catch (error) {
-        res.status(500).json({ message: "Error sending invoice email", error: error.message });
+        return next(error);
     }
 };
 
-const addPayment = async (req, res) => {
+const addPayment = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { amount, type = "CREDIT", description, paymentDate } = req.body;
 
-        if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ message: "Valid amount is required" });
+        if (!amount || parseFloat(amount) <= 0) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Valid amount is required");
 
         const invoice = await prisma.invoice.findUnique({
             where: { id },
             include: { payments: true },
         });
-        if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+        if (!invoice) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Invoice not found");
 
         const payment = await prisma.paymentEntry.create({
             data: {
@@ -326,11 +351,11 @@ const addPayment = async (req, res) => {
 
         res.status(201).json({ payment, totalPaid: parseFloat(totalPaid.toFixed(2)), balance: parseFloat((invoice.total - totalPaid).toFixed(2)), status: newStatus });
     } catch (error) {
-        res.status(500).json({ message: "Error recording payment", error: error.message });
+        return next(error);
     }
 };
 
-const deletePayment = async (req, res) => {
+const deletePayment = async (req, res, next) => {
     try {
         const { id, paymentId } = req.params;
         await prisma.paymentEntry.delete({ where: { id: paymentId } });
@@ -346,11 +371,11 @@ const deletePayment = async (req, res) => {
         await prisma.invoice.update({ where: { id }, data: { status: newStatus } });
         res.json({ message: "Payment deleted" });
     } catch (error) {
-        res.status(500).json({ message: "Error deleting payment", error: error.message });
+        return next(error);
     }
 };
 
-const getBalanceSheet = async (req, res) => {
+const getBalanceSheet = async (req, res, next) => {
     try {
         const page  = Math.max(1, parseInt(req.query.page  ?? 1));
         const limit = Math.min(200, Math.max(1, parseInt(req.query.limit ?? 50)));
@@ -418,17 +443,17 @@ const getBalanceSheet = async (req, res) => {
             pagination: { page, limit, total, pages: Math.ceil(total / limit) },
         });
     } catch (error) {
-        res.status(500).json({ message: "Error fetching balance sheet", error: error.message });
+        return next(error);
     }
 };
 
-const getInvoiceStats = async (req, res) => {
+const getInvoiceStats = async (req, res, next) => {
     try {
         const { getRevenueStats } = require("../services/dealService");
         const stats = await getRevenueStats();
         res.json(stats);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching invoice stats", error: error.message });
+        return next(error);
     }
 };
 

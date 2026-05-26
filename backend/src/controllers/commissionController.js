@@ -1,6 +1,6 @@
 const prisma = require("../utils/prisma");
 
-const getCommissions = async (req, res) => {
+const getCommissions = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         let where = {};
@@ -19,7 +19,7 @@ const getCommissions = async (req, res) => {
 
         res.json({ totalAmount, commissions });
     } catch (error) {
-        res.status(500).json({ message: "Error fetching commissions", error: error.message });
+        return next(error);
     }
 };
 

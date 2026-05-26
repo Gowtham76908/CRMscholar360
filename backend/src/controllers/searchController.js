@@ -1,6 +1,6 @@
 const prisma = require("../utils/prisma");
 
-const globalSearch = async (req, res) => {
+const globalSearch = async (req, res, next) => {
     try {
         const { q } = req.query;
         if (!q || q.length < 2) {
@@ -44,7 +44,7 @@ const globalSearch = async (req, res) => {
 
         res.json({ leads, tasks, users });
     } catch (error) {
-        res.status(500).json({ message: "Error performing search", error: error.message });
+        return next(error);
     }
 };
 

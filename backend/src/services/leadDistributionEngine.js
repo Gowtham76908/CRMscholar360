@@ -181,7 +181,7 @@ async function findBestEmployee(managerId) {
         const profile = emp.employeeProfile;
         if (!profile) continue;
         const s = scoreEmployee(profile);
-        if (s > bestScore) { bestScore = s; best = emp.id; }
+        if (s >= 0 && s > bestScore) { bestScore = s; best = emp.id; }
     }
 
     return best; // null if nobody is available

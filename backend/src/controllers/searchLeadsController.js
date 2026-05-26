@@ -14,7 +14,7 @@ const extractEmails = (text) => {
 };
 
 // Search businesses via Serper API (places + web)
-const searchBusinessLeads = async (req, res) => {
+const searchBusinessLeads = async (req, res, next) => {
     try {
         const { query } = req.body;
 
@@ -103,13 +103,13 @@ const searchBusinessLeads = async (req, res) => {
 
         res.json({ leads, total: leads.length, query: query.trim() });
     } catch (error) {
-        console.error("Serper API error:", error.response?.data || error.message);
-        res.status(500).json({ message: "Error searching leads", error: error.message });
+
+        return next(error);
     }
 };
 
 // Bulk import searched leads into the database
-const importSearchedLeads = async (req, res) => {
+const importSearchedLeads = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leads } = req.body;
@@ -186,8 +186,8 @@ const importSearchedLeads = async (req, res) => {
             leads: createdLeads
         });
     } catch (error) {
-        console.error("Import searched leads error:", error.message);
-        res.status(500).json({ message: "Error importing leads", error: error.message });
+
+        return next(error);
     }
 };
 

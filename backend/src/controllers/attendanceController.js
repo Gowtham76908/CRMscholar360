@@ -3,7 +3,7 @@ const { calculateCompOffBalance, calculateCompOffBalanceBulk } = require("../uti
 const { nowIST, todayIST } = require("../utils/istTime");
 
 // Check In
-const checkIn = async (req, res) => {
+const checkIn = async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const { latitude, longitude } = req.body;
@@ -67,13 +67,13 @@ const checkIn = async (req, res) => {
 
         res.json({ message: "Checked in successfully", attendance });
     } catch (error) {
-        console.error("CHECK-IN ERROR:", error.message);
-        res.status(500).json({ message: "Failed to check in", error: error.message });
+
+        return next(error);
     }
 };
 
 // Check Out
-const checkOut = async (req, res) => {
+const checkOut = async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const todayDateOnly = todayIST();
@@ -111,13 +111,13 @@ const checkOut = async (req, res) => {
 
         res.json({ message: "Checked out successfully", attendance: updated });
     } catch (error) {
-        console.error("Check-out error:", error);
-        res.status(500).json({ message: "Failed to check out" });
+
+        return next(error);
     }
 };
 
 // Get My Attendance
-const getMyAttendance = async (req, res) => {
+const getMyAttendance = async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const { month, year } = req.query;
@@ -138,13 +138,13 @@ const getMyAttendance = async (req, res) => {
 
         res.json(attendance);
     } catch (error) {
-        console.error("Get attendance error:", error);
-        res.status(500).json({ message: "Failed to fetch attendance" });
+
+        return next(error);
     }
 };
 
 // Get All Attendance (Admin)
-const getAllAttendance = async (req, res) => {
+const getAllAttendance = async (req, res, next) => {
     try {
         const { date, userId } = req.query;
 
@@ -169,13 +169,13 @@ const getAllAttendance = async (req, res) => {
 
         res.json(attendance);
     } catch (error) {
-        console.error("Get all attendance error:", error);
-        res.status(500).json({ message: "Failed to fetch attendance" });
+
+        return next(error);
     }
 };
 
 // Get Attendance Stats
-const getAttendanceStats = async (req, res) => {
+const getAttendanceStats = async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const { month, year } = req.query;
@@ -203,13 +203,13 @@ const getAttendanceStats = async (req, res) => {
 
         res.json(stats);
     } catch (error) {
-        console.error("Get stats error:", error);
-        res.status(500).json({ message: "Failed to fetch stats" });
+
+        return next(error);
     }
 };
 
 // Admin: Monthly Report - all employees summary
-const getAdminMonthlyReport = async (req, res) => {
+const getAdminMonthlyReport = async (req, res, next) => {
     try {
         const { month, year } = req.query;
         const targetMonth = parseInt(month) || (new Date().getMonth() + 1);
@@ -295,13 +295,13 @@ const getAdminMonthlyReport = async (req, res) => {
 
         res.json({ report, meta: { month: targetMonth, year: targetYear, workingDays, sundayCount, totalDaysInMonth } });
     } catch (error) {
-        console.error("Admin monthly report error:", error);
-        res.status(500).json({ message: "Failed to fetch monthly report" });
+
+        return next(error);
     }
 };
 
 // Admin: Get specific employee's monthly attendance
-const getEmployeeMonthlyAttendance = async (req, res) => {
+const getEmployeeMonthlyAttendance = async (req, res, next) => {
     try {
         const { employeeId } = req.params;
         const { month, year } = req.query;
@@ -338,13 +338,13 @@ const getEmployeeMonthlyAttendance = async (req, res) => {
 
         res.json({ employee, attendance, leaves, compOffBalance: await calculateCompOffBalance(employeeId) });
     } catch (error) {
-        console.error("Employee monthly attendance error:", error);
-        res.status(500).json({ message: "Failed to fetch employee attendance" });
+
+        return next(error);
     }
 };
 
 // Admin: Update attendance status
-const updateAttendanceStatus = async (req, res) => {
+const updateAttendanceStatus = async (req, res, next) => {
     try {
         const { userId, date, status } = req.body;
 
@@ -382,8 +382,8 @@ const updateAttendanceStatus = async (req, res) => {
 
         res.json({ message: "Attendance status updated successfully", attendance });
     } catch (error) {
-        console.error("Update attendance status error:", error);
-        res.status(500).json({ message: "Failed to update attendance status" });
+
+        return next(error);
     }
 };
 

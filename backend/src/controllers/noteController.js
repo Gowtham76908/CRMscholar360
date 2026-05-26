@@ -1,7 +1,7 @@
 const prisma = require("../utils/prisma");
 
 // Create Note
-const createNote = async (req, res) => {
+const createNote = async (req, res, next) => {
     try {
         const { leadId } = req.params;
         const { content } = req.body;
@@ -9,7 +9,7 @@ const createNote = async (req, res) => {
         // Verify lead exists
         const lead = await prisma.lead.findUnique({ where: { id: leadId } });
         if (!lead) {
-            return res.status(404).json({ message: "Lead not found" });
+            throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
         }
 
         const note = await prisma.note.create({
@@ -21,12 +21,12 @@ const createNote = async (req, res) => {
 
         res.status(201).json({ message: "Note added successfully", note });
     } catch (error) {
-        res.status(500).json({ message: "Error adding note", error: error.message });
+        return next(error);
     }
 };
 
 // Get Notes for a Lead
-const getNotes = async (req, res) => {
+const getNotes = async (req, res, next) => {
     try {
         const { leadId } = req.params;
 
@@ -37,7 +37,7 @@ const getNotes = async (req, res) => {
 
         res.json(notes);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching notes", error: error.message });
+        return next(error);
     }
 };
 

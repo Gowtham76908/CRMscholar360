@@ -44,7 +44,7 @@ app.use(cors({
     origin: (origin, callback) => {
         if (!origin) return callback(null, true);
         const isAllowed = allowedOrigins.includes(origin) ||
-                          origin.includes("localhost");
+                          /^https?:\/\/localhost(:\d+)?$/.test(origin);
         if (isAllowed) {
             callback(null, true);
         } else {
@@ -53,7 +53,11 @@ app.use(cors({
     },
     credentials: true,
 }));
-app.use(express.json());
+// Capture raw body buffer so webhook signature middleware can verify HMAC-SHA256.
+// Must be set up before express.json() consumes the stream.
+app.use(express.json({
+    verify: (req, _res, buf) => { req.rawBody = buf; },
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
@@ -167,11 +171,15 @@ app.use("/api/email-track",     require("./routes/emailTrack"));
 
 // Global error handler — must be last middleware
 const { ApiError } = require("./utils/apiError");
+const logger = require("./utils/logger");
 app.use((err, req, res, _next) => {
-    console.error(`[ERROR] ${req.method} ${req.url} —`, err.message);
-    if (err instanceof ApiError) return res.status(err.status).json(err.toJSON());
+    if (err instanceof ApiError) {
+        if (err.status >= 500) logger.error({ method: req.method, url: req.url, code: err.code }, err.message);
+        return res.status(err.status).json(err.toJSON());
+    }
+    logger.error({ method: req.method, url: req.url, err }, err.message || "Unhandled error");
     res.status(err.status || 500).json({
-        error: { code: "INTERNAL_ERROR", message: err.message || "Something went wrong." },
+        error: { code: "INTERNAL_ERROR", message: "Something went wrong." },
     });
 });
 

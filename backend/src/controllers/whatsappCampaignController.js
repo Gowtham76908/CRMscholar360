@@ -1,5 +1,6 @@
 const prisma = require("../utils/prisma");
 const { runCampaign } = require("../services/whatsappCampaignService");
+const { ApiError } = require("../utils/apiError");
 
 async function createCampaign(req, res) {
     try {
@@ -44,8 +45,7 @@ async function createCampaign(req, res) {
 
         res.status(201).json({ campaign, skippedCount });
     } catch (e) {
-        console.error("[createCampaign]", e.message);
-        res.status(500).json({ error: e.message });
+        return next(e);
     }
 }
 
@@ -70,8 +70,7 @@ async function startCampaign(req, res) {
 
         res.json({ message: "Campaign started" });
     } catch (e) {
-        console.error("[startCampaign]", e.message);
-        res.status(500).json({ error: e.message });
+        return next(e);
     }
 }
 
@@ -85,8 +84,7 @@ async function pauseCampaign(req, res) {
         if (updated.count === 0) return res.status(409).json({ error: "Campaign is not running" });
         res.json({ message: "Campaign paused" });
     } catch (e) {
-        console.error("[pauseCampaign]", e.message);
-        res.status(500).json({ error: e.message });
+        return next(e);
     }
 }
 
@@ -101,8 +99,7 @@ async function resumeCampaign(req, res) {
         runCampaign(id).catch(err => console.error(`[Campaign ${id}] resume error:`, err.message));
         res.json({ message: "Campaign resumed" });
     } catch (e) {
-        console.error("[resumeCampaign]", e.message);
-        res.status(500).json({ error: e.message });
+        return next(e);
     }
 }
 
@@ -124,8 +121,7 @@ async function listCampaigns(req, res) {
 
         res.json({ campaigns, total, page, pages: Math.ceil(total / limit) });
     } catch (e) {
-        console.error("[listCampaigns]", e.message);
-        res.status(500).json({ error: e.message });
+        return next(e);
     }
 }
 
@@ -145,8 +141,7 @@ async function getCampaign(req, res) {
         if (!campaign) return res.status(404).json({ error: "Campaign not found" });
         res.json(campaign);
     } catch (e) {
-        console.error("[getCampaign]", e.message);
-        res.status(500).json({ error: e.message });
+        return next(e);
     }
 }
 
@@ -160,8 +155,7 @@ async function listAutoReplies(req, res) {
         });
         res.json(rules);
     } catch (e) {
-        console.error("[listAutoReplies]", e.message);
-        res.status(500).json({ error: e.message });
+        return next(e);
     }
 }
 
@@ -191,8 +185,7 @@ async function createAutoReply(req, res) {
         });
         res.status(201).json(rule);
     } catch (e) {
-        console.error("[createAutoReply]", e.message);
-        res.status(500).json({ error: e.message });
+        return next(e);
     }
 }
 
@@ -213,9 +206,8 @@ async function updateAutoReply(req, res) {
         });
         res.json(rule);
     } catch (e) {
-        if (e.code === "P2025") return res.status(404).json({ error: "Auto-reply rule not found" });
-        console.error("[updateAutoReply]", e.message);
-        res.status(500).json({ error: e.message });
+        if (e.code === "P2025") return next(e);
+        return next(e);
     }
 }
 
@@ -225,9 +217,8 @@ async function deleteAutoReply(req, res) {
         await prisma.whatsAppAutoReply.delete({ where: { id } });
         res.json({ message: "Deleted" });
     } catch (e) {
-        if (e.code === "P2025") return res.status(404).json({ error: "Auto-reply rule not found" });
-        console.error("[deleteAutoReply]", e.message);
-        res.status(500).json({ error: e.message });
+        if (e.code === "P2025") return next(e);
+        return next(e);
     }
 }
 

@@ -1,6 +1,7 @@
 const prisma = require("../utils/prisma");
+const { ApiError } = require("../utils/apiError");
 
-const list = async (req, res) => {
+const list = async (req, res, next) => {
     try {
         const templates = await prisma.emailTemplate.findMany({
             orderBy: { createdAt: "desc" },
@@ -8,11 +9,11 @@ const list = async (req, res) => {
         });
         res.json(templates);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
-const create = async (req, res) => {
+const create = async (req, res, next) => {
     const { name, subject, body } = req.body;
     if (!name || !subject || !body) {
         return res.status(400).json({ message: "name, subject, and body are required" });
@@ -23,11 +24,11 @@ const create = async (req, res) => {
         });
         res.status(201).json(template);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
-const update = async (req, res) => {
+const update = async (req, res, next) => {
     const { id } = req.params;
     const { name, subject, body } = req.body;
     try {
@@ -44,17 +45,17 @@ const update = async (req, res) => {
         });
         res.json(updated);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
-const remove = async (req, res) => {
+const remove = async (req, res, next) => {
     const { id } = req.params;
     try {
         await prisma.emailTemplate.delete({ where: { id } });
         res.json({ ok: true });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 

@@ -33,51 +33,54 @@ function matchesAllConditions(lead, conditions) {
 
 // ─── Action Executor ──────────────────────────────────────────────────────────
 
-async function executeAction(action, lead, childContext = {}) {
+async function executeAction(action, lead, childContext = {}, tx = prisma) {
     const cfg = action.config;
 
     switch (action.type) {
         case "CHANGE_STATUS": {
-            const updatedLead = await prisma.lead.update({
+            const updatedLead = await tx.lead.update({
                 where: { id: lead.id },
                 data: { status: cfg.status }
             });
-            await logActivity({
-                leadId: lead.id,
-                userId: null,
-                action: "STATUS_CHANGED",
-                metadata: { prevStatus: lead.status, newStatus: cfg.status, source: "automation" }
+            await tx.activity.create({
+                data: {
+                    leadId: lead.id,
+                    userId: null,
+                    action: "STATUS_CHANGED",
+                    metadata: { prevStatus: lead.status, newStatus: cfg.status, source: "automation" },
+                }
             });
-            // Fire chained STATUS_CHANGED rules — execution context propagates chain state
-            runRulesForLead("STATUS_CHANGED", updatedLead, {
+            // Fire chained STATUS_CHANGED rules after the transaction commits
+            setImmediate(() => runRulesForLead("STATUS_CHANGED", updatedLead, {
                 ...childContext,
                 prevStatus: lead.status,
                 newStatus: cfg.status,
-            }).catch(console.error);
-            // Note: childContext already has triggerDepth+1 and this ruleId in ruleChain
+            }).catch(console.error));
             return { action: "CHANGE_STATUS", status: cfg.status };
         }
 
         case "ASSIGN_LEAD": {
-            const updatedLead = await prisma.lead.update({
+            const updatedLead = await tx.lead.update({
                 where: { id: lead.id },
                 data: { assignedToId: cfg.userId }
             });
-            await logActivity({
-                leadId: lead.id,
-                userId: cfg.userId,
-                action: "ASSIGNED",
-                metadata: { assignedToId: cfg.userId, source: "automation" }
+            await tx.activity.create({
+                data: {
+                    leadId: lead.id,
+                    userId: cfg.userId,
+                    action: "ASSIGNED",
+                    metadata: { assignedToId: cfg.userId, source: "automation" },
+                }
             });
-            // Fire chained LEAD_ASSIGNED rules — execution context propagates chain state
-            runRulesForLead("LEAD_ASSIGNED", updatedLead, childContext).catch(console.error);
+            // Fire chained LEAD_ASSIGNED rules after the transaction commits
+            setImmediate(() => runRulesForLead("LEAD_ASSIGNED", updatedLead, childContext).catch(console.error));
             return { action: "ASSIGN_LEAD", userId: cfg.userId };
         }
 
         case "CREATE_TASK": {
             const dueDate = new Date();
             dueDate.setDate(dueDate.getDate() + (cfg.dueDaysFromNow ?? 1));
-            await prisma.task.create({
+            await tx.task.create({
                 data: {
                     title: cfg.title,
                     description: cfg.description ?? null,
@@ -88,11 +91,13 @@ async function executeAction(action, lead, childContext = {}) {
                     priority: cfg.priority ?? "MEDIUM",
                 }
             });
-            await logActivity({
-                leadId: lead.id,
-                userId: null,
-                action: "TASK_CREATED",
-                metadata: { title: cfg.title, source: "automation" }
+            await tx.activity.create({
+                data: {
+                    leadId: lead.id,
+                    userId: null,
+                    action: "TASK_CREATED",
+                    metadata: { title: cfg.title, source: "automation" },
+                }
             });
             return { action: "CREATE_TASK", title: cfg.title };
         }
@@ -101,7 +106,7 @@ async function executeAction(action, lead, childContext = {}) {
             if (!lead.assignedToId) return { action: "CREATE_REMINDER", skipped: true, reason: "no_assignee" };
             const remindAt = new Date();
             remindAt.setHours(remindAt.getHours() + (cfg.dueHoursFromNow ?? 24));
-            await prisma.reminder.create({
+            await tx.reminder.create({
                 data: {
                     leadId: lead.id,
                     userId: lead.assignedToId,
@@ -114,7 +119,7 @@ async function executeAction(action, lead, childContext = {}) {
 
         case "SEND_NOTIFICATION": {
             if (lead.assignedToId) {
-                await prisma.notification.create({
+                await tx.notification.create({
                     data: {
                         userId: lead.assignedToId,
                         title: cfg.title ?? "Automation Alert",
@@ -135,7 +140,7 @@ async function executeAction(action, lead, childContext = {}) {
                     p === "{{lead.name}}" ? lead.name : p
                 );
                 const result = await sendTemplateMessage(normalized, cfg.templateName, params);
-                await prisma.whatsAppMessage.create({
+                await tx.whatsAppMessage.create({
                     data: {
                         leadId: lead.id,
                         userId: null,
@@ -149,11 +154,13 @@ async function executeAction(action, lead, childContext = {}) {
                         sentAt: new Date(),
                     },
                 });
-                await logActivity({
-                    leadId: lead.id,
-                    userId: null,
-                    action: "WHATSAPP_SENT",
-                    metadata: { templateName: cfg.templateName, source: "automation" },
+                await tx.activity.create({
+                    data: {
+                        leadId: lead.id,
+                        userId: null,
+                        action: "WHATSAPP_SENT",
+                        metadata: { templateName: cfg.templateName, source: "automation" },
+                    }
                 });
             } catch (e) {
                 console.warn(`[AutomationEngine] SEND_WHATSAPP failed for lead ${lead.id}: ${e.message}`);
@@ -167,11 +174,13 @@ async function executeAction(action, lead, childContext = {}) {
             try {
                 const body = (cfg.body || "Hi {{lead.name}}, thank you for your enquiry.").replace(/\{\{lead\.name\}\}/g, lead.name);
                 await sendEmail({ to: lead.email, subject: cfg.subject || "Message from our team", text: body });
-                await logActivity({
-                    leadId: lead.id,
-                    userId: null,
-                    action: "EMAIL_SENT",
-                    metadata: { subject: cfg.subject, source: "automation" },
+                await tx.activity.create({
+                    data: {
+                        leadId: lead.id,
+                        userId: null,
+                        action: "EMAIL_SENT",
+                        metadata: { subject: cfg.subject, source: "automation" },
+                    }
                 });
             } catch (e) {
                 console.warn(`[AutomationEngine] SEND_EMAIL failed for lead ${lead.id}: ${e.message}`);
@@ -338,31 +347,45 @@ async function runRulesForLead(triggerType, lead, context = null) {
         // Build child context — this rule is now part of the chain
         const child = childContext(ctx, rule.id);
 
-        for (const action of rule.actions) {
-            try {
-                const result = await executeAction(action, lead, child);
-                results.push(result);
-                // Re-fetch lead so subsequent actions see the updated state
-                lead = await prisma.lead.findUnique({ where: { id: lead.id } });
-            } catch (err) {
-                failed = true;
-                results.push({ action: action.type, error: err.message });
-            }
-        }
-
-        await prisma.automationLog.create({
-            data: {
-                ruleId: rule.id,
-                leadId: lead.id,
-                status: failed ? "FAILED" : "SUCCESS",
-                details: {
-                    results,
-                    chainId:      ctx.chainId,
-                    triggerDepth: ctx.triggerDepth,
-                    ruleChain:    ctx.ruleChain,
+        try {
+            await prisma.$transaction(async (tx) => {
+                for (const action of rule.actions) {
+                    const result = await executeAction(action, lead, child, tx);
+                    results.push(result);
+                    // Re-fetch lead so subsequent actions see the updated state
+                    lead = await tx.lead.findUnique({ where: { id: lead.id } });
                 }
-            }
-        });
+                await tx.automationLog.create({
+                    data: {
+                        ruleId: rule.id,
+                        leadId: lead.id,
+                        status: "SUCCESS",
+                        details: {
+                            results,
+                            chainId:      ctx.chainId,
+                            triggerDepth: ctx.triggerDepth,
+                            ruleChain:    ctx.ruleChain,
+                        }
+                    }
+                });
+            });
+        } catch (err) {
+            failed = true;
+            results.push({ error: err.message });
+            await prisma.automationLog.create({
+                data: {
+                    ruleId: rule.id,
+                    leadId: lead.id,
+                    status: "FAILED",
+                    details: {
+                        results,
+                        chainId:      ctx.chainId,
+                        triggerDepth: ctx.triggerDepth,
+                        ruleChain:    ctx.ruleChain,
+                    }
+                }
+            });
+        }
     }
 }
 

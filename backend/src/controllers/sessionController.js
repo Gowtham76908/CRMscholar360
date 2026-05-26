@@ -11,7 +11,7 @@ const createSession = async (userId, device) => {
     }
 };
 
-const getActiveSessions = async (req, res) => {
+const getActiveSessions = async (req, res, next) => {
     try {
         const { role } = req.user;
         if (role !== "SUPER_ADMIN") return res.status(403).json({ message: "Forbidden" });
@@ -23,11 +23,11 @@ const getActiveSessions = async (req, res) => {
 
         res.json(sessions);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching sessions", error: error.message });
+        return next(error);
     }
 };
 
-const logoutAllSessions = async (req, res) => {
+const logoutAllSessions = async (req, res, next) => {
     try {
         const { userId } = req.body; // Target user to force logout
         if (!userId) return res.status(400).json({ message: "User ID required" });
@@ -38,7 +38,7 @@ const logoutAllSessions = async (req, res) => {
 
         res.json({ message: "Logged out all sessions for user" });
     } catch (error) {
-        res.status(500).json({ message: "Error logging out sessions", error: error.message });
+        return next(error);
     }
 };
 

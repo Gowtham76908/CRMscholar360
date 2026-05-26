@@ -4,6 +4,7 @@ const calculateLeadScore = require("../utils/leadScorer");
 const normalizePhone = require("../utils/normalizePhone");
 const logActivity = require("../utils/activityLogger");
 const { encrypt, decrypt } = require("../utils/encrypt");
+const { ApiError } = require("../utils/apiError");
 
 const FB_API = "https://graph.facebook.com/v18.0";
 
@@ -17,7 +18,7 @@ const resolveToken = (raw) => {
 };
 
 // GET /api/facebook/status
-const getStatus = async (req, res) => {
+const getStatus = async (req, res, next) => {
     try {
         const intg = await getIntegration();
         res.json({
@@ -26,12 +27,12 @@ const getStatus = async (req, res) => {
             pageId:      intg?.config?.pageId ?? null,
         });
     } catch (e) {
-        res.status(500).json({ message: "Error fetching Facebook status", error: e.message });
+        return next(e);
     }
 };
 
 // POST /api/facebook/connect
-const connect = async (req, res) => {
+const connect = async (req, res, next) => {
     try {
         const { accessToken, pageId } = req.body;
         if (!accessToken || !pageId) {
@@ -45,7 +46,7 @@ const connect = async (req, res) => {
             });
         } catch (e) {
             const msg = e.response?.data?.error?.message || "Invalid access token or page ID";
-            return res.status(400).json({ message: msg });
+            return next(e);
         }
 
         await prisma.integration.upsert({
@@ -56,12 +57,12 @@ const connect = async (req, res) => {
 
         res.json({ connected: true });
     } catch (e) {
-        res.status(500).json({ message: "Error connecting Facebook", error: e.message });
+        return next(e);
     }
 };
 
 // DELETE /api/facebook/disconnect
-const disconnect = async (req, res) => {
+const disconnect = async (req, res, next) => {
     try {
         await prisma.integration.upsert({
             where:  { platform: "FACEBOOK_LEADS" },
@@ -70,12 +71,12 @@ const disconnect = async (req, res) => {
         });
         res.json({ disconnected: true });
     } catch (e) {
-        res.status(500).json({ message: "Error disconnecting", error: e.message });
+        return next(e);
     }
 };
 
 // GET /api/facebook/forms
-const listForms = async (req, res) => {
+const listForms = async (req, res, next) => {
     try {
         const intg = await getIntegration();
         if (!intg?.isConnected || !intg?.config?.accessToken) {
@@ -92,12 +93,12 @@ const listForms = async (req, res) => {
         res.json(data.data || []);
     } catch (e) {
         const msg = e.response?.data?.error?.message || e.message;
-        res.status(500).json({ message: `Facebook API error: ${msg}` });
+        return next(e);
     }
 };
 
 // POST /api/facebook/sync  body: { formId }
-const syncLeads = async (req, res) => {
+const syncLeads = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const { formId } = req.body;
@@ -198,8 +199,85 @@ const syncLeads = async (req, res) => {
         res.json(results);
     } catch (e) {
         const msg = e.response?.data?.error?.message || e.message;
-        res.status(500).json({ message: `Sync failed: ${msg}` });
+        return next(e);
     }
 };
 
-module.exports = { getStatus, connect, disconnect, listForms, syncLeads };
+// ── Facebook Webhook ─────────────────────────────────────────────────────────
+
+// GET /api/facebook/webhook — Facebook subscription verification challenge
+const verifyWebhook = (req, res) => {
+    const { "hub.mode": mode, "hub.verify_token": token, "hub.challenge": challenge } = req.query;
+    const expected = process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN;
+    if (mode === "subscribe" && token === expected) {
+        console.log("[Facebook] Webhook subscription verified.");
+        return res.status(200).send(challenge);
+    }
+    console.warn("[Facebook] Webhook verification failed — token mismatch.");
+    res.status(403).json({ error: "Verification failed." });
+};
+
+// POST /api/facebook/webhook — receive real-time lead events from Facebook
+const receiveWebhookEvent = async (req, res, next) => {
+    // Acknowledge immediately (Facebook requires 200 within 20 s)
+    res.sendStatus(200);
+
+    try {
+        const body = req.body;
+        if (body.object !== "page") return;
+
+        const intg = await getIntegration();
+        if (!intg?.isConnected) return;
+        const accessToken = resolveToken(intg.accessToken);
+        if (!accessToken) return;
+
+        for (const entry of (body.entry || [])) {
+            for (const change of (entry.changes || [])) {
+                if (change.field !== "leadgen") continue;
+                const leadgenId = change.value?.leadgen_id;
+                const formId    = change.value?.form_id;
+                if (!leadgenId || !formId) continue;
+
+                try {
+                    const { data: fieldData } = await axios.get(
+                        `${FB_API}/${leadgenId}`,
+                        { params: { access_token: accessToken } }
+                    );
+
+                    const fields = {};
+                    for (const f of (fieldData.field_data || [])) {
+                        fields[f.name] = f.values?.[0] ?? null;
+                    }
+
+                    const name  = fields.full_name || fields.first_name || "Facebook Lead";
+                    const phone = normalizePhone(fields.phone_number || fields.phone || "");
+                    const email = fields.email || null;
+
+                    if (!phone && !email) continue;
+
+                    const existing = await prisma.lead.findFirst({
+                        where: { OR: [...(phone ? [{ phone }] : []), ...(email ? [{ email }] : [])] },
+                        select: { id: true },
+                    });
+                    if (existing) {
+                        await logActivity({ leadId: existing.id, action: "WEBHOOK_DUPLICATE_HIT", metadata: { source: "FACEBOOK_REALTIME", leadgenId } });
+                        continue;
+                    }
+
+                    const { score, category } = calculateLeadScore({ source: "FACEBOOK", phone, email });
+                    const lead = await prisma.lead.create({
+                        data: { name, email, phone, source: "FACEBOOK", enquiryType: "PRODUCT", score, category },
+                    });
+                    await logActivity({ leadId: lead.id, action: "LEAD_CREATED_VIA_WEBHOOK", metadata: { source: "FACEBOOK_REALTIME", leadgenId, formId } });
+                    console.log(`[Facebook] Real-time lead created: ${lead.id}`);
+                } catch (err) {
+                    console.error(`[Facebook] Error processing leadgen ${leadgenId}:`, err.message);
+                }
+            }
+        }
+    } catch (err) {
+        console.error("[Facebook] Webhook event processing error:", err.message);
+    }
+};
+
+module.exports = { getStatus, connect, disconnect, listForms, syncLeads, verifyWebhook, receiveWebhookEvent };

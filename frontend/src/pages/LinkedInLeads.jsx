@@ -70,7 +70,7 @@ const LinkedInLeads = () => {
             });
             setResults(res.data.leads || []);
         } catch (err) {
-            setError(err.response?.data?.message || "Search failed. Please try again.");
+            setError(err.response?.data?.error?.message || err.response?.data?.message || "Search failed. Please try again.");
         } finally {
             setLoading(false);
         }
@@ -111,7 +111,7 @@ const LinkedInLeads = () => {
         } catch (err) {
             setImportResult({
                 success: false,
-                message: err.response?.data?.message || "Import failed. Please try again."
+                message: err.response?.data?.error?.message || err.response?.data?.message || "Import failed. Please try again."
             });
         } finally {
             setImporting(false);

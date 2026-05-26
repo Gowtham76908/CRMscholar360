@@ -3,20 +3,20 @@ const logActivity = require("../utils/activityLogger");
 const normalizePhone = require("../utils/normalizePhone");
 const { getTemplates, sendTemplateMessage } = require("../services/whatsappService");
 const { processInboundReply } = require("../services/whatsappAutoReplyService");
+const { ApiError } = require("../utils/apiError");
 
 // GET /api/whatsapp/templates
-const listTemplates = async (req, res) => {
+const listTemplates = async (req, res, next) => {
     try {
         const templates = await getTemplates();
         res.json(templates);
     } catch (err) {
-        console.error("WATI getTemplates error:", err.message);
-        res.status(502).json({ message: "Failed to fetch templates from WATI", error: err.message });
+        return next(err);
     }
 };
 
 // POST /api/whatsapp/send
-const sendMessage = async (req, res) => {
+const sendMessage = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leadId, templateName, parameters = [] } = req.body;
@@ -64,13 +64,12 @@ const sendMessage = async (req, res) => {
 
         res.status(201).json(record);
     } catch (err) {
-        console.error("WhatsApp send error:", err.message);
-        res.status(500).json({ message: "Failed to send WhatsApp message", error: err.message });
+        return next(err);
     }
 };
 
 // GET /api/whatsapp/messages?direction=inbound&limit=10
-const getInboundMessages = async (req, res) => {
+const getInboundMessages = async (req, res, next) => {
     try {
         const { direction, limit = 20 } = req.query;
         const where = {};
@@ -86,12 +85,12 @@ const getInboundMessages = async (req, res) => {
         });
         res.json({ data: messages });
     } catch (err) {
-        res.status(500).json({ message: "Failed to fetch messages", error: err.message });
+        return next(err);
     }
 };
 
 // GET /api/whatsapp/:leadId/messages
-const getMessages = async (req, res) => {
+const getMessages = async (req, res, next) => {
     try {
         const messages = await prisma.whatsAppMessage.findMany({
             where: { leadId: req.params.leadId },
@@ -99,12 +98,12 @@ const getMessages = async (req, res) => {
         });
         res.json(messages);
     } catch (err) {
-        res.status(500).json({ message: "Failed to fetch messages", error: err.message });
+        return next(err);
     }
 };
 
 // POST /api/whatsapp/webhook  (no auth — WATI calls this)
-const watiWebhook = async (req, res) => {
+const watiWebhook = async (req, res, next) => {
     try {
         console.log("WATI webhook:", JSON.stringify(req.body));
         const payload = req.body;
@@ -216,8 +215,7 @@ const watiWebhook = async (req, res) => {
 
         res.json({ ok: true });
     } catch (err) {
-        console.error("WATI webhook error:", err.message);
-        res.status(500).json({ message: "Webhook error", error: err.message });
+        return next(err);
     }
 };
 

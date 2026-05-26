@@ -3,17 +3,17 @@ const bcrypt = require("bcrypt");
 const normalizePhone = require("../utils/normalizePhone");
 const { toSafeUser } = require("../utils/safeUser");
 
-const registerUser = async (req, res) => {
+const registerUser = async (req, res, next) => {
     try {
         const { name, email, phone, password, role, department } = req.body;
 
         if (!name || !email || !password) {
-            return res.status(400).json({ message: "Name, email, and password are required" });
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Name, email, and password are required");
         }
 
         const existingUser = await prisma.user.findUnique({ where: { email } });
         if (existingUser) {
-            return res.status(400).json({ message: "User already exists" });
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "User already exists");
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -33,12 +33,12 @@ const registerUser = async (req, res) => {
         res.status(201).json({ message: "User registered successfully", user: toSafeUser(newUser) });
 
     } catch (error) {
-        res.status(500).json({ message: "Internal server error", error: error.message });
+        return next(error);
     }
 };
 
 // Update Profile
-const updateProfile = async (req, res) => {
+const updateProfile = async (req, res, next) => {
     try {
         const userId = req.user.userId; // properly extracted from token
         const { name, phone, department } = req.body;
@@ -50,21 +50,21 @@ const updateProfile = async (req, res) => {
 
         res.json(toSafeUser(updatedUser));
     } catch (error) {
-        res.status(500).json({ message: "Error updating profile", error: error.message });
+        return next(error);
     }
 };
 
 // Change Password
-const changePassword = async (req, res) => {
+const changePassword = async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const { currentPassword, newPassword } = req.body;
 
         const user = await prisma.user.findUnique({ where: { id: userId } });
-        if (!user) return res.status(404).json({ message: "User not found" });
+        if (!user) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "User not found");
 
         const isMatch = await bcrypt.compare(currentPassword, user.password);
-        if (!isMatch) return res.status(400).json({ message: "Incorrect current password" });
+        if (!isMatch) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Incorrect current password");
 
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         await prisma.user.update({
@@ -74,12 +74,12 @@ const changePassword = async (req, res) => {
 
         res.json({ message: "Password updated successfully" });
     } catch (error) {
-        res.status(500).json({ message: "Error changing password", error: error.message });
+        return next(error);
     }
 };
 
 // Update Preferences
-const updatePreferences = async (req, res) => {
+const updatePreferences = async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const { preferences } = req.body;
@@ -92,12 +92,12 @@ const updatePreferences = async (req, res) => {
 
         res.json(updatedUser);
     } catch (error) {
-        res.status(500).json({ message: "Error updating preferences", error: error.message });
+        return next(error);
     }
 };
 
 // Get all users (for admin/manager selection)
-const getAllUsers = async (req, res) => {
+const getAllUsers = async (req, res, next) => {
     try {
         const users = await prisma.user.findMany({
             where: { isActive: true },
@@ -113,8 +113,8 @@ const getAllUsers = async (req, res) => {
 
         res.json(users);
     } catch (error) {
-        console.error("Get users error:", error);
-        res.status(500).json({ message: "Failed to fetch users" });
+
+        return next(error);
     }
 };
 

@@ -1,5 +1,6 @@
 const OpenAI = require("openai");
 const crypto = require("crypto");
+const { ApiError } = require("../utils/apiError");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -27,7 +28,7 @@ function checkRateLimit(userId) {
     return true;
 }
 
-exports.getDigest = async (req, res) => {
+exports.getDigest = async (req, res, next) => {
     try {
         const {
             followUp = 0,
@@ -70,9 +71,8 @@ exports.getDigest = async (req, res) => {
 
         res.json({ digest, cached: false });
     } catch (err) {
-        console.error("[AI Digest]", err.message);
         const cached = digestCache.get(req.user?.id);
         if (cached) return res.json({ digest: cached.digest, cached: true });
-        res.status(500).json({ error: "AI digest temporarily unavailable." });
+        return next(err);
     }
 };

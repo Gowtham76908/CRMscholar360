@@ -64,7 +64,7 @@ const matchLead = async (call) => {
 // ═══════════════════════════════════════════════════════════════════════════
 // POST /api/salestrail/webhook  — Salestrail pushes call data here
 // ═══════════════════════════════════════════════════════════════════════════
-const salestrailWebhook = async (req, res) => {
+const salestrailWebhook = async (req, res, next) => {
     try {
         if (!verifyBasicAuth(req)) {
             return res.status(401).json({ message: "Unauthorized" });
@@ -111,15 +111,15 @@ const salestrailWebhook = async (req, res) => {
 
         res.status(200).json({ received: payloads.length, results });
     } catch (err) {
-        console.error("[SALESTRAIL WEBHOOK]", err.message);
-        res.status(500).json({ message: "Webhook error", error: err.message });
+
+        return next(err);
     }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GET /api/salestrail/calls  — list all call logs (paginated + filtered)
 // ═══════════════════════════════════════════════════════════════════════════
-const getCalls = async (req, res) => {
+const getCalls = async (req, res, next) => {
     try {
         const {
             page        = 1,
@@ -165,16 +165,18 @@ const getCalls = async (req, res) => {
             prisma.salestrailCall.count({ where }),
         ]);
 
-        res.json({ calls, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+        const p = parseInt(page);
+        const l = parseInt(limit);
+        res.json({ data: calls, total, page: p, limit: l, totalPages: Math.max(1, Math.ceil(total / l)) });
     } catch (err) {
-        res.status(500).json({ message: "Error fetching calls", error: err.message });
+        return next(err);
     }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GET /api/salestrail/stats  — summary + calls per day
 // ═══════════════════════════════════════════════════════════════════════════
-const getStats = async (req, res) => {
+const getStats = async (req, res, next) => {
     try {
         const { days = 30, agentEmails } = req.query;
         const daysInt   = parseInt(days);
@@ -288,7 +290,7 @@ const getStats = async (req, res) => {
             perDay,
         });
     } catch (err) {
-        res.status(500).json({ message: "Error fetching stats", error: err.message });
+        return next(err);
     }
 };
 

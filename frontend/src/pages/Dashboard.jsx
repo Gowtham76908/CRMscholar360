@@ -496,6 +496,7 @@ const Dashboard = () => {
     const { data: stats, isLoading: statsLoading } = useQuery({
         queryKey: ["dashboard-stats"],
         queryFn: () => api.get("/leads/stats").then(r => r.data),
+        staleTime: 120_000,
     });
 
     const { data: leadsData, isLoading: leadsLoading } = useQuery({
@@ -503,16 +504,19 @@ const Dashboard = () => {
         queryFn: () => api.get("/leads", {
             params: { limit: 10, status: "FOLLOW_UP,CONTACTED,NEW", sortBy: "updatedAt", sortOrder: "asc" }
         }).then(r => r.data.data || r.data),
+        staleTime: 120_000,
     });
 
     const { data: tasks, isLoading: tasksLoading } = useQuery({
         queryKey: ["tasks", "my-pending"],
         queryFn: () => api.get("/tasks").then(r => r.data.data ?? r.data),
+        staleTime: 120_000,
     });
 
     const { data: reminders, isLoading: remindersLoading } = useQuery({
         queryKey: ["reminders", "upcoming"],
         queryFn: () => api.get("/reminders").then(r => r.data.data ?? r.data),
+        staleTime: 120_000,
     });
 
     // ── Manager / Admin queries ────────────────────────────────────────────────

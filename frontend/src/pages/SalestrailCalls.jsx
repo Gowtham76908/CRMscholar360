@@ -168,9 +168,9 @@ const SalestrailCalls = () => {
 
     const s      = statsData?.summary || {};
     const perDay = statsData?.perDay  || [];
-    const calls  = callsData?.calls   || [];
-    const total  = callsData?.total   || 0;
-    const pages  = callsData?.pages   || 1;
+    const calls  = callsData?.data       || [];
+    const total  = callsData?.total      || 0;
+    const pages  = callsData?.totalPages || 1;
 
     // Weekly aggregation
     const chartData = useMemo(() => {

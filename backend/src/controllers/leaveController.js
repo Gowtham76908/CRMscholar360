@@ -24,7 +24,7 @@ const findConflict = (userId, from, to, excludeId = null) =>
     });
 
 // Apply for Leave
-const applyLeave = async (req, res) => {
+const applyLeave = async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const { fromDate, toDate, reason, approverIds, leaveType } = req.body;
@@ -155,7 +155,7 @@ const applyLeave = async (req, res) => {
         }
     } catch (error) {
         if (error.statusCode === 409) {
-            return res.status(409).json({ message: error.message });
+            return next(error);
         }
         // DB exclusion constraint tripped (race between two simultaneous submissions)
         if (isOverlapViolation(error)) {
@@ -167,12 +167,12 @@ const applyLeave = async (req, res) => {
             });
         }
         console.error("Apply leave error:", error);
-        res.status(500).json({ message: "Failed to apply for leave" });
+        return next(error);
     }
 };
 
 // Get My Leaves
-const getMyLeaves = async (req, res) => {
+const getMyLeaves = async (req, res, next) => {
     try {
         const userId = req.user.userId;
 
@@ -192,13 +192,13 @@ const getMyLeaves = async (req, res) => {
 
         res.json(leaves);
     } catch (error) {
-        console.error("Get my leaves error:", error);
-        res.status(500).json({ message: "Failed to fetch leaves" });
+
+        return next(error);
     }
 };
 
 // Get Pending Leaves (Admin)
-const getPendingLeaves = async (req, res) => {
+const getPendingLeaves = async (req, res, next) => {
     try {
         const userId = req.user.userId;
 
@@ -234,8 +234,8 @@ const getPendingLeaves = async (req, res) => {
 
         res.json(leaves);
     } catch (error) {
-        console.error("Get pending leaves error:", error);
-        res.status(500).json({ message: "Failed to fetch pending leaves" });
+
+        return next(error);
     }
 };
 
@@ -266,13 +266,13 @@ const getAllLeaves = async (_req, res) => {
 
         res.json(leaves);
     } catch (error) {
-        console.error("Get all leaves error:", error);
-        res.status(500).json({ message: "Failed to fetch leaves" });
+
+        return next(error);
     }
 };
 
 // Approve Leave
-const approveLeave = async (req, res) => {
+const approveLeave = async (req, res, next) => {
     try {
         const { id } = req.params;
         const userId = req.user.userId;
@@ -355,7 +355,7 @@ const approveLeave = async (req, res) => {
     } catch (error) {
         // Overlap thrown inside the transaction (application-level guard)
         if (error.statusCode === 409) {
-            return res.status(409).json({ message: error.message });
+            return next(error);
         }
         // DB exclusion constraint tripped (belt-and-suspenders)
         if (isOverlapViolation(error)) {
@@ -369,12 +369,12 @@ const approveLeave = async (req, res) => {
             });
         }
         console.error("Approve leave error:", error);
-        res.status(500).json({ message: "Failed to approve leave" });
+        return next(error);
     }
 };
 
 // Reject Leave
-const rejectLeave = async (req, res) => {
+const rejectLeave = async (req, res, next) => {
     try {
         const { id } = req.params;
         const userId = req.user.userId;
@@ -421,8 +421,8 @@ const rejectLeave = async (req, res) => {
             link:    "/leave"
         }).catch(err => console.error("[Notification] LEAVE_REJECTED failed:", err));
     } catch (error) {
-        console.error("Reject leave error:", error);
-        res.status(500).json({ message: "Failed to reject leave" });
+
+        return next(error);
     }
 };
 
@@ -450,7 +450,7 @@ const createAttendanceForLeave = async (leave, tx) => {
 };
 
 // Get Leave Stats
-const getLeaveStats = async (req, res) => {
+const getLeaveStats = async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const currentYear = new Date().getFullYear();
@@ -476,8 +476,8 @@ const getLeaveStats = async (req, res) => {
 
         res.json(stats);
     } catch (error) {
-        console.error("Get leave stats error:", error);
-        res.status(500).json({ message: "Failed to fetch leave stats" });
+
+        return next(error);
     }
 };
 

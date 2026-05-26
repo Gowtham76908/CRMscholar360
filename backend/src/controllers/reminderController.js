@@ -1,6 +1,6 @@
 const prisma = require("../utils/prisma");
 
-const createReminder = async (req, res) => {
+const createReminder = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leadId, taskId, remindAt, message } = req.body;
@@ -17,11 +17,11 @@ const createReminder = async (req, res) => {
 
         res.status(201).json(reminder);
     } catch (error) {
-        res.status(500).json({ message: "Error creating reminder", error: error.message });
+        return next(error);
     }
 };
 
-const getMyReminders = async (req, res) => {
+const getMyReminders = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leadId } = req.query;
@@ -33,18 +33,18 @@ const getMyReminders = async (req, res) => {
         });
         res.json(reminders);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching reminders", error: error.message });
+        return next(error);
     }
 };
 
-const dismissReminder = async (req, res) => {
+const dismissReminder = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { id } = req.params;
 
         const reminder = await prisma.reminder.findUnique({ where: { id } });
-        if (!reminder) return res.status(404).json({ message: "Reminder not found" });
-        if (reminder.userId !== userId) return res.status(403).json({ message: "Access denied" });
+        if (!reminder) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Reminder not found");
+        if (reminder.userId !== userId) throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Access denied");
 
         const updated = await prisma.reminder.update({
             where: { id },
@@ -52,7 +52,7 @@ const dismissReminder = async (req, res) => {
         });
         res.json(updated);
     } catch (error) {
-        res.status(500).json({ message: "Error dismissing reminder", error: error.message });
+        return next(error);
     }
 };
 

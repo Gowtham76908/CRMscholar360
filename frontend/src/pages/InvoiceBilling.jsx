@@ -1406,10 +1406,12 @@ export default function InvoiceBilling() {
         queryFn: () => api.get("/company-settings").then((r) => r.data),
     });
 
-    const { data: invoices = [], isLoading } = useQuery({
+    const { data: invoicesResp, isLoading } = useQuery({
         queryKey: ["invoices"],
         queryFn: () => api.get("/invoices").then((r) => r.data),
     });
+    // Handle both paginated { data: [...] } and legacy flat-array responses
+    const invoices = Array.isArray(invoicesResp) ? invoicesResp : (invoicesResp?.data ?? []);
 
     const deleteMut = useMutation({
         mutationFn: (id) => api.delete(`/invoices/${id}`),

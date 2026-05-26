@@ -16,7 +16,7 @@ const taskInclude = {
 
 // ─── Create Task ──────────────────────────────────────────────────────────────
 
-const createTask = async (req, res) => {
+const createTask = async (req, res, next) => {
     try {
         let {
             title, description, leadId, assignedTo, dueDate, files,
@@ -25,10 +25,10 @@ const createTask = async (req, res) => {
         } = req.body;
 
         if (!title || !title.trim()) {
-            return res.status(400).json({ message: "Task title is required" });
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Task title is required");
         }
         if (!dueDate || isNaN(new Date(dueDate).getTime())) {
-            return res.status(400).json({ message: "A valid due date is required" });
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "A valid due date is required");
         }
 
         if (!leadId || leadId === "") leadId = null;
@@ -36,11 +36,11 @@ const createTask = async (req, res) => {
 
         if (leadId) {
             const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-            if (!lead) return res.status(404).json({ message: "Lead not found" });
+            if (!lead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
         }
         if (assignedTo) {
             const user = await prisma.user.findUnique({ where: { id: assignedTo } });
-            if (!user) return res.status(404).json({ message: "Assigned user not found" });
+            if (!user) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Assigned user not found");
         }
 
         // If sprintId provided, determine kanbanStatus based on sprint state
@@ -93,20 +93,20 @@ const createTask = async (req, res) => {
             }).catch(err => console.error("[Notification] TASK_ASSIGNED failed:", err));
         }
     } catch (error) {
-        console.error("CREATE_TASK_ERROR:", error);
-        res.status(500).json({ message: "Error creating task", error: error.message });
+
+        return next(error);
     }
 };
 
 // ─── Get Tasks (paginated) ────────────────────────────────────────────────────
 
-const getTasks = async (req, res) => {
+const getTasks = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
 
         const validation = getTasksSchema.safeParse(req.query);
         if (!validation.success) {
-            return res.status(400).json({ message: "Invalid query parameters", errors: validation.error.errors });
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Invalid query parameters");
         }
 
         const { page, limit, filter, leadId } = validation.data;
@@ -116,37 +116,37 @@ const getTasks = async (req, res) => {
                 where: { id: leadId },
                 select: { assignedToId: true }
             });
-            if (!lead) return res.status(404).json({ message: "Lead not found" });
+            if (!lead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
             if (role === "EMPLOYEE" && lead.assignedToId !== userId) {
-                return res.status(403).json({ message: "Access denied" });
+                throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Access denied");
             }
         }
 
         const result = await getTasksPaginated({ userId, role, page, limit, filter, leadId });
         res.json(result);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching tasks", error: error.message });
+        return next(error);
     }
 };
 
 // ─── Get Task By ID ───────────────────────────────────────────────────────────
 
-const getTaskById = async (req, res) => {
+const getTaskById = async (req, res, next) => {
     try {
         const task = await prisma.task.findUnique({
             where: { id: req.params.id },
             include: taskInclude
         });
-        if (!task) return res.status(404).json({ message: "Task not found" });
+        if (!task) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Task not found");
         res.json(task);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching task", error: error.message });
+        return next(error);
     }
 };
 
 // ─── Update Task (full) ───────────────────────────────────────────────────────
 
-const updateTask = async (req, res) => {
+const updateTask = async (req, res, next) => {
     try {
         const { id } = req.params;
         const {
@@ -174,19 +174,19 @@ const updateTask = async (req, res) => {
         });
         res.json({ message: "Task updated", task });
     } catch (error) {
-        res.status(500).json({ message: "Error updating task", error: error.message });
+        return next(error);
     }
 };
 
 // ─── Update Status (legacy + kanban) ─────────────────────────────────────────
 
-const updateTaskStatus = async (req, res) => {
+const updateTaskStatus = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
 
         if (!["PENDING", "COMPLETED"].includes(status)) {
-            return res.status(400).json({ message: "Invalid status" });
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Invalid status");
         }
 
         // Only force kanban to DONE when completing — don't reset position when un-completing
@@ -222,20 +222,20 @@ const updateTaskStatus = async (req, res) => {
             }
         }
     } catch (error) {
-        res.status(500).json({ message: "Error updating task", error: error.message });
+        return next(error);
     }
 };
 
 // ─── Update Kanban Status (drag & drop) ──────────────────────────────────────
 
-const updateKanbanStatus = async (req, res) => {
+const updateKanbanStatus = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { kanbanStatus, orderIndex } = req.body;
 
         const validStatuses = ["BACKLOG", "TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "BLOCKED"];
         if (!validStatuses.includes(kanbanStatus)) {
-            return res.status(400).json({ message: "Invalid kanban status" });
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Invalid kanban status");
         }
 
         const task = await prisma.task.update({
@@ -251,30 +251,30 @@ const updateKanbanStatus = async (req, res) => {
         });
         res.json({ message: "Kanban status updated", task });
     } catch (error) {
-        res.status(500).json({ message: "Error updating kanban status", error: error.message });
+        return next(error);
     }
 };
 
 // ─── Delete Task ──────────────────────────────────────────────────────────────
 
-const deleteTask = async (req, res) => {
+const deleteTask = async (req, res, next) => {
     try {
         await prisma.task.delete({ where: { id: req.params.id } });
         res.json({ message: "Task deleted" });
     } catch (error) {
-        res.status(500).json({ message: "Error deleting task", error: error.message });
+        return next(error);
     }
 };
 
 // ─── Comments ─────────────────────────────────────────────────────────────────
 
-const addComment = async (req, res) => {
+const addComment = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { userId } = req.user;
         const { content } = req.body;
 
-        if (!content?.trim()) return res.status(400).json({ message: "Comment cannot be empty" });
+        if (!content?.trim()) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Comment cannot be empty");
 
         const comment = await prisma.taskComment.create({
             data: { taskId: id, userId, content: content.trim() },
@@ -282,11 +282,11 @@ const addComment = async (req, res) => {
         });
         res.status(201).json({ message: "Comment added", comment });
     } catch (error) {
-        res.status(500).json({ message: "Error adding comment", error: error.message });
+        return next(error);
     }
 };
 
-const getComments = async (req, res) => {
+const getComments = async (req, res, next) => {
     try {
         const comments = await prisma.taskComment.findMany({
             where: { taskId: req.params.id },
@@ -295,25 +295,25 @@ const getComments = async (req, res) => {
         });
         res.json(comments);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching comments", error: error.message });
+        return next(error);
     }
 };
 
-const deleteComment = async (req, res) => {
+const deleteComment = async (req, res, next) => {
     try {
         const { commentId } = req.params;
         const { userId, role } = req.user;
 
         const comment = await prisma.taskComment.findUnique({ where: { id: commentId } });
-        if (!comment) return res.status(404).json({ message: "Comment not found" });
+        if (!comment) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Comment not found");
         if (comment.userId !== userId && role !== "SUPER_ADMIN") {
-            return res.status(403).json({ message: "Not authorized to delete this comment" });
+            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Not authorized to delete this comment");
         }
 
         await prisma.taskComment.delete({ where: { id: commentId } });
         res.json({ message: "Comment deleted" });
     } catch (error) {
-        res.status(500).json({ message: "Error deleting comment", error: error.message });
+        return next(error);
     }
 };
 

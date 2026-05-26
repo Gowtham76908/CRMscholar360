@@ -1,10 +1,11 @@
 const prisma = require("../utils/prisma");
+const { ApiError } = require("../utils/apiError");
 
 // 1x1 transparent GIF pixel
 const PIXEL = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
 
 // GET /api/email-track/open/:id  (public, no auth)
-const trackOpen = async (req, res) => {
+const trackOpen = async (req, res, next) => {
     // Respond with pixel immediately — never block on DB
     res.writeHead(200, {
         "Content-Type":  "image/gif",
@@ -26,7 +27,7 @@ const trackOpen = async (req, res) => {
 };
 
 // GET /api/email-track/click/:id?url=... (public, no auth)
-const trackClick = async (req, res) => {
+const trackClick = async (req, res, next) => {
     const { id } = req.params;
     const { url } = req.query;
 

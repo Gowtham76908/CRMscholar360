@@ -1,7 +1,7 @@
 const prisma = require("../utils/prisma");
 
 // Get all integrations
-const getIntegrations = async (req, res) => {
+const getIntegrations = async (req, res, next) => {
     try {
         let integrations = await prisma.integration.findMany();
 
@@ -21,12 +21,12 @@ const getIntegrations = async (req, res) => {
 
         res.json(integrations);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching integrations", error: error.message });
+        return next(error);
     }
 };
 
 // Toggle Integration Status
-const toggleIntegration = async (req, res) => {
+const toggleIntegration = async (req, res, next) => {
     try {
         const { id } = req.params;
 
@@ -45,7 +45,7 @@ const toggleIntegration = async (req, res) => {
 
         res.json(updated);
     } catch (error) {
-        res.status(500).json({ message: "Error toggling integration", error: error.message });
+        return next(error);
     }
 };
 

@@ -1,4 +1,5 @@
 const prisma = require("../utils/prisma");
+const paginate = require("../utils/paginate");
 
 const taskInclude = {
     lead: { select: { id: true, name: true, phone: true, email: true } },
@@ -51,20 +52,9 @@ const getTasks = async ({ userId, role, page, limit, filter, leadId }) => {
             prisma.task.count({ where: { ...rbacWhere, status: "PENDING", dueDate: { lt: new Date() } } }),
         ]);
 
-    return {
-        data: tasks,
-        meta: {
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-            stats: {
-                pending: pendingCount,
-                completed: completedCount,
-                overdue: overdueCount,
-            }
-        }
-    };
+    return paginate(tasks, total, page, limit, {
+        stats: { pending: pendingCount, completed: completedCount, overdue: overdueCount },
+    });
 };
 
 module.exports = { getTasks };

@@ -1,6 +1,6 @@
 const prisma = require("../utils/prisma");
 
-const getLeaderboard = async (req, res) => {
+const getLeaderboard = async (req, res, next) => {
     try {
         const { month, year } = req.query;
         const now = new Date();
@@ -95,8 +95,8 @@ const getLeaderboard = async (req, res) => {
 
         res.json(leaderboard);
     } catch (error) {
-        console.error("Leaderboard error:", error);
-        res.status(500).json({ message: "Failed to fetch leaderboard", error: error.message });
+
+        return next(error);
     }
 };
 

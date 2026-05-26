@@ -148,7 +148,7 @@ export default function Deals() {
     });
 
     const deals = data?.data ?? [];
-    const totalPages = data?.pages ?? 1;
+    const totalPages = data?.totalPages ?? 1;
     const total = data?.total ?? 0;
 
     const toggleSort = (field) => {

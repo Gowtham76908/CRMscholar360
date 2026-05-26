@@ -12,7 +12,7 @@ const MIN_RESPONSE_MS   = 400;             // constant-time floor for forgot-pas
 
 const hashToken = (raw) => crypto.createHash("sha256").update(raw).digest("hex");
 
-const login = async (req, res) => {
+const login = async (req, res, next) => {
     try {
         const { email, password } = req.body;
 
@@ -58,14 +58,11 @@ const login = async (req, res) => {
         );
 
     } catch (error) {
-        res.status(500).json({
-            message: "Login failed",
-            error: error.message
-        });
+        return next(error);
     }
 };
 
-const forgotPassword = async (req, res) => {
+const forgotPassword = async (req, res, next) => {
     const start = Date.now();
     // Always respond with the same message — never reveal whether the email exists
     const SAFE_RESPONSE = { message: "If that email is registered, a reset link has been sent." };
@@ -121,7 +118,7 @@ const forgotPassword = async (req, res) => {
     res.json(SAFE_RESPONSE);
 };
 
-const resetPassword = async (req, res) => {
+const resetPassword = async (req, res, next) => {
     try {
         const { token, password } = req.body;
 
@@ -176,8 +173,8 @@ const resetPassword = async (req, res) => {
             text: `Hi ${user.name},\n\nYour D-CRM password was changed on ${resetTime} IST.\n\nIf you did not do this, contact your administrator immediately.\n\nD-CRM Security`,
         }).catch(err => console.error("[ResetPassword] Alert email failed:", err));
     } catch (error) {
-        console.error("[ResetPassword] Error:", error);
-        res.status(500).json({ code: "RESET_FAILED", message: "Failed to reset password. Please try again." });
+
+        return next(error);
     }
 };
 

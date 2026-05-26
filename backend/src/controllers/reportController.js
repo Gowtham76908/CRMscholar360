@@ -10,7 +10,7 @@ const getDateFilter = (from, to) => {
     };
 };
 
-const getLeadsBySource = async (req, res) => {
+const getLeadsBySource = async (req, res, next) => {
     try {
         const { from, to } = req.query;
         const dateFilter = getDateFilter(from, to);
@@ -25,11 +25,11 @@ const getLeadsBySource = async (req, res) => {
 
         res.json(groupBySource);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching leads by source", error: error.message });
+        return next(error);
     }
 };
 
-const getLeadsByEmployee = async (req, res) => {
+const getLeadsByEmployee = async (req, res, next) => {
     try {
         const { from, to } = req.query;
         const dateFilter = getDateFilter(from, to);
@@ -59,11 +59,11 @@ const getLeadsByEmployee = async (req, res) => {
 
         res.json(result);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching leads by employee", error: error.message });
+        return next(error);
     }
 };
 
-const getConversionRate = async (req, res) => {
+const getConversionRate = async (req, res, next) => {
     try {
         const { from, to } = req.query;
         const dateFilter = getDateFilter(from, to);
@@ -77,11 +77,11 @@ const getConversionRate = async (req, res) => {
 
         res.json({ totalLeads, convertedLeads, conversionRate: `${rate}%` });
     } catch (error) {
-        res.status(500).json({ message: "Error fetching conversion rate", error: error.message });
+        return next(error);
     }
 };
 
-const getMonthlyGrowth = async (req, res) => {
+const getMonthlyGrowth = async (req, res, next) => {
     try {
         // Last 6 months growth
         const now = new Date();
@@ -108,7 +108,7 @@ const getMonthlyGrowth = async (req, res) => {
 
         res.json(result);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching monthly growth", error: error.message });
+        return next(error);
     }
 };
 

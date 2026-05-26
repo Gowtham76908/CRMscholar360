@@ -397,10 +397,10 @@ export default function UnassignedLeads() {
                 </table>
 
                 {/* Pagination */}
-                {pagination && pagination.pages > 1 && (
+                {pagination && pagination.totalPages > 1 && (
                     <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
                         <p className="text-xs text-gray-500">
-                            {pagination.total} leads — page {pagination.page} of {pagination.pages}
+                            {pagination.total} leads — page {pagination.page} of {pagination.totalPages}
                         </p>
                         <div className="flex items-center gap-1">
                             <button
@@ -411,7 +411,7 @@ export default function UnassignedLeads() {
                                 Prev
                             </button>
                             <button
-                                disabled={page >= pagination.pages}
+                                disabled={page >= pagination.totalPages}
                                 onClick={() => setPage(p => p + 1)}
                                 className="px-3 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40"
                             >

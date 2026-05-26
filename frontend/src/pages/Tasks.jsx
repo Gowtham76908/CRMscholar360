@@ -39,7 +39,11 @@ const Tasks = () => {
     });
 
     const tasks = tasksData?.data || [];
-    const meta = tasksData?.meta || { total: 0, totalPages: 0, stats: { pending: 0, completed: 0, overdue: 0 } };
+    const meta = {
+        total:      tasksData?.total      ?? 0,
+        totalPages: tasksData?.totalPages ?? 0,
+        stats:      tasksData?.stats      ?? { pending: 0, completed: 0, overdue: 0 },
+    };
 
     const pageButtons = useMemo(() => getPages(page, meta.totalPages), [page, meta.totalPages]);
     const goTo = useCallback((p) => setPage(Math.max(1, Math.min(meta.totalPages, p))), [meta.totalPages]);

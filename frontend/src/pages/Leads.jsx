@@ -107,6 +107,7 @@ const Leads = () => {
             const res = await api.get("/leads", { params });
             return res.data;
         },
+        staleTime: 60_000,
         placeholderData: (prev) => prev,
     });
 
@@ -119,7 +120,7 @@ const Leads = () => {
     const slaBreachDays  = orgSettings?.slaBreachDays  ?? 7;
 
     const leads = leadsData?.data || [];
-    const meta = leadsData?.meta || { total: 0, totalPages: 0 };
+    const meta = { total: leadsData?.total ?? 0, totalPages: leadsData?.totalPages ?? 0 };
 
     const pageButtons = useMemo(() => getPages(page, meta.totalPages), [page, meta.totalPages]);
 

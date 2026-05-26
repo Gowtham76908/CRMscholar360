@@ -1,7 +1,7 @@
 const prisma = require("../utils/prisma");
 
 // Update current user's online status
-const updateMyStatus = async (req, res) => {
+const updateMyStatus = async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const { status } = req.body;
@@ -42,13 +42,13 @@ const updateMyStatus = async (req, res) => {
 
         res.json({ message: "Status updated", user });
     } catch (error) {
-        console.error("Update status error:", error);
-        res.status(500).json({ message: "Failed to update status" });
+
+        return next(error);
     }
 };
 
 // Get all active users with their current online status
-const getAllUsersStatus = async (req, res) => {
+const getAllUsersStatus = async (req, res, next) => {
     try {
         const users = await prisma.user.findMany({
             where: { isActive: true },
@@ -71,13 +71,13 @@ const getAllUsersStatus = async (req, res) => {
         });
         res.json(users);
     } catch (error) {
-        console.error("Get all users status error:", error);
-        res.status(500).json({ message: "Failed to fetch users status" });
+
+        return next(error);
     }
 };
 
 // Get today's status logs for current user
-const getMyTodayLogs = async (req, res) => {
+const getMyTodayLogs = async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const today = new Date();
@@ -94,13 +94,13 @@ const getMyTodayLogs = async (req, res) => {
 
         res.json(logs);
     } catch (error) {
-        console.error("Get today logs error:", error);
-        res.status(500).json({ message: "Failed to fetch today's status logs" });
+
+        return next(error);
     }
 };
 
 // Get specific user's last seen time
-const getLastSeen = async (req, res) => {
+const getLastSeen = async (req, res, next) => {
     try {
         const { userId } = req.params;
         const user = await prisma.user.findUnique({
@@ -111,8 +111,8 @@ const getLastSeen = async (req, res) => {
         if (!user) return res.status(404).json({ message: "User not found" });
         res.json(user);
     } catch (error) {
-        console.error("Get last seen error:", error);
-        res.status(500).json({ message: "Failed to fetch last seen" });
+
+        return next(error);
     }
 };
 

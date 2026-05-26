@@ -1,7 +1,7 @@
 const prisma = require("../utils/prisma");
 
 // Create Department
-const createDepartment = async (req, res) => {
+const createDepartment = async (req, res, next) => {
     try {
         const { name } = req.body;
 
@@ -23,12 +23,12 @@ const createDepartment = async (req, res) => {
 
         res.status(201).json(department);
     } catch (error) {
-        res.status(500).json({ message: "Error creating department", error: error.message });
+        return next(error);
     }
 };
 
 // Get All Departments
-const getDepartments = async (req, res) => {
+const getDepartments = async (req, res, next) => {
     try {
         const departments = await prisma.department.findMany({
             orderBy: { name: "asc" },
@@ -40,12 +40,12 @@ const getDepartments = async (req, res) => {
         });
         res.json(departments);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching departments", error: error.message });
+        return next(error);
     }
 };
 
 // Delete Department
-const deleteDepartment = async (req, res) => {
+const deleteDepartment = async (req, res, next) => {
     try {
         const { id } = req.params;
 
@@ -66,12 +66,12 @@ const deleteDepartment = async (req, res) => {
 
         res.json({ message: "Department deleted successfully" });
     } catch (error) {
-        res.status(500).json({ message: "Error deleting department", error: error.message });
+        return next(error);
     }
 };
 
 // Get Single Department with Users
-const getDepartmentById = async (req, res) => {
+const getDepartmentById = async (req, res, next) => {
     try {
         const { id } = req.params;
         const department = await prisma.department.findUnique({
@@ -96,7 +96,7 @@ const getDepartmentById = async (req, res) => {
 
         res.json(department);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching department", error: error.message });
+        return next(error);
     }
 };
 

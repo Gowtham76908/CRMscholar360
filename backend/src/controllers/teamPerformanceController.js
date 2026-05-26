@@ -1,5 +1,6 @@
 const prisma = require("../utils/prisma");
 const { getTeamMemberIds } = require("../services/organizationService");
+const { ApiError } = require("../utils/apiError");
 
 // ── Date range helper ─────────────────────────────────────────────────────────
 function dateRange(period, from, to) {
@@ -43,7 +44,7 @@ async function resolveTeamIds(userId, role) {
 }
 
 // ── GET /api/team-performance/kpis ───────────────────────────────────────────
-const getKPIs = async (req, res) => {
+const getKPIs = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { period = "30d", from, to } = req.query;
@@ -88,12 +89,12 @@ const getKPIs = async (req, res) => {
             responseRate: totalAssigned > 0 ? Math.round((responded / totalAssigned) * 100) : 0,
         });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/team-performance/lead-chart ─────────────────────────────────────
-const getLeadChart = async (req, res) => {
+const getLeadChart = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { period = "30d", from, to, mode = "daily" } = req.query;
@@ -141,12 +142,12 @@ const getLeadChart = async (req, res) => {
         }
         res.json(weeks);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/team-performance/employees ──────────────────────────────────────
-const getEmployeeTable = async (req, res) => {
+const getEmployeeTable = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { period = "30d", from, to } = req.query;
@@ -156,48 +157,44 @@ const getEmployeeTable = async (req, res) => {
 
         const dr = dateRange(period, from, to);
 
-        const [employees, assignedGroups, convertedGroups, followUpGroups, callRows] =
-            await prisma.$transaction([
-                prisma.user.findMany({
-                    where: { id: { in: teamIds } },
-                    select: {
-                        id: true, name: true, email: true, profilePhoto: true,
-                        onlineStatus: true, lastSeen: true,
-                        employeeProfile: {
-                            select: {
-                                availabilityStatus: true,
-                                currentLeadLoad: true, maxDailyLeads: true,
-                                performanceScore: true,
-                            },
+        const idList = teamIds.map(id => `'${id}'`).join(",");
+        const [employees, leadStats, callRows] = await Promise.all([
+            prisma.user.findMany({
+                where: { id: { in: teamIds } },
+                select: {
+                    id: true, name: true, email: true, profilePhoto: true,
+                    onlineStatus: true, lastSeen: true,
+                    employeeProfile: {
+                        select: {
+                            availabilityStatus: true,
+                            currentLeadLoad: true, maxDailyLeads: true,
+                            performanceScore: true,
                         },
                     },
-                    orderBy: { name: "asc" },
-                }),
-                prisma.lead.groupBy({
-                    by: ["assignedToId"],
-                    where: { assignedToId: { in: teamIds }, assignedAt: dr },
-                    _count: { id: true },
-                }),
-                prisma.lead.groupBy({
-                    by: ["assignedToId"],
-                    where: { assignedToId: { in: teamIds }, status: "CONVERTED", updatedAt: dr },
-                    _count: { id: true },
-                }),
-                prisma.lead.groupBy({
-                    by: ["assignedToId"],
-                    where: { assignedToId: { in: teamIds }, status: "FOLLOW_UP" },
-                    _count: { id: true },
-                }),
-                prisma.salestrailCall.findMany({
-                    where: { startedAt: dr },
-                    select: { agentEmail: true, duration: true },
-                }),
-            ]);
+                },
+                orderBy: { name: "asc" },
+            }),
+            prisma.$queryRawUnsafe(`
+                SELECT
+                    "assignedToId",
+                    COUNT(*)                                                        AS assigned,
+                    COUNT(*) FILTER (WHERE status = 'CONVERTED' AND "updatedAt" >= $1 AND "updatedAt" <= $2) AS converted,
+                    COUNT(*) FILTER (WHERE status = 'FOLLOW_UP')                   AS follow_up
+                FROM "Lead"
+                WHERE "assignedToId" IN (${idList})
+                  AND "assignedAt" >= $1
+                  AND "assignedAt" <= $2
+                GROUP BY "assignedToId"
+            `, dr.gte, dr.lte),
+            prisma.salestrailCall.findMany({
+                where: { startedAt: dr },
+                select: { agentEmail: true, duration: true },
+            }),
+        ]);
 
-        const toMap = (arr) => Object.fromEntries(arr.map(r => [r.assignedToId, r._count.id]));
-        const assignedMap  = toMap(assignedGroups);
-        const convertedMap = toMap(convertedGroups);
-        const followUpMap  = toMap(followUpGroups);
+        const assignedMap  = Object.fromEntries(leadStats.map(r => [r.assignedToId, Number(r.assigned)]));
+        const convertedMap = Object.fromEntries(leadStats.map(r => [r.assignedToId, Number(r.converted)]));
+        const followUpMap  = Object.fromEntries(leadStats.map(r => [r.assignedToId, Number(r.follow_up)]));
 
         const emailToId  = Object.fromEntries(employees.map(e => [e.email, e.id]));
         const callsById  = {};
@@ -227,13 +224,13 @@ const getEmployeeTable = async (req, res) => {
             talkTime:            talkById[e.id]     || 0,
         })));
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/team-performance/team-emails ────────────────────────────────────
 // Returns emails of team members (used by frontend to scope SalestrailSection)
-const getTeamEmails = async (req, res) => {
+const getTeamEmails = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const teamIds  = await resolveTeamIds(userId, role);
@@ -243,7 +240,7 @@ const getTeamEmails = async (req, res) => {
         });
         res.json(rows.map(r => r.email));
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -281,7 +278,7 @@ function buildInsights(employees, teamStats) {
 }
 
 // ── GET /api/team-performance/workforce ──────────────────────────────────────
-const getWorkforce = async (req, res) => {
+const getWorkforce = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { period = "30d", from, to } = req.query;
@@ -381,12 +378,12 @@ const getWorkforce = async (req, res) => {
             insights,
         });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/team-performance/workload ───────────────────────────────────────
-const getWorkload = async (req, res) => {
+const getWorkload = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const teamIds = await resolveTeamIds(userId, role);
@@ -416,12 +413,12 @@ const getWorkload = async (req, res) => {
             };
         }));
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/team-performance/workflow-board ─────────────────────────────────
-const getWorkflowBoard = async (req, res) => {
+const getWorkflowBoard = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const teamIds = await resolveTeamIds(userId, role);
@@ -479,14 +476,14 @@ const getWorkflowBoard = async (req, res) => {
 
         res.json(board);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 const VALID_STATUSES = new Set(["NEW", "CONTACTED", "FOLLOW_UP", "CONVERTED", "LOST"]);
 const PAGE_SIZE      = 20;
 
-const getWorkflowColumnLeads = async (req, res) => {
+const getWorkflowColumnLeads = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { status }       = req.params;
@@ -541,7 +538,7 @@ const getWorkflowColumnLeads = async (req, res) => {
             totalPages: Math.ceil(total / PAGE_SIZE),
         });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -571,7 +568,7 @@ function buildRevenueInsights({ pipelineValue, wonRevenue, realizedRevenue, outs
 }
 
 // ── GET /api/team-performance/revenue-kpis ───────────────────────────────────
-const getRevenueKPIs = async (req, res) => {
+const getRevenueKPIs = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { period = "30d", from, to } = req.query;
@@ -635,12 +632,12 @@ const getRevenueKPIs = async (req, res) => {
             insights,
         });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/team-performance/revenue-trend ──────────────────────────────────
-const getRevenueTrend = async (req, res) => {
+const getRevenueTrend = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { period = "30d", from, to, mode = "daily" } = req.query;
@@ -702,12 +699,12 @@ const getRevenueTrend = async (req, res) => {
         }
         res.json(daily);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/team-performance/revenue-by-employee ────────────────────────────
-const getRevenueByEmployee = async (req, res) => {
+const getRevenueByEmployee = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { period = "30d", from, to } = req.query;
@@ -742,12 +739,12 @@ const getRevenueByEmployee = async (req, res) => {
             collected:   parseFloat((collByEmp[e.id] || 0).toFixed(2)),
         })).sort((a, b) => b.wonRevenue - a.wonRevenue));
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/team-performance/revenue-by-source ──────────────────────────────
-const getRevenueBySource = async (req, res) => {
+const getRevenueBySource = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { period = "30d", from, to } = req.query;
@@ -767,12 +764,12 @@ const getRevenueBySource = async (req, res) => {
         }
         res.json(Object.entries(bySource).map(([source, amount]) => ({ source, amount: parseFloat(amount.toFixed(2)) })).sort((a, b) => b.amount - a.amount));
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/team-performance/revenue-by-manager ─────────────────────────────
-const getRevenueByManager = async (req, res) => {
+const getRevenueByManager = async (req, res, next) => {
     try {
         const { role } = req.user;
         if (role !== "SUPER_ADMIN") return res.status(403).json({ message: "SUPER_ADMIN only" });
@@ -797,12 +794,12 @@ const getRevenueByManager = async (req, res) => {
 
         res.json(managers.map(m => ({ id: m.id, name: m.name, wonRevenue: parseFloat((byMgr[m.id] || 0).toFixed(2)) })).sort((a, b) => b.wonRevenue - a.wonRevenue));
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/team-performance/invoice-collection-trend ───────────────────────
-const getInvoiceCollectionTrend = async (req, res) => {
+const getInvoiceCollectionTrend = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { period = "30d", from, to, mode = "daily" } = req.query;
@@ -849,12 +846,12 @@ const getInvoiceCollectionTrend = async (req, res) => {
         }
         res.json(daily);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/team-performance/revenue-employees ──────────────────────────────
-const getRevenueEmployeeTable = async (req, res) => {
+const getRevenueEmployeeTable = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { period = "30d", from, to } = req.query;
@@ -918,7 +915,7 @@ const getRevenueEmployeeTable = async (req, res) => {
             };
         }).sort((a, b) => b.revenueGenerated - a.revenueGenerated));
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 

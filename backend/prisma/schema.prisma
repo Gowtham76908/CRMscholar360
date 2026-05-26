@@ -147,6 +147,8 @@ model Lead {
   @@index([assignedToId, status])
   @@index([assignedToId, createdAt])
   @@index([lastActivityAt])
+  @@index([score])
+  @@index([nextFollowUpAt])
 }
 
 model AutomationRule {
@@ -170,6 +172,8 @@ model AutomationCondition {
   operator String         // equals | not_equals | is_empty | is_not_empty
   value    String?
   rule     AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId])
 }
 
 model AutomationAction {
@@ -193,6 +197,8 @@ model AutomationLog {
 
   @@index([leadId])
   @@index([ruleId])
+  @@index([ruleId, leadId, status])
+  @@index([ruleId, createdAt])
 }
 
 model Note {
@@ -257,6 +263,8 @@ model Task {
   files          TaskFile[]
   comments       TaskComment[]
 
+  @@index([leadId])
+  @@index([sprintId])
   @@index([status])
   @@index([dueDate])
   @@index([assignedToId, status])
@@ -271,6 +279,9 @@ model TaskComment {
   updatedAt DateTime @updatedAt
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id])
+
+  @@index([taskId])
+  @@index([userId])
 }
 
 model TaskFile {
@@ -339,6 +350,9 @@ model Reminder {
   dismissed Boolean  @default(false)
 
   @@index([remindAt, isSent])
+  @@index([userId])
+  @@index([leadId])
+  @@index([taskId])
 }
 
 model Commission {
@@ -383,6 +397,9 @@ model CallLog {
   isTranscribed Boolean   @default(false)
   transcribedAt DateTime?
   lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([userId])
 }
 
 model Session {
@@ -391,6 +408,8 @@ model Session {
   device    String
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Workspace {
@@ -468,6 +487,7 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@index([userId, isRead])
+  @@index([userId, createdAt])
 }
 
 enum Role {
@@ -597,6 +617,7 @@ model Deal {
   @@index([assignedEmployeeId])
   @@index([stage])
   @@index([deletedAt])
+  @@index([invoiceId])
 }
 
 enum DealStage {
@@ -649,6 +670,8 @@ model InvoiceItem {
   taxableValue Float
   amount       Float
   invoice      Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
 }
 
 model PaymentEntry {
@@ -660,6 +683,8 @@ model PaymentEntry {
   paymentDate DateTime    @default(now())
   createdAt   DateTime    @default(now())
   invoice     Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
 }
 
 enum InvoiceType {

@@ -7,7 +7,7 @@ const { updateLeadScoreFromCall } = require("../services/leadScoringService");
 const { runRulesForLead } = require("../services/automationEngine");
 
 // Initiate Click2Call via Greeter
-const initiateCall = async (req, res) => {
+const initiateCall = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leadId, customerNumber } = req.body;
@@ -79,14 +79,14 @@ const initiateCall = async (req, res) => {
             greeterResponse: greeterResponse.data
         });
     } catch (error) {
-        console.error("Click2Call error:", error.message);
-        res.status(500).json({ message: "Failed to initiate call", error: error.message });
+
+        return next(error);
     }
 };
 
 // Greeter Webhook - receives call data after call ends
 // This endpoint is called by Greeter (no auth required)
-const greeterWebhook = async (req, res) => {
+const greeterWebhook = async (req, res, next) => {
     try {
         console.log("Greeter webhook received:", req.body);
 
@@ -203,13 +203,13 @@ const greeterWebhook = async (req, res) => {
 
         res.status(200).json({ message: "Webhook received successfully" });
     } catch (error) {
-        console.error("Greeter webhook error:", error.message);
-        res.status(500).json({ message: "Webhook processing error", error: error.message });
+
+        return next(error);
     }
 };
 
 // Log a manual call (existing functionality)
-const logCall = async (req, res) => {
+const logCall = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leadId, duration, callType, notes } = req.body;
@@ -242,12 +242,12 @@ const logCall = async (req, res) => {
 
         res.status(201).json(callLog);
     } catch (error) {
-        res.status(500).json({ message: "Error logging call", error: error.message });
+        return next(error);
     }
 };
 
 // Get call logs for a lead
-const getCallLogs = async (req, res) => {
+const getCallLogs = async (req, res, next) => {
     try {
         const { leadId } = req.params;
         const logs = await prisma.callLog.findMany({
@@ -256,12 +256,12 @@ const getCallLogs = async (req, res) => {
         });
         res.json(logs);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching call logs", error: error.message });
+        return next(error);
     }
 };
 
 // Transcribe a call recording
-const transcribeCall = async (req, res) => {
+const transcribeCall = async (req, res, next) => {
     try {
         const { callLogId } = req.params;
 
@@ -340,13 +340,13 @@ const transcribeCall = async (req, res) => {
             callLog: updated
         });
     } catch (error) {
-        console.error("Transcription error:", error.message);
-        res.status(500).json({ message: "Transcription failed", error: error.message });
+
+        return next(error);
     }
 };
 
 // Get all call logs for a lead (with full details)
-const getCallLogDetails = async (req, res) => {
+const getCallLogDetails = async (req, res, next) => {
     try {
         const { callLogId } = req.params;
         const callLog = await prisma.callLog.findUnique({
@@ -358,12 +358,12 @@ const getCallLogDetails = async (req, res) => {
         }
         res.json(callLog);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching call log", error: error.message });
+        return next(error);
     }
 };
 
 // Upload a recording file manually for a lead
-const uploadRecording = async (req, res) => {
+const uploadRecording = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leadId } = req.body;
@@ -412,13 +412,13 @@ const uploadRecording = async (req, res) => {
             callLog
         });
     } catch (error) {
-        console.error("Upload recording error:", error.message);
-        res.status(500).json({ message: "Failed to upload recording", error: error.message });
+
+        return next(error);
     }
 };
 
 // Upload an audio file and immediately transcribe it (combined workflow)
-const uploadAndTranscribe = async (req, res) => {
+const uploadAndTranscribe = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leadId } = req.body;
@@ -498,8 +498,8 @@ const uploadAndTranscribe = async (req, res) => {
             callLog: updated,
         });
     } catch (error) {
-        console.error("Upload-and-transcribe error:", error.message);
-        res.status(500).json({ message: "Upload and transcription failed", error: error.message });
+
+        return next(error);
     }
 };
 

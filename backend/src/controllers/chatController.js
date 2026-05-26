@@ -14,7 +14,7 @@ const getStreamClient = () => {
 };
 
 // Create Token & Sync User
-const createToken = async (req, res) => {
+const createToken = async (req, res, next) => {
     try {
         console.log("Chat Token Request Initiated");
         // console.log("User in Request:", req.user); // Debug: Check if user exists
@@ -75,12 +75,12 @@ const createToken = async (req, res) => {
         if (error.response) {
             console.error("Stream API Response Error:", error.response.data);
         }
-        res.status(500).json({ message: "Failed to create chat token", error: error.message });
+        return next(error);
     }
 };
 
 // Create Channel (Optional - mostly handled frontend side for DMs, but good for Admin groups)
-const createGroupChannel = async (req, res) => {
+const createGroupChannel = async (req, res, next) => {
     try {
         const { name, members, image } = req.body; // members = array of userIds
         const creatorId = req.user.userId;
@@ -101,13 +101,13 @@ const createGroupChannel = async (req, res) => {
 
         res.json({ message: "Channel created successfully", channelId: channel.id });
     } catch (error) {
-        console.error("Error creating channel:", error);
-        res.status(500).json({ message: "Failed to create channel" });
+
+        return next(error);
     }
 };
 
 // Get All Users (For Search Bar) - reusing existing logic effectively, but specific format might be useful
-const getUsersForChat = async (req, res) => {
+const getUsersForChat = async (req, res, next) => {
     try {
         if (!req.user || !req.user.userId) {
             console.error("User ID missing from request in getUsersForChat");
@@ -142,8 +142,8 @@ const getUsersForChat = async (req, res) => {
 
         res.json(formattedUsers);
     } catch (error) {
-        console.error("Error in getUsersForChat:", error);
-        res.status(500).json({ message: "Error fetching users", error: error.message });
+
+        return next(error);
     }
 };
 
@@ -165,7 +165,7 @@ const upsertUserToStream = async (user) => {
 };
 
 // Start Direct Chat (Syncs users first)
-const startDirectChat = async (req, res) => {
+const startDirectChat = async (req, res, next) => {
     try {
         const { targetUserId } = req.body;
         const currentUserId = req.user?.userId;
@@ -213,13 +213,13 @@ const startDirectChat = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("CRITICAL [CHAT_START] error:", error);
-        res.status(500).json({ message: "Failed to start chat", error: error.message });
+
+        return next(error);
     }
 };
 
 // Sync user to Stream (helper exposed as endpoint)
-const syncUserToStream = async (req, res) => {
+const syncUserToStream = async (req, res, next) => {
     try {
         const { userId } = req.body;
 
@@ -246,13 +246,13 @@ const syncUserToStream = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error("Error syncing user to Stream:", error);
-        res.status(500).json({ message: "Failed to sync user" });
+
+        return next(error);
     }
 };
 
 // Sync ALL users to Stream (run once after deployment)
-const syncAllUsers = async (req, res) => {
+const syncAllUsers = async (req, res, next) => {
     try {
         const users = await prisma.user.findMany({
             where: { isActive: true }
@@ -280,13 +280,13 @@ const syncAllUsers = async (req, res) => {
             results
         });
     } catch (error) {
-        console.error("Error syncing all users:", error);
-        res.status(500).json({ message: "Failed to sync users", error: error.message });
+
+        return next(error);
     }
 };
 
 // Seed demo channels + messages
-const seedDemoData = async (req, res) => {
+const seedDemoData = async (req, res, next) => {
     try {
         const streamClient = getStreamClient();
         const creatorId = req.user.userId;
@@ -382,8 +382,8 @@ const seedDemoData = async (req, res) => {
 
         res.json({ ok: true, message: `Seeded ${seededChannels} channels with ${seededMessages} messages`, users: users.length });
     } catch (err) {
-        console.error("Seed error:", err);
-        res.status(500).json({ message: err.message });
+
+        return next(err);
     }
 };
 

@@ -1,6 +1,6 @@
 const prisma = require("../utils/prisma");
 
-const exportTasks = async (req, res) => {
+const exportTasks = async (req, res, next) => {
     try {
         const tasks = await prisma.task.findMany({
             include: {
@@ -26,11 +26,11 @@ const exportTasks = async (req, res) => {
         res.attachment("tasks.csv");
         res.send(csv);
     } catch (error) {
-        res.status(500).json({ message: "Error exporting tasks", error: error.message });
+        return next(error);
     }
 };
 
-const exportTeamPerformance = async (req, res) => {
+const exportTeamPerformance = async (req, res, next) => {
     try {
         const users = await prisma.user.findMany({
             where: { role: "EMPLOYEE" },
@@ -62,7 +62,7 @@ const exportTeamPerformance = async (req, res) => {
         res.attachment("team_performance.csv");
         res.send(csv);
     } catch (error) {
-        res.status(500).json({ message: "Error exporting team performance", error: error.message });
+        return next(error);
     }
 };
 

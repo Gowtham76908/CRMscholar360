@@ -1,20 +1,21 @@
 const prisma = require("../utils/prisma");
+const { ApiError } = require("../utils/apiError");
 
 const SYSTEM_KEYS = new Set([
     "name", "phone", "email", "company", "source", "enquiryType",
     "biodata", "jobTitle", "linkedinUrl", "category",
 ]);
 
-const listFields = async (req, res) => {
+const listFields = async (req, res, next) => {
     try {
         const fields = await prisma.customFieldDef.findMany({ orderBy: { order: "asc" } });
         res.json(fields);
     } catch (e) {
-        res.status(500).json({ message: "Error fetching fields", error: e.message });
+        return next(e);
     }
 };
 
-const createField = async (req, res) => {
+const createField = async (req, res, next) => {
     try {
         const { name, fieldKey, type, options, required, order } = req.body;
         if (!name || !fieldKey || !type) {
@@ -35,12 +36,12 @@ const createField = async (req, res) => {
         });
         res.status(201).json(field);
     } catch (e) {
-        if (e.code === "P2002") return res.status(409).json({ message: "A field with this key already exists" });
-        res.status(500).json({ message: "Error creating field", error: e.message });
+        if (e.code === "P2002") return next(e);
+        return next(e);
     }
 };
 
-const updateField = async (req, res) => {
+const updateField = async (req, res, next) => {
     try {
         const { id } = req.params;
         const existing = await prisma.customFieldDef.findUnique({ where: { id } });
@@ -63,12 +64,12 @@ const updateField = async (req, res) => {
         const field = await prisma.customFieldDef.update({ where: { id }, data });
         res.json(field);
     } catch (e) {
-        if (e.code === "P2025") return res.status(404).json({ message: "Field not found" });
-        res.status(500).json({ message: "Error updating field", error: e.message });
+        if (e.code === "P2025") return next(e);
+        return next(e);
     }
 };
 
-const deleteField = async (req, res) => {
+const deleteField = async (req, res, next) => {
     try {
         const { id } = req.params;
         const field = await prisma.customFieldDef.findUnique({ where: { id }, select: { fieldKey: true, isSystem: true } });
@@ -80,13 +81,13 @@ const deleteField = async (req, res) => {
 
         res.json({ deleted: true });
     } catch (e) {
-        if (e.code === "P2025") return res.status(404).json({ message: "Field not found" });
-        res.status(500).json({ message: "Error deleting field", error: e.message });
+        if (e.code === "P2025") return next(e);
+        return next(e);
     }
 };
 
 // PATCH /leads/:leadId/custom-fields  — saves only non-system custom JSON fields
-const saveLeadCustomFields = async (req, res) => {
+const saveLeadCustomFields = async (req, res, next) => {
     try {
         const { leadId } = req.params;
         const { userId, role } = req.user;
@@ -114,7 +115,7 @@ const saveLeadCustomFields = async (req, res) => {
         });
         res.json({ customFields: updated.customFields });
     } catch (e) {
-        res.status(500).json({ message: "Error saving custom fields", error: e.message });
+        return next(e);
     }
 };
 

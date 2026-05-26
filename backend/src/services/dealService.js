@@ -1,4 +1,5 @@
 const prisma = require("../utils/prisma");
+const paginate = require("../utils/paginate");
 
 const DEAL_SELECT = {
     id: true,
@@ -90,7 +91,7 @@ const listDeals = async (userId, role, { page = 1, limit = 20, stage, search, le
         prisma.deal.count({ where }),
     ]);
 
-    return { data: raw.map(withComputed), total, page, limit, pages: Math.ceil(total / limit) };
+    return paginate(raw.map(withComputed), total, page, limit);
 };
 
 const getDealById = async (id, userId, role) => {

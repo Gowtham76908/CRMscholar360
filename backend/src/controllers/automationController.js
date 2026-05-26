@@ -1,7 +1,8 @@
 const prisma = require("../utils/prisma");
 const { seedDefaultAutomations } = require("../services/automationSeedService");
+const { ApiError } = require("../utils/apiError");
 
-const getRules = async (req, res) => {
+const getRules = async (req, res, next) => {
     try {
         const rules = await prisma.automationRule.findMany({
             include: {
@@ -13,11 +14,11 @@ const getRules = async (req, res) => {
         });
         res.json(rules);
     } catch (e) {
-        res.status(500).json({ message: "Error fetching automation rules", error: e.message });
+        return next(e);
     }
 };
 
-const createRule = async (req, res) => {
+const createRule = async (req, res, next) => {
     try {
         const { name, description, triggerType, triggerConfig, conditions = [], actions = [] } = req.body;
         if (!name || !triggerType) return res.status(400).json({ message: "name and triggerType are required" });
@@ -36,11 +37,11 @@ const createRule = async (req, res) => {
         });
         res.status(201).json(rule);
     } catch (e) {
-        res.status(500).json({ message: "Error creating rule", error: e.message });
+        return next(e);
     }
 };
 
-const toggleRule = async (req, res) => {
+const toggleRule = async (req, res, next) => {
     try {
         const { id } = req.params;
         const current = await prisma.automationRule.findUnique({ where: { id }, select: { isActive: true } });
@@ -51,11 +52,11 @@ const toggleRule = async (req, res) => {
         });
         res.json(rule);
     } catch (e) {
-        res.status(500).json({ message: "Error toggling rule", error: e.message });
+        return next(e);
     }
 };
 
-const updateRule = async (req, res) => {
+const updateRule = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { name, description, triggerConfig, isActive, actions } = req.body;
@@ -80,22 +81,22 @@ const updateRule = async (req, res) => {
         });
         res.json(rule);
     } catch (e) {
-        if (e.code === "P2025") return res.status(404).json({ message: "Rule not found" });
-        res.status(500).json({ message: "Error updating rule", error: e.message });
+        if (e.code === "P2025") return next(e);
+        return next(e);
     }
 };
 
-const deleteRule = async (req, res) => {
+const deleteRule = async (req, res, next) => {
     try {
         await prisma.automationRule.delete({ where: { id: req.params.id } });
         res.json({ deleted: true });
     } catch (e) {
-        if (e.code === "P2025") return res.status(404).json({ message: "Rule not found" });
-        res.status(500).json({ message: "Error deleting rule", error: e.message });
+        if (e.code === "P2025") return next(e);
+        return next(e);
     }
 };
 
-const getRuleLogs = async (req, res) => {
+const getRuleLogs = async (req, res, next) => {
     try {
         const logs = await prisma.automationLog.findMany({
             where: { ruleId: req.params.id },
@@ -105,16 +106,16 @@ const getRuleLogs = async (req, res) => {
         });
         res.json(logs);
     } catch (e) {
-        res.status(500).json({ message: "Error fetching logs", error: e.message });
+        return next(e);
     }
 };
 
-const seedRules = async (req, res) => {
+const seedRules = async (req, res, next) => {
     try {
         const results = await seedDefaultAutomations();
         res.json({ seeded: results });
     } catch (e) {
-        res.status(500).json({ message: "Seed failed", error: e.message });
+        return next(e);
     }
 };
 

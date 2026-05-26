@@ -1,4 +1,5 @@
 const prisma = require("../utils/prisma");
+const { ApiError } = require("../utils/apiError");
 
 // ── Access guard ──────────────────────────────────────────────────────────────
 
@@ -429,7 +430,7 @@ function buildInsights(events, stats, lead) {
 
 // ── Controllers ───────────────────────────────────────────────────────────────
 
-const getJourney = async (req, res) => {
+const getJourney = async (req, res, next) => {
     const { id } = req.params;
     const { userId, role } = req.user;
     const { filter, search, page: rawPage } = req.query;
@@ -508,7 +509,7 @@ const getJourney = async (req, res) => {
             pagination: { page, totalPages, total, pageSize: PAGE_SIZE },
         });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 

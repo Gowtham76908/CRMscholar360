@@ -29,7 +29,7 @@ function stripSensitive(settings) {
     return safe;
 }
 
-const getSettings = async (req, res) => {
+const getSettings = async (req, res, next) => {
     try {
         let settings = await prisma.companySettings.findFirst();
         if (!settings) {
@@ -38,7 +38,7 @@ const getSettings = async (req, res) => {
         const isPrivileged = req.user?.role === "SUPER_ADMIN";
         res.json(isPrivileged ? settings : stripSensitive(settings));
     } catch (error) {
-        res.status(500).json({ message: "Error fetching settings", error: error.message });
+        return next(error);
     }
 };
 
@@ -50,7 +50,7 @@ const ALLOWED_UPDATE_FIELDS = [
     "slaWarningDays", "slaBreachDays",
 ];
 
-const updateSettings = async (req, res) => {
+const updateSettings = async (req, res, next) => {
     try {
         const data = {};
         for (const field of ALLOWED_UPDATE_FIELDS) {
@@ -68,11 +68,11 @@ const updateSettings = async (req, res) => {
         }
         res.json(settings);
     } catch (error) {
-        res.status(500).json({ message: "Error updating settings", error: error.message });
+        return next(error);
     }
 };
 
-const testSmtp = async (req, res) => {
+const testSmtp = async (req, res, next) => {
     try {
         const { smtpHost, smtpPort, smtpUser, smtpPass, smtpSecure, smtpFrom, testTo } = req.body;
         if (!smtpHost || !smtpUser || !smtpPass) {
@@ -88,7 +88,7 @@ const testSmtp = async (req, res) => {
         });
         res.json({ message: "Test email sent successfully" });
     } catch (error) {
-        res.status(400).json({ message: "SMTP test failed", error: error.message });
+        return next(error);
     }
 };
 

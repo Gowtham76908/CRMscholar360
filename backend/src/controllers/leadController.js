@@ -1,4 +1,5 @@
 const prisma = require("../utils/prisma");
+const paginate = require("../utils/paginate");
 const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
 const { createCommission } = require("../services/commissionService");
@@ -9,9 +10,10 @@ const { runRulesForLead } = require("../services/automationEngine");
 const { getSuggestionsForLead, dismissSuggestion } = require("../services/followUpSuggestionService");
 const { adjustLeadLoad, assignLeads: smartAssignLeads, batchAssignLeads } = require("../services/leadDistributionEngine");
 const XLSX = require("xlsx");
+const { ApiError, ERROR_CODES } = require("../utils/apiError");
 
 // Get Leads
-const getLeads = async (req, res) => {
+const getLeads = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
 
@@ -57,19 +59,19 @@ const getLeads = async (req, res) => {
         // 4. Send Response
         res.json(result);
     } catch (error) {
-        console.error("Error in getLeads:", error);
-        res.status(500).json({ message: "Error fetching leads", error: error.message });
+
+        return next(error);
     }
 };
 
 // Create Lead (Admin/Super Admin)
-const createLead = async (req, res) => {
+const createLead = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { name, email, phone, source, enquiryType } = req.body;
 
         if (!name || !phone || !source || !enquiryType) {
-            return res.status(400).json({ message: "Name, phone, source, and enquiry type are required" });
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Name, phone, source, and enquiry type are required");
         }
 
         // Scoring
@@ -101,19 +103,19 @@ const createLead = async (req, res) => {
 
         res.status(201).json({ message: "Lead created successfully", lead: newLead });
     } catch (error) {
-        res.status(500).json({ message: "Error creating lead", error: error.message });
+        return next(error);
     }
 };
 
 // Update Lead Status (and other details)
-const updateLead = async (req, res) => {
+const updateLead = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { id } = req.params;
         const { status, name, email, phone, source, enquiryType, assignedToId, nextFollowUpAt } = req.body;
 
         const currentLead = await prisma.lead.findUnique({ where: { id } });
-        if (!currentLead) return res.status(404).json({ message: "Lead not found" });
+        if (!currentLead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
 
         // Stage gate: CONVERTED requires at least phone or email
         if (status === "CONVERTED" && currentLead.status !== "CONVERTED") {
@@ -212,47 +214,50 @@ const updateLead = async (req, res) => {
 
         res.json({ message: "Lead updated successfully", lead: updatedLead });
     } catch (error) {
-        res.status(500).json({ message: "Error updating lead", error: error.message });
+        return next(error);
     }
 };
 
 // Assign Lead
-const assignLead = async (req, res) => {
+const assignLead = async (req, res, next) => {
     try {
         const { userId } = req.user; // Admin ID
         const { id } = req.params;
         const { assignedToId } = req.body;
 
         if (!assignedToId) {
-            return res.status(400).json({ message: "assignedToId is required" });
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "assignedToId is required");
         }
 
         const user = await prisma.user.findUnique({ where: { id: assignedToId } });
         if (!user) {
-            return res.status(404).json({ message: "Target user not found" });
+            throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Target user not found");
         }
 
-        const updatedLead = await prisma.lead.update({
-            where: { id },
-            data: { assignedToId }
-        });
-
-        // Log Activity
-        await logActivity({
-            leadId: updatedLead.id,
-            userId,
-            action: "LEAD_ASSIGNED",
-            metadata: { assignedTo: user.name }
+        const updatedLead = await prisma.$transaction(async (tx) => {
+            const lead = await tx.lead.update({
+                where: { id },
+                data: { assignedToId }
+            });
+            await tx.activity.create({
+                data: {
+                    leadId: lead.id,
+                    userId,
+                    action: "LEAD_ASSIGNED",
+                    metadata: { assignedTo: user.name },
+                }
+            });
+            return lead;
         });
 
         res.json({ message: "Lead assigned successfully", lead: updatedLead });
     } catch (error) {
-        res.status(500).json({ message: "Error assigning lead", error: error.message });
+        return next(error);
     }
 };
 
 // Check Duplicates
-const checkDuplicate = async (req, res) => {
+const checkDuplicate = async (req, res, next) => {
     try {
         const { email, phone } = req.body;
 
@@ -277,18 +282,18 @@ const checkDuplicate = async (req, res) => {
 
         res.json({ duplicate: false, existingLeads: [] });
     } catch (error) {
-        res.status(500).json({ message: "Error checking duplicates", error: error.message });
+        return next(error);
     }
 };
 
 // Merge Leads
-const mergeLeads = async (req, res) => {
+const mergeLeads = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { primaryLeadId, secondaryLeadId } = req.body;
 
         if (!primaryLeadId || !secondaryLeadId) {
-            return res.status(400).json({ message: "Both primary and secondary lead IDs are required" });
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Both primary and secondary lead IDs are required");
         }
 
         // Use transaction to ensure data integrity
@@ -352,110 +357,137 @@ const mergeLeads = async (req, res) => {
 
         res.json({ message: "Leads merged successfully", lead: result });
     } catch (error) {
-        res.status(500).json({ message: "Error merging leads", error: error.message });
+        return next(error);
     }
 };
 
 // Get Single Lead (detail page)
-const getLead = async (req, res) => {
+const getLead = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { userId, role } = req.user;
+        // Return core lead fields only — related data (activities, calls, notes, tasks,
+        // reminders) is fetched via dedicated sub-resource endpoints to keep payload small.
         const lead = await prisma.lead.findUnique({
             where: { id },
             include: {
                 assignedTo: {
                     select: { id: true, name: true, email: true, phone: true, profilePhoto: true }
                 },
-                notes: { orderBy: { createdAt: "desc" } },
-                tasks: {
-                    include: {
-                        assignedTo: { select: { id: true, name: true } },
-                        files: { select: { id: true, fileName: true, fileUrl: true } },
-                    },
-                    orderBy: { dueDate: "asc" },
-                },
-                callLogs: {
-                    orderBy: { createdAt: "desc" },
-                    take: 50,
-                },
             },
         });
-        if (!lead) return res.status(404).json({ message: "Lead not found" });
+        if (!lead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
         if (role === "EMPLOYEE" && lead.assignedToId !== userId) {
-            return res.status(403).json({ message: "Access denied" });
+            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Access denied");
         }
         res.json(lead);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching lead", error: error.message });
+        return next(error);
     }
 };
 
-// Get Activities
-const getLeadActivities = async (req, res) => {
+// Get Activities (paginated)
+const getLeadActivities = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { userId, role } = req.user;
         if (role === "EMPLOYEE") {
             const lead = await prisma.lead.findUnique({ where: { id }, select: { assignedToId: true } });
-            if (!lead) return res.status(404).json({ message: "Lead not found" });
-            if (lead.assignedToId !== userId) return res.status(403).json({ message: "Access denied" });
+            if (!lead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
+            if (lead.assignedToId !== userId) throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Access denied");
         }
-        const activities = await prisma.activity.findMany({
-            where: { leadId: id },
-            orderBy: { createdAt: "desc" },
-            take: 50,
-            include: { user: { select: { name: true } } }
-        });
-        res.json(activities);
+        const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+        const where = { leadId: id };
+        const [total, activities] = await prisma.$transaction([
+            prisma.activity.count({ where }),
+            prisma.activity.findMany({
+                where,
+                orderBy: { createdAt: "desc" },
+                skip: (page - 1) * limit,
+                take: limit,
+                include: { user: { select: { id: true, name: true } } },
+            }),
+        ]);
+        res.json(paginate(activities, total, page, limit));
     } catch (error) {
-        res.status(500).json({ message: "Error fetching activities", error: error.message });
+        return next(error);
     }
 };
 
 // RFC 4180: escape internal quotes by doubling them, then wrap field in quotes
 const csvField = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 
+// In-memory set of userIds with an active export — prevents concurrent exports per user.
+// Single-process safe; for multi-process deployments a distributed lock (e.g. Redis) would be needed.
+const activeExports = new Set();
+
 // Export Leads to CSV
-const exportLeads = async (req, res) => {
+const exportLeads = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
 
-        // Apply the same role-based scoping used in getLeads — prevents TEAM_LEAD from
-        // exfiltrating the entire lead database via a single export request.
-        const where = {};
-        if (role === "EMPLOYEE") {
-            where.assignedToId = userId;
+        if (activeExports.has(userId)) {
+            throw new ApiError(429, ERROR_CODES.RATE_LIMITED, "An export is already in progress for your account. Please wait for it to finish.");
         }
+        activeExports.add(userId);
 
-        const leads = await prisma.lead.findMany({
-            where,
-            include: { assignedTo: { select: { name: true } } },
-            take: 10000, // safety cap — stream/paginate if larger exports are needed
-            orderBy: { createdAt: "desc" },
-        });
+        try {
+            // Apply the same role-based scoping used in getLeads — prevents TEAM_LEAD from
+            // exfiltrating the entire lead database via a single export request.
+            const where = {};
+            if (role === "EMPLOYEE") {
+                where.assignedToId = userId;
+            }
 
-        const headers = ["Name", "Email", "Phone", "Source", "Type", "Status", "Score", "Category", "Assigned To", "Created At"];
-        const rows = leads.map(lead => [
-            lead.name,
-            lead.email || "",
-            lead.phone || "",
-            lead.source,
-            lead.enquiryType,
-            lead.status,
-            lead.score,
-            lead.category || "",
-            lead.assignedTo?.name || "Unassigned",
-            new Date(lead.createdAt).toLocaleDateString("en-IN")
-        ].map(csvField).join(","));
+            const headers = ["Name", "Email", "Phone", "Source", "Type", "Status", "Score", "Category", "Assigned To", "Created At"];
 
-        const csv = [headers.map(csvField).join(","), ...rows].join("\r\n");
+            res.header("Content-Type", "text/csv; charset=utf-8");
+            res.attachment("leads.csv");
+            res.write(headers.map(csvField).join(",") + "\r\n");
 
-        res.header("Content-Type", "text/csv; charset=utf-8");
-        res.attachment("leads.csv");
-        res.send(csv);
+            const PAGE = 500;
+            let cursor = undefined;
+            let done = false;
+
+            while (!done) {
+                const page = await prisma.lead.findMany({
+                    where,
+                    include: { assignedTo: { select: { name: true } } },
+                    orderBy: { createdAt: "desc" },
+                    take: PAGE,
+                    ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+                });
+
+                for (const lead of page) {
+                    res.write([
+                        lead.name,
+                        lead.email || "",
+                        lead.phone || "",
+                        lead.source,
+                        lead.enquiryType,
+                        lead.status,
+                        lead.score,
+                        lead.category || "",
+                        lead.assignedTo?.name || "Unassigned",
+                        new Date(lead.createdAt).toLocaleDateString("en-IN"),
+                    ].map(csvField).join(",") + "\r\n");
+                }
+
+                if (page.length < PAGE) {
+                    done = true;
+                } else {
+                    cursor = page[page.length - 1].id;
+                }
+            }
+
+            res.end();
+        } finally {
+            activeExports.delete(userId);
+        }
     } catch (error) {
-        res.status(500).json({ message: "Error exporting leads", error: error.message });
+
+        return next(error);
     }
 };
 
@@ -525,12 +557,12 @@ function buildFieldMap(headerRow) {
 }
 
 // Preview — parse file, return metadata without touching the DB
-const previewImport = async (req, res) => {
+const previewImport = async (req, res, next) => {
     try {
-        if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+        if (!req.file) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "No file uploaded");
 
         const rows = parseFileBuffer(req.file.buffer, req.file.originalname);
-        if (rows.length < 2) return res.status(400).json({ message: "File is empty or has no data rows" });
+        if (rows.length < 2) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "File is empty or has no data rows");
 
         const fieldMap = buildFieldMap(rows[0]);
         const hasAssignmentColumn = Object.values(fieldMap).includes("assignedTo");
@@ -549,7 +581,7 @@ const previewImport = async (req, res) => {
             previewRows,
         });
     } catch (err) {
-        res.status(500).json({ message: "Error parsing file", error: err.message });
+        return next(err);
     }
 };
 
@@ -774,11 +806,11 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
 // POST /leads/import
 // Validates the file, creates an ImportJob record, responds immediately with
 // the jobId, then spawns runImportJob in the background via setImmediate.
-const importLeads = async (req, res) => {
+const importLeads = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
 
-        if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+        if (!req.file) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "No file uploaded");
 
         const allocationMode = req.body?.allocationMode ?? "unassigned";
 
@@ -788,7 +820,7 @@ const importLeads = async (req, res) => {
 
         // Quick structural check (header row only) before accepting the job
         const headerRows = parseFileBuffer(buffer, originalname);
-        if (headerRows.length < 2) return res.status(400).json({ message: "File is empty or has no data rows" });
+        if (headerRows.length < 2) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "File is empty or has no data rows");
         const estimatedTotal = headerRows.length - 1;
 
         const job = await prisma.importJob.create({
@@ -802,30 +834,30 @@ const importLeads = async (req, res) => {
         // so the CPU-bound CSV/XLSX parsing doesn't add latency to the 200 response.
         setImmediate(() => runImportJob(job.id, { buffer, originalname, allocationMode, userId, role }));
     } catch (error) {
-        console.error("Import error:", error);
-        res.status(500).json({ message: "Error starting import", error: error.message });
+
+        return next(error);
     }
 };
 
 // GET /leads/import/status/:jobId
-const getImportStatus = async (req, res) => {
+const getImportStatus = async (req, res, next) => {
     try {
         const job = await prisma.importJob.findUnique({ where: { id: req.params.jobId } });
-        if (!job) return res.status(404).json({ message: "Import job not found" });
+        if (!job) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Import job not found");
 
         // Only the creator or an admin can see the job
         const { userId, role } = req.user;
         if (job.createdById !== userId && !["SUPER_ADMIN", "ADMIN"].includes(role)) {
-            return res.status(403).json({ message: "Forbidden" });
+            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Forbidden");
         }
 
         res.json(job);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching import status", error: error.message });
+        return next(error);
     }
 };
 
-const getOverdueFollowUps = async (req, res) => {
+const getOverdueFollowUps = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const leadWhere = role === "EMPLOYEE" ? { assignedToId: userId } : {};
@@ -845,11 +877,11 @@ const getOverdueFollowUps = async (req, res) => {
         });
         res.json(leads);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching overdue follow-ups", error: error.message });
+        return next(error);
     }
 };
 
-const getDashboardStats = async (req, res) => {
+const getDashboardStats = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const today = new Date();
@@ -884,12 +916,12 @@ const getDashboardStats = async (req, res) => {
             conversionRate: total > 0 ? Math.round((converted / total) * 100) : 0
         });
     } catch (error) {
-        res.status(500).json({ message: "Error fetching dashboard stats", error: error.message });
+        return next(error);
     }
 };
 
 // GET /leads/duplicates — find groups of leads sharing the same phone or email
-const getDuplicates = async (req, res) => {
+const getDuplicates = async (req, res, next) => {
     try {
         // Ask the DB which phone/email values appear more than once — avoids full table scan in JS
         const [phoneDupeGroups, emailDupeGroups] = await Promise.all([
@@ -960,16 +992,16 @@ const getDuplicates = async (req, res) => {
 
         res.json({ groups, total: groups.length });
     } catch (error) {
-        res.status(500).json({ message: "Error fetching duplicates", error: error.message });
+        return next(error);
     }
 };
 
 // GET /leads/team-stats — per-member conversion stats (admin / team lead only)
-const getTeamStats = async (req, res) => {
+const getTeamStats = async (req, res, next) => {
     try {
         const { role } = req.user;
         if (!["SUPER_ADMIN", "MANAGER"].includes(role)) {
-            return res.status(403).json({ message: "Forbidden" });
+            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Forbidden");
         }
 
         const [users, grouped] = await Promise.all([
@@ -1014,49 +1046,49 @@ const getTeamStats = async (req, res) => {
 
         res.json(result);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching team stats", error: error.message });
+        return next(error);
     }
 };
 
-const getLeadSuggestions = async (req, res) => {
+const getLeadSuggestions = async (req, res, next) => {
     try {
         const suggestions = await getSuggestionsForLead(req.params.id);
         res.json(suggestions);
     } catch (error) {
-        console.error("Error fetching suggestions:", error);
-        res.status(500).json({ message: "Error fetching suggestions", error: error.message });
+
+        return next(error);
     }
 };
 
-const dismissLeadSuggestion = async (req, res) => {
+const dismissLeadSuggestion = async (req, res, next) => {
     try {
         const { key } = req.body;
-        if (!key) return res.status(400).json({ message: "key is required" });
+        if (!key) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "key is required");
         await dismissSuggestion(req.params.id, key, req.user.userId);
         res.json({ dismissed: true });
     } catch (error) {
-        console.error("Error dismissing suggestion:", error);
-        res.status(500).json({ message: "Error dismissing suggestion", error: error.message });
+
+        return next(error);
     }
 };
 
 // Reassign Lead with history tracking
-const reassignLead = async (req, res) => {
+const reassignLead = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { employeeId, reason } = req.body;
         const { userId, role } = req.user;
 
-        if (!employeeId) return res.status(400).json({ message: "employeeId is required" });
+        if (!employeeId) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "employeeId is required");
 
         const { canReassignLeadTo } = require("../services/permissionService");
         const allowed = await canReassignLeadTo(userId, role, employeeId);
         if (!allowed) {
-            return res.status(403).json({ message: "You can only assign leads to members of your team" });
+            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You can only assign leads to members of your team");
         }
 
         const lead = await prisma.lead.findUnique({ where: { id } });
-        if (!lead) return res.status(404).json({ message: "Lead not found" });
+        if (!lead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
 
         // MANAGER: current lead assignee must also be in same team
         if (role === "MANAGER" && lead.assignedToId) {
@@ -1065,12 +1097,12 @@ const reassignLead = async (req, res) => {
                 select: { managerId: true },
             });
             if (assignee?.managerId !== userId) {
-                return res.status(403).json({ message: "You can only reassign leads currently assigned to your team members" });
+                throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You can only reassign leads currently assigned to your team members");
             }
         }
 
         const employee = await prisma.user.findUnique({ where: { id: employeeId } });
-        if (!employee) return res.status(404).json({ message: "Employee not found" });
+        if (!employee) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Employee not found");
 
         const previousEmployeeId = lead.assignedToId || null;
 
@@ -1100,11 +1132,11 @@ const reassignLead = async (req, res) => {
 
         res.json({ message: "Lead reassigned successfully", lead: updatedLead });
     } catch (error) {
-        res.status(500).json({ message: "Error reassigning lead", error: error.message });
+        return next(error);
     }
 };
 
-const getSLAAlerts = async (req, res) => {
+const getSLAAlerts = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const settings = await prisma.companySettings.findFirst();
@@ -1132,7 +1164,7 @@ const getSLAAlerts = async (req, res) => {
         });
         res.json({ data: leads, breachDays });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 

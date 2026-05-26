@@ -2,8 +2,9 @@ const dealService = require("../services/dealService");
 const logActivity = require("../utils/activityLogger");
 const prisma = require("../utils/prisma");
 const { computeInvoiceTotals, generateInvoiceNumber } = require("../controllers/invoiceController");
+const { ApiError } = require("../utils/apiError");
 
-const getPipeline = async (req, res) => {
+const getPipeline = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { search, ownerId, managerId, dateFrom, dateTo } = req.query;
@@ -14,7 +15,7 @@ const getPipeline = async (req, res) => {
     }
 };
 
-const getMembers = async (req, res) => {
+const getMembers = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const members = await dealService.getPipelineMembers(userId, role);
@@ -24,7 +25,7 @@ const getMembers = async (req, res) => {
     }
 };
 
-const createDeal = async (req, res) => {
+const createDeal = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { leadId, title, amount, stage, currency, notes, assignedEmployeeId } = req.body;
@@ -48,7 +49,7 @@ const createDeal = async (req, res) => {
     }
 };
 
-const listDeals = async (req, res) => {
+const listDeals = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { page, limit, stage, search, leadId, ownerId, sortBy, sortOrder } = req.query;
@@ -70,7 +71,7 @@ const listDeals = async (req, res) => {
     }
 };
 
-const getDeal = async (req, res) => {
+const getDeal = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const deal = await dealService.getDealById(req.params.id, userId, role);
@@ -80,7 +81,7 @@ const getDeal = async (req, res) => {
     }
 };
 
-const updateDeal = async (req, res) => {
+const updateDeal = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const prevDeal = await dealService.getDealById(req.params.id, userId, role);
@@ -109,7 +110,7 @@ const updateDeal = async (req, res) => {
     }
 };
 
-const deleteDeal = async (req, res) => {
+const deleteDeal = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         await dealService.softDeleteDeal(req.params.id, userId, role);
@@ -119,7 +120,7 @@ const deleteDeal = async (req, res) => {
     }
 };
 
-const createInvoiceFromDeal = async (req, res) => {
+const createInvoiceFromDeal = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { id } = req.params;
@@ -199,7 +200,7 @@ const createInvoiceFromDeal = async (req, res) => {
     }
 };
 
-const listDealInvoices = async (req, res) => {
+const listDealInvoices = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const invoices = await dealService.getDealInvoices(req.params.id, userId, role);

@@ -1,4 +1,5 @@
 const prisma = require("../utils/prisma");
+const { ApiError } = require("../utils/apiError");
 const {
     getTeamWithStats,
     getFullOrgWithStats,
@@ -11,7 +12,7 @@ const {
  * SUPER_ADMIN: entire org
  * ADMIN: own employees
  */
-const getOrgTeam = async (req, res) => {
+const getOrgTeam = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const members =
@@ -20,7 +21,7 @@ const getOrgTeam = async (req, res) => {
                 : await getTeamWithStats(userId); // MANAGER sees own team
         res.json(members);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -29,7 +30,7 @@ const getOrgTeam = async (req, res) => {
  * Returns one employee's profile with their lead/task/call stats.
  * Access is guarded by requireHierarchyAccess middleware on the route.
  */
-const getEmployeeProfile = async (req, res) => {
+const getEmployeeProfile = async (req, res, next) => {
     try {
         const { id } = req.params;
         const employee = await prisma.user.findUnique({
@@ -68,7 +69,7 @@ const getEmployeeProfile = async (req, res) => {
 
         res.json({ ...employee, assignedLeads, pendingLeads, callCount });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -76,13 +77,13 @@ const getEmployeeProfile = async (req, res) => {
  * GET /organization/stats
  * Returns dashboard card stats scoped by role.
  */
-const getStats = async (req, res) => {
+const getStats = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const stats = await getOrgStats(userId, role);
         res.json(stats);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -91,7 +92,7 @@ const getStats = async (req, res) => {
  * Assign or change an employee's manager.
  * Body: { managerId: string | null }
  */
-const setManager = async (req, res) => {
+const setManager = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { managerId } = req.body;
@@ -114,7 +115,7 @@ const setManager = async (req, res) => {
 
         res.json(updated);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -122,7 +123,7 @@ const setManager = async (req, res) => {
  * GET /organization/managers
  * Returns all users eligible to be managers (ADMIN + SUPER_ADMIN).
  */
-const getManagers = async (req, res) => {
+const getManagers = async (req, res, next) => {
     try {
         const managers = await prisma.user.findMany({
             where: { role: { in: ["SUPER_ADMIN", "MANAGER"] }, isActive: true },
@@ -131,7 +132,7 @@ const getManagers = async (req, res) => {
         });
         res.json(managers);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 

@@ -2,7 +2,7 @@ const prisma = require("../utils/prisma");
 const logActivity = require("../utils/activityLogger");
 const { batchAssignLeads } = require("../services/leadDistributionEngine");
 
-const bulkUpdateLeads = async (req, res) => {
+const bulkUpdateLeads = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leadIds, status } = req.body;
@@ -31,11 +31,11 @@ const bulkUpdateLeads = async (req, res) => {
 
         res.json({ message: `Updated ${result.count} leads successfully`, count: result.count });
     } catch (error) {
-        res.status(500).json({ message: "Error bulk updating leads", error: error.message });
+        return next(error);
     }
 };
 
-const bulkAssignLeads = async (req, res) => {
+const bulkAssignLeads = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leadIds, assignedToId } = req.body;
@@ -63,11 +63,11 @@ const bulkAssignLeads = async (req, res) => {
 
         res.json({ message: `Assigned ${result.count} leads to ${assignee.name}`, count: result.count });
     } catch (error) {
-        res.status(500).json({ message: "Error bulk assigning leads", error: error.message });
+        return next(error);
     }
 };
 
-const bulkSmartAssignLeads = async (req, res) => {
+const bulkSmartAssignLeads = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leadIds } = req.body;
@@ -82,7 +82,7 @@ const bulkSmartAssignLeads = async (req, res) => {
             ...result,
         });
     } catch (error) {
-        res.status(500).json({ message: "Smart assign failed", error: error.message });
+        return next(error);
     }
 };
 

@@ -3,7 +3,7 @@ const bcrypt = require("bcrypt");
 const { upsertUserToStream } = require("./chatController");
 
 // Create User (Super Admin only)
-const createUser = async (req, res) => {
+const createUser = async (req, res, next) => {
     try {
         const { name, email, phone, role, department, password, jobTitle } = req.body;
 
@@ -64,12 +64,12 @@ const createUser = async (req, res) => {
 
         res.status(201).json({ message: "User created successfully", user: userWithoutPassword });
     } catch (error) {
-        res.status(500).json({ message: "Error creating user", error: error.message });
+        return next(error);
     }
 };
 
 // Get Team (Super Admin only)
-const getTeam = async (req, res) => {
+const getTeam = async (req, res, next) => {
     try {
         const team = await prisma.user.findMany({
             select: {
@@ -91,12 +91,12 @@ const getTeam = async (req, res) => {
         });
         res.json(team);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching team", error: error.message });
+        return next(error);
     }
 };
 
 // Toggle User Access
-const toggleUserAccess = async (req, res) => {
+const toggleUserAccess = async (req, res, next) => {
     try {
         const { id } = req.params;
 
@@ -113,12 +113,12 @@ const toggleUserAccess = async (req, res) => {
 
         res.json(updatedUser);
     } catch (error) {
-        res.status(500).json({ message: "Error toggling user access", error: error.message });
+        return next(error);
     }
 };
 
 // Update User
-const updateUser = async (req, res) => {
+const updateUser = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { name, phone, role, department, jobTitle, managerId } = req.body;
@@ -174,12 +174,12 @@ const updateUser = async (req, res) => {
 
         res.json(updatedUser);
     } catch (error) {
-        res.status(500).json({ message: "Error updating user", error: error.message });
+        return next(error);
     }
 };
 
 // Hard Delete User (Remove from DB)
-const deleteUser = async (req, res) => {
+const deleteUser = async (req, res, next) => {
     try {
         const { id } = req.params;
 
@@ -195,7 +195,7 @@ const deleteUser = async (req, res) => {
 
         res.json({ message: "User permanently deleted" });
     } catch (error) {
-        res.status(500).json({ message: "Error deleting user", error: error.message });
+        return next(error);
     }
 };
 

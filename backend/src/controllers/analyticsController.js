@@ -1,7 +1,7 @@
 const prisma = require("../utils/prisma");
 
 // Team Performance Metrics
-const getTeamPerformance = async (req, res) => {
+const getTeamPerformance = async (req, res, next) => {
     try {
         const users = await prisma.user.findMany({
             where: { role: "EMPLOYEE" },
@@ -45,12 +45,12 @@ const getTeamPerformance = async (req, res) => {
 
         res.json(performance);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching team performance", error: error.message });
+        return next(error);
     }
 };
 
 // Response Time Analytics
-const getResponseTimeAnalytics = async (req, res) => {
+const getResponseTimeAnalytics = async (req, res, next) => {
     try {
         // Aggregate average response time
         const leadsWithResponse = await prisma.lead.findMany({
@@ -68,7 +68,7 @@ const getResponseTimeAnalytics = async (req, res) => {
 
         res.json({ avgResponseTimeHours: avgHours, baseSize: leadsWithResponse.length });
     } catch (error) {
-        res.status(500).json({ message: "Error fetching analytics", error: error.message });
+        return next(error);
     }
 };
 

@@ -4,6 +4,7 @@ const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
 
 const { decrypt } = require("../utils/encrypt");
+const { ApiError } = require("../utils/apiError");
 const SERPER_BASE_URL = "https://google.serper.dev";
 
 const getSerperKey = async () => {
@@ -170,7 +171,7 @@ const parseCompanyResult = (result, index, emailMap, phoneMap) => {
 
 // ─── Controllers ─────────────────────────────────────────────────────────────
 
-const searchLinkedInLeads = async (req, res) => {
+const searchLinkedInLeads = async (req, res, next) => {
     try {
         const { query, type = "people", location = "" } = req.body;
 
@@ -180,7 +181,7 @@ const searchLinkedInLeads = async (req, res) => {
 
         const apiKey = await getSerperKey();
         if (!apiKey) {
-            return res.status(503).json({ message: "Serper API key not configured. Add SERPER_API_KEY to .env or configure LinkedIn Lead Search in Settings → Integrations." });
+            throw new ApiError(503, "SERVICE_UNAVAILABLE", "Serper API key not configured. Add SERPER_API_KEY to .env or configure LinkedIn Lead Search in Settings → Integrations.");
         }
 
         const sitePrefix = type === "companies"
@@ -191,7 +192,7 @@ const searchLinkedInLeads = async (req, res) => {
         const linkedinQuery = `${sitePrefix} "${query.trim()}"${locationPart}`;
         const contactQuery = `"${query.trim()}"${locationPart} email contact phone`;
 
-        const [linkedinRes, contactRes] = await Promise.all([
+        const [linkedinRes, contactRes] = await Promise.allSettled([
             axios.post(
                 `${SERPER_BASE_URL}/search`,
                 { q: linkedinQuery, gl: "in", hl: "en", num: 20 },
@@ -204,8 +205,15 @@ const searchLinkedInLeads = async (req, res) => {
             )
         ]);
 
-        const organic = linkedinRes.data.organic || [];
-        const { emailMap, phoneMap } = buildContactMaps(contactRes.data.organic || []);
+        if (linkedinRes.status === "rejected") {
+            const err = linkedinRes.reason;
+            const msg = err.response?.data?.message || `Serper API error (${err.response?.status ?? "network"})`;
+            throw new ApiError(502, "SERPER_ERROR", `Search API error: ${msg}`);
+        }
+
+        const organic = linkedinRes.value.data.organic || [];
+        const contactOrganic = contactRes.status === "fulfilled" ? contactRes.value.data.organic || [] : [];
+        const { emailMap, phoneMap } = buildContactMaps(contactOrganic);
 
         const urlPattern = type === "companies"
             ? /linkedin\.com\/company\//i
@@ -222,12 +230,16 @@ const searchLinkedInLeads = async (req, res) => {
 
         res.json({ leads, total: leads.length, query: query.trim(), type });
     } catch (error) {
-        console.error("LinkedIn search error:", error.response?.data || error.message);
-        res.status(500).json({ message: "Error searching LinkedIn leads", error: error.message });
+        if (error.response) {
+            // Serper API returned an error — surface the actual message
+            const msg = error.response.data?.message || error.response.data?.error || `Serper API error (${error.response.status})`;
+            return next(new ApiError(502, "SERPER_ERROR", `Search API error: ${msg}`));
+        }
+        return next(error);
     }
 };
 
-const importLinkedInLeads = async (req, res) => {
+const importLinkedInLeads = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leads } = req.body;
@@ -320,8 +332,8 @@ const importLinkedInLeads = async (req, res) => {
             leads: createdLeads
         });
     } catch (error) {
-        console.error("Import LinkedIn leads error:", error.message);
-        res.status(500).json({ message: "Error importing leads", error: error.message });
+
+        return next(error);
     }
 };
 

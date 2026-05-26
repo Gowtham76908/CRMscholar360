@@ -8,7 +8,7 @@ const taskInclude = {
 
 // ─── Sprints CRUD ─────────────────────────────────────────────────────────────
 
-const getSprints = async (req, res) => {
+const getSprints = async (req, res, next) => {
     try {
         const sprints = await prisma.sprint.findMany({
             include: { tasks: { include: taskInclude } },
@@ -16,11 +16,11 @@ const getSprints = async (req, res) => {
         });
         res.json(sprints);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching sprints", error: error.message });
+        return next(error);
     }
 };
 
-const getActiveSprint = async (req, res) => {
+const getActiveSprint = async (req, res, next) => {
     try {
         const sprint = await prisma.sprint.findFirst({
             where: { status: "ACTIVE" },
@@ -28,11 +28,11 @@ const getActiveSprint = async (req, res) => {
         });
         res.json(sprint || null);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching active sprint", error: error.message });
+        return next(error);
     }
 };
 
-const getBacklog = async (req, res) => {
+const getBacklog = async (req, res, next) => {
     try {
         const tasks = await prisma.task.findMany({
             where: { sprintId: null },
@@ -41,11 +41,11 @@ const getBacklog = async (req, res) => {
         });
         res.json(tasks);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching backlog", error: error.message });
+        return next(error);
     }
 };
 
-const createSprint = async (req, res) => {
+const createSprint = async (req, res, next) => {
     try {
         const { name, goal, startDate, endDate } = req.body;
         if (!name || !startDate || !endDate) {
@@ -59,11 +59,11 @@ const createSprint = async (req, res) => {
         });
         res.status(201).json({ message: "Sprint created", sprint });
     } catch (error) {
-        res.status(500).json({ message: "Error creating sprint", error: error.message });
+        return next(error);
     }
 };
 
-const updateSprint = async (req, res) => {
+const updateSprint = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { name, goal, startDate, endDate } = req.body;
@@ -78,11 +78,11 @@ const updateSprint = async (req, res) => {
         });
         res.json({ message: "Sprint updated", sprint });
     } catch (error) {
-        res.status(500).json({ message: "Error updating sprint", error: error.message });
+        return next(error);
     }
 };
 
-const deleteSprint = async (req, res) => {
+const deleteSprint = async (req, res, next) => {
     try {
         const { id } = req.params;
         await prisma.task.updateMany({
@@ -92,13 +92,13 @@ const deleteSprint = async (req, res) => {
         await prisma.sprint.delete({ where: { id } });
         res.json({ message: "Sprint deleted" });
     } catch (error) {
-        res.status(500).json({ message: "Error deleting sprint", error: error.message });
+        return next(error);
     }
 };
 
 // ─── Sprint Lifecycle ─────────────────────────────────────────────────────────
 
-const startSprint = async (req, res) => {
+const startSprint = async (req, res, next) => {
     try {
         const { id } = req.params;
         const activeCount = await prisma.sprint.count({ where: { status: "ACTIVE" } });
@@ -124,11 +124,11 @@ const startSprint = async (req, res) => {
         });
         res.json({ message: "Sprint started", sprint: updated });
     } catch (error) {
-        res.status(500).json({ message: "Error starting sprint", error: error.message });
+        return next(error);
     }
 };
 
-const completeSprint = async (req, res) => {
+const completeSprint = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { moveUnfinished = true } = req.body;
@@ -146,13 +146,13 @@ const completeSprint = async (req, res) => {
         });
         res.json({ message: "Sprint completed", sprint });
     } catch (error) {
-        res.status(500).json({ message: "Error completing sprint", error: error.message });
+        return next(error);
     }
 };
 
 // ─── Sprint Tasks ─────────────────────────────────────────────────────────────
 
-const addTasksToSprint = async (req, res) => {
+const addTasksToSprint = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { taskIds } = req.body;
@@ -171,11 +171,11 @@ const addTasksToSprint = async (req, res) => {
         });
         res.json({ message: `${taskIds.length} task(s) added to sprint` });
     } catch (error) {
-        res.status(500).json({ message: "Error adding tasks to sprint", error: error.message });
+        return next(error);
     }
 };
 
-const removeTaskFromSprint = async (req, res) => {
+const removeTaskFromSprint = async (req, res, next) => {
     try {
         const { taskId } = req.params;
         await prisma.task.update({
@@ -184,13 +184,13 @@ const removeTaskFromSprint = async (req, res) => {
         });
         res.json({ message: "Task moved to backlog" });
     } catch (error) {
-        res.status(500).json({ message: "Error removing task from sprint", error: error.message });
+        return next(error);
     }
 };
 
 // ─── Analytics ────────────────────────────────────────────────────────────────
 
-const getSprintAnalytics = async (req, res) => {
+const getSprintAnalytics = async (req, res, next) => {
     try {
         const { id } = req.params;
         const sprint = await prisma.sprint.findUnique({
@@ -254,11 +254,11 @@ const getSprintAnalytics = async (req, res) => {
             burndown
         });
     } catch (error) {
-        res.status(500).json({ message: "Error fetching sprint analytics", error: error.message });
+        return next(error);
     }
 };
 
-const getTeamVelocity = async (req, res) => {
+const getTeamVelocity = async (req, res, next) => {
     try {
         const sprints = await prisma.sprint.findMany({
             where: { status: { in: ["ACTIVE", "COMPLETED"] } },
@@ -273,7 +273,7 @@ const getTeamVelocity = async (req, res) => {
         }));
         res.json(velocity);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching velocity", error: error.message });
+        return next(error);
     }
 };
 

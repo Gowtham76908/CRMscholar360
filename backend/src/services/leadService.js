@@ -1,5 +1,6 @@
 const prisma = require("../utils/prisma");
 const { getTeamMemberIds } = require("./organizationService");
+const paginate = require("../utils/paginate");
 
 /**
  * Get leads with pagination, filtering, searching, and sorting
@@ -116,15 +117,7 @@ const getLeads = async ({
         })
     ]);
 
-    return {
-        data: leads,
-        meta: {
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit)
-        }
-    };
+    return paginate(leads, total, page, limit);
 };
 
 module.exports = {

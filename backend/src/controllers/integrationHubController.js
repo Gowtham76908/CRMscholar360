@@ -1,6 +1,7 @@
 const prisma = require("../utils/prisma");
 const { encrypt, decrypt } = require("../utils/encrypt");
 const { getProvider } = require("../services/providers/registry");
+const { ApiError } = require("../utils/apiError");
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,7 @@ async function addLog(integrationId, type, message, status = "INFO", metadata = 
 
 // ── controllers ──────────────────────────────────────────────────────────────
 
-const getAll = async (req, res) => {
+const getAll = async (req, res, next) => {
     try {
         await ensureDefaults();
         const integrations = await prisma.integration.findMany({
@@ -65,11 +66,11 @@ const getAll = async (req, res) => {
         });
         res.json(integrations.map(safeIntegration));
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
-const startOAuth = async (req, res) => {
+const startOAuth = async (req, res, next) => {
     const { platform } = req.params;
     try {
         const integration = await prisma.integration.findUnique({ where: { platform } });
@@ -77,11 +78,11 @@ const startOAuth = async (req, res) => {
         const { authUrl } = await provider.getAuthUrl(platform);
         res.json({ authUrl });
     } catch (err) {
-        res.status(400).json({ message: err.message });
+        return next(err);
     }
 };
 
-const oauthCallback = async (req, res) => {
+const oauthCallback = async (req, res, next) => {
     const { platform } = req.params;
     const { code, error, state } = req.query;
 
@@ -136,7 +137,7 @@ const oauthCallback = async (req, res) => {
     }
 };
 
-const configure = async (req, res) => {
+const configure = async (req, res, next) => {
     const { platform } = req.params;
     const { config, metadata } = req.body;
     try {
@@ -195,11 +196,11 @@ const configure = async (req, res) => {
 
         res.json(safeIntegration(updated));
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
-const testConnection = async (req, res) => {
+const testConnection = async (req, res, next) => {
     const { platform } = req.params;
     try {
         const integration = await prisma.integration.findUnique({ where: { platform } });
@@ -219,11 +220,11 @@ const testConnection = async (req, res) => {
 
         res.json(result);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
-const sync = async (req, res) => {
+const sync = async (req, res, next) => {
     const { platform } = req.params;
     try {
         const integration = await prisma.integration.findUnique({ where: { platform } });
@@ -243,7 +244,7 @@ const sync = async (req, res) => {
                 data: { status: "ERROR", errorMessage: syncErr.message },
             });
             await addLog(integration.id, "SYNC_FAILED", syncErr.message, "ERROR");
-            return res.status(500).json({ message: syncErr.message });
+            return next(syncErr);
         }
 
         await prisma.integration.update({
@@ -254,11 +255,11 @@ const sync = async (req, res) => {
 
         res.json({ ...result, lastSynced: new Date() });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
-const disconnect = async (req, res) => {
+const disconnect = async (req, res, next) => {
     const { platform } = req.params;
     try {
         const integration = await prisma.integration.findUnique({ where: { platform } });
@@ -283,11 +284,11 @@ const disconnect = async (req, res) => {
         await addLog(integration.id, "DISCONNECTED", `${platform} disconnected`, "INFO");
         res.json({ ok: true });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
-const getLogs = async (req, res) => {
+const getLogs = async (req, res, next) => {
     const { platform } = req.params;
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     try {
@@ -301,11 +302,11 @@ const getLogs = async (req, res) => {
         });
         res.json(logs);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
-const getAllLogs = async (req, res) => {
+const getAllLogs = async (req, res, next) => {
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     try {
         const logs = await prisma.integrationLog.findMany({
@@ -317,7 +318,7 @@ const getAllLogs = async (req, res) => {
         });
         res.json(logs);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 

@@ -1,6 +1,6 @@
 const prisma = require("../utils/prisma");
 
-const getAuditLogs = async (req, res) => {
+const getAuditLogs = async (req, res, next) => {
     try {
         const logs = await prisma.activity.findMany({
             include: {
@@ -13,7 +13,7 @@ const getAuditLogs = async (req, res) => {
 
         res.json(logs);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching audit logs", error: error.message });
+        return next(error);
     }
 };
 

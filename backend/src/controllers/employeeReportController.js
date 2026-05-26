@@ -1,5 +1,6 @@
 const prisma = require("../utils/prisma");
 const { getTeamMemberIds } = require("../services/organizationService");
+const { ApiError } = require("../utils/apiError");
 
 // ── Date range helper ─────────────────────────────────────────────────────────
 function dateRange(period, from, to) {
@@ -42,7 +43,7 @@ async function assertAccess(req, employeeId) {
 }
 
 // ── GET /api/employee-report/:id/profile ─────────────────────────────────────
-const getProfile = async (req, res) => {
+const getProfile = async (req, res, next) => {
     try {
         const { id: employeeId } = req.params;
         if (!await assertAccess(req, employeeId)) {
@@ -69,12 +70,12 @@ const getProfile = async (req, res) => {
 
         res.json({ ...user, attendanceDays });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/employee-report/:id/kpis ────────────────────────────────────────
-const getKPIs = async (req, res) => {
+const getKPIs = async (req, res, next) => {
     try {
         const { id: employeeId } = req.params;
         if (!await assertAccess(req, employeeId)) {
@@ -137,12 +138,12 @@ const getKPIs = async (req, res) => {
             conversionRate:  assigned      > 0 ? Math.round((converted   / assigned)       * 100) : 0,
         });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/employee-report/:id/lead-chart ──────────────────────────────────
-const getLeadChart = async (req, res) => {
+const getLeadChart = async (req, res, next) => {
     try {
         const { id: employeeId } = req.params;
         if (!await assertAccess(req, employeeId)) {
@@ -191,12 +192,12 @@ const getLeadChart = async (req, res) => {
         }
         res.json(weeks);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/employee-report/:id/tasks ───────────────────────────────────────
-const getTaskAnalytics = async (req, res) => {
+const getTaskAnalytics = async (req, res, next) => {
     try {
         const { id: employeeId } = req.params;
         if (!await assertAccess(req, employeeId)) {
@@ -217,12 +218,12 @@ const getTaskAnalytics = async (req, res) => {
             completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
         });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/employee-report/:id/activities ──────────────────────────────────
-const getActivities = async (req, res) => {
+const getActivities = async (req, res, next) => {
     try {
         const { id: employeeId } = req.params;
         if (!await assertAccess(req, employeeId)) {
@@ -241,12 +242,12 @@ const getActivities = async (req, res) => {
 
         res.json(activities);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/employee-report/:id/communication ───────────────────────────────
-const getCommunicationStats = async (req, res) => {
+const getCommunicationStats = async (req, res, next) => {
     try {
         const { id: employeeId } = req.params;
         if (!await assertAccess(req, employeeId)) {
@@ -267,12 +268,12 @@ const getCommunicationStats = async (req, res) => {
             responseRate: whatsappSent > 0 ? Math.round((whatsappReplied / whatsappSent) * 100) : 0,
         });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/employee-report/:id/notes ───────────────────────────────────────
-const getNotes = async (req, res) => {
+const getNotes = async (req, res, next) => {
     try {
         const { id: employeeId } = req.params;
         if (!await assertAccess(req, employeeId)) {
@@ -286,12 +287,12 @@ const getNotes = async (req, res) => {
         });
         res.json(notes);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── POST /api/employee-report/:id/notes ──────────────────────────────────────
-const addNote = async (req, res) => {
+const addNote = async (req, res, next) => {
     try {
         const { id: employeeId } = req.params;
         const { userId } = req.user;
@@ -308,12 +309,12 @@ const addNote = async (req, res) => {
         });
         res.json(note);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── DELETE /api/employee-report/notes/:noteId ────────────────────────────────
-const deleteNote = async (req, res) => {
+const deleteNote = async (req, res, next) => {
     try {
         const { noteId } = req.params;
         const { userId, role } = req.user;
@@ -327,12 +328,12 @@ const deleteNote = async (req, res) => {
         await prisma.managerNote.delete({ where: { id: noteId } });
         res.json({ message: "Note deleted" });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/employee-report/:id/productivity ────────────────────────────────
-const getProductivity = async (req, res) => {
+const getProductivity = async (req, res, next) => {
     try {
         const { id: employeeId } = req.params;
         if (!await assertAccess(req, employeeId)) {
@@ -420,12 +421,12 @@ const getProductivity = async (req, res) => {
             taskTrend: Object.values(dayMap),
         });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/employee-report/:id/funnel ──────────────────────────────────────
-const getFunnel = async (req, res) => {
+const getFunnel = async (req, res, next) => {
     try {
         const { id: employeeId } = req.params;
         if (!await assertAccess(req, employeeId)) {
@@ -451,12 +452,12 @@ const getFunnel = async (req, res) => {
             { stage: "Lost",       count: lost,      pct: total > 0 ? Math.round((lost      / total) * 100) : 0 },
         ]);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
 // ── GET /api/employee-report/:id/revenue-kpis ────────────────────────────────
-const getRevenueKPIs = async (req, res) => {
+const getRevenueKPIs = async (req, res, next) => {
     try {
         const { id: employeeId } = req.params;
         if (!await assertAccess(req, employeeId)) return res.status(403).json({ message: "Access denied" });
@@ -500,7 +501,7 @@ const getRevenueKPIs = async (req, res) => {
 };
 
 // ── GET /api/employee-report/:id/revenue-trend ───────────────────────────────
-const getRevenueTrend = async (req, res) => {
+const getRevenueTrend = async (req, res, next) => {
     try {
         const { id: employeeId } = req.params;
         if (!await assertAccess(req, employeeId)) return res.status(403).json({ message: "Access denied" });
@@ -545,7 +546,7 @@ const getRevenueTrend = async (req, res) => {
 };
 
 // ── GET /api/employee-report/:id/invoice-collection-trend ────────────────────
-const getInvoiceCollectionTrend = async (req, res) => {
+const getInvoiceCollectionTrend = async (req, res, next) => {
     try {
         const { id: employeeId } = req.params;
         if (!await assertAccess(req, employeeId)) return res.status(403).json({ message: "Access denied" });

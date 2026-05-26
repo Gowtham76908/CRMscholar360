@@ -851,6 +851,7 @@ export default function LeadDetail() {
     const [searchParams] = useSearchParams();
     const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
 
+    const [activeTab, setActiveTab] = useState("overview");
     const [noteText, setNoteText] = useState("");
     const [showTaskModal, setShowTaskModal] = useState(false);
     const [showWaModal, setShowWaModal] = useState(false);
@@ -870,20 +871,20 @@ export default function LeadDetail() {
 
     const { data: activities = [] } = useQuery({
         queryKey: ["lead-activities", id],
-        queryFn: () => api.get(`/leads/${id}/activities`).then(r => r.data),
-        enabled: !!lead,
+        queryFn: () => api.get(`/leads/${id}/activities`).then(r => r.data?.data ?? r.data),
+        enabled: !!lead && activeTab === "activity",
     });
 
     const { data: notes = [] } = useQuery({
         queryKey: ["lead-notes", id],
         queryFn: () => api.get(`/leads/${id}/notes`).then(r => r.data),
-        enabled: !!lead,
+        enabled: !!lead && activeTab === "activity",
     });
 
     const { data: callsData, isLoading: callsLoading } = useQuery({
         queryKey: ["lead-calls", id],
         queryFn: () => api.get(`/calls/${id}`).then(r => r.data),
-        enabled: !!lead,
+        enabled: !!lead && activeTab === "activity",
     });
 
     const { data: tasksData, isLoading: tasksLoading } = useQuery({
@@ -910,13 +911,13 @@ export default function LeadDetail() {
     const { data: waMessages = [] } = useQuery({
         queryKey: ["lead-whatsapp", id],
         queryFn: () => api.get(`/whatsapp/${id}/messages`).then(r => r.data),
-        enabled: !!lead,
+        enabled: !!lead && activeTab === "activity",
     });
 
     const { data: emailLogs = [] } = useQuery({
         queryKey: ["lead-emails", id],
         queryFn: () => api.get(`/leads/${id}/emails`).then(r => r.data),
-        enabled: !!lead,
+        enabled: !!lead && activeTab === "activity",
     });
 
     const { data: leadDeals = [], isLoading: dealsLoading } = useQuery({
@@ -1256,11 +1257,33 @@ export default function LeadDetail() {
             {/* ── Deal Room split-pane ───────────────────────────────────────── */}
             <div className="flex flex-col md:flex-row gap-5 items-start">
 
-                {/* ── LEFT: AI Context Bar + Timeline ───────────────────────── */}
+                {/* ── LEFT: Tabbed content ──────────────────────────────────── */}
                 <div className="flex-1 min-w-0 space-y-4 w-full">
 
-                    {/* AI Context Bar */}
-                    <SmartSuggestions leadId={id} lead={lead} onAction={handleSuggestionAction} />
+                    {/* Tab bar */}
+                    <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+                        {[{ id: "overview", label: "Overview" }, { id: "activity", label: "Activity" }].map(t => (
+                            <button
+                                key={t.id}
+                                onClick={() => setActiveTab(t.id)}
+                                className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-all ${
+                                    activeTab === t.id
+                                        ? "bg-white text-indigo-700 shadow-sm"
+                                        : "text-gray-500 hover:text-gray-800"
+                                }`}
+                            >
+                                {t.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Overview tab */}
+                    {activeTab === "overview" && (
+                        <SmartSuggestions leadId={id} lead={lead} onAction={handleSuggestionAction} />
+                    )}
+
+                    {/* Activity tab */}
+                    {activeTab === "activity" && (<>
 
                     {/* Timeline card */}
                     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
@@ -1398,6 +1421,7 @@ export default function LeadDetail() {
                             )}
                         </div>
                     </div>
+                    </>)}
                 </div>
 
                 {/* ── RIGHT: scrollable panel ────────────────────────────────── */}

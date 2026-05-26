@@ -4,7 +4,7 @@ const logActivity = require("../utils/activityLogger");
 const emailService = require("../services/emailService");
 
 // Handle Incoming Webhook for Lead Creation
-const handleLeadWebhook = async (req, res) => {
+const handleLeadWebhook = async (req, res, next) => {
     try {
         const { source, name, email, phone, enquiryType, metadata } = req.body;
 
@@ -69,8 +69,8 @@ const handleLeadWebhook = async (req, res) => {
 
         res.status(201).json({ message: "Lead processed successfully", leadId: newLead.id });
     } catch (error) {
-        console.error("Webhook Error:", error);
-        res.status(500).json({ message: "Error processing webhook", error: error.message });
+
+        return next(error);
     }
 };
 

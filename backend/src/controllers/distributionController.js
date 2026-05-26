@@ -2,6 +2,7 @@ const prisma   = require("../utils/prisma");
 const engine   = require("../services/leadDistributionEngine");
 const { getTeamMemberIds } = require("../services/organizationService");
 const { leadLoadRecalculationJob } = require("../services/leadLoadScheduler");
+const { ApiError } = require("../utils/apiError");
 
 // ── Unassigned lead pool ──────────────────────────────────────────────────────
 
@@ -10,7 +11,7 @@ const { leadLoadRecalculationJob } = require("../services/leadLoadScheduler");
  * SUPER_ADMIN: all unassigned leads
  * MANAGER:     unassigned leads (no ownership filter — manager can claim any)
  */
-const getUnassignedLeads = async (req, res) => {
+const getUnassignedLeads = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const page   = Math.max(1, parseInt(req.query.page  || "1"));
@@ -54,10 +55,10 @@ const getUnassignedLeads = async (req, res) => {
 
         res.json({
             leads,
-            pagination: { total, page, limit, pages: Math.ceil(total / limit) },
+            pagination: { total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) },
         });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -68,7 +69,7 @@ const getUnassignedLeads = async (req, res) => {
  * Returns employees who are ONLINE + accepting leads + under capacity.
  * MANAGER sees only own team. SUPER_ADMIN sees all.
  */
-const getAvailableEmployees = async (req, res) => {
+const getAvailableEmployees = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
 
@@ -113,7 +114,7 @@ const getAvailableEmployees = async (req, res) => {
 
         res.json(available);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -125,7 +126,7 @@ const getAvailableEmployees = async (req, res) => {
  * MANAGER: can only assign to own team employees.
  * SUPER_ADMIN: can assign to anyone.
  */
-const manualAssign = async (req, res) => {
+const manualAssign = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { leadId, employeeId } = req.body;
@@ -151,7 +152,7 @@ const manualAssign = async (req, res) => {
         if (result.error) return res.status(400).json({ message: result.error });
         res.json({ message: "Lead assigned", lead: result.lead });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -163,7 +164,7 @@ const manualAssign = async (req, res) => {
  * Runs auto-distribution over the unassigned pool (or a specific set).
  * MANAGER: restricts scoring to own team.
  */
-const bulkAutoAssign = async (req, res) => {
+const bulkAutoAssign = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         let { leadIds, all } = req.body;
@@ -186,7 +187,7 @@ const bulkAutoAssign = async (req, res) => {
 
         res.json(summary);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -197,7 +198,7 @@ const bulkAutoAssign = async (req, res) => {
  * Manager assigns an unassigned lead to themselves or to a specific employee.
  * Body (optional): { employeeId }
  */
-const claimLead = async (req, res) => {
+const claimLead = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { leadId } = req.params;
@@ -236,7 +237,7 @@ const claimLead = async (req, res) => {
         if (result.error) return res.status(400).json({ message: result.error });
         res.json({ message: "Lead claimed", lead: result.lead });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -245,7 +246,7 @@ const claimLead = async (req, res) => {
 /**
  * GET /distribution/profile/:employeeId
  */
-const getProfile = async (req, res) => {
+const getProfile = async (req, res, next) => {
     try {
         const { employeeId } = req.params;
         const { userId, role } = req.user;
@@ -262,7 +263,7 @@ const getProfile = async (req, res) => {
         if (!profile) return res.status(404).json({ message: "Profile not found" });
         res.json(profile);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -271,7 +272,7 @@ const getProfile = async (req, res) => {
  * Employee: can toggle isAcceptingLeads and availabilityStatus on own profile.
  * MANAGER/SUPER_ADMIN: can update maxDailyLeads and all status fields for team members.
  */
-const updateProfile = async (req, res) => {
+const updateProfile = async (req, res, next) => {
     try {
         const { employeeId } = req.params;
         const { userId, role } = req.user;
@@ -316,7 +317,7 @@ const updateProfile = async (req, res) => {
 
         res.json(profile);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -324,12 +325,12 @@ const updateProfile = async (req, res) => {
  * POST /distribution/recalculate
  * SUPER_ADMIN only — manually trigger the hourly recalculation job.
  */
-const triggerRecalculation = async (req, res) => {
+const triggerRecalculation = async (req, res, next) => {
     try {
         await leadLoadRecalculationJob();
         res.json({ message: "Lead load recalculation complete" });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 
@@ -337,7 +338,7 @@ const triggerRecalculation = async (req, res) => {
  * GET /distribution/stats
  * Returns a quick overview for the unassigned-leads dashboard.
  */
-const getDistributionStats = async (req, res) => {
+const getDistributionStats = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
 
@@ -355,7 +356,7 @@ const getDistributionStats = async (req, res) => {
 
         res.json({ unassigned, availableEmployees, assignedToday });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return next(err);
     }
 };
 

@@ -1,6 +1,7 @@
 const { randomUUID } = require("crypto");
 const prisma = require("../utils/prisma");
 const { sendLeadEmail } = require("../services/emailService");
+const { ApiError } = require("../utils/apiError");
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3000";
 
@@ -22,7 +23,7 @@ const injectTracking = (html, logId) => {
 };
 
 // POST /api/leads/:id/emails
-const sendEmail = async (req, res) => {
+const sendEmail = async (req, res, next) => {
     try {
         const { id: leadId } = req.params;
         const { toEmail, subject, body } = req.body;
@@ -62,13 +63,12 @@ const sendEmail = async (req, res) => {
 
         res.status(201).json(log);
     } catch (error) {
-        console.error("[EMAIL SEND]", error.message);
-        res.status(500).json({ message: "Failed to send email", error: error.message });
+        return next(error);
     }
 };
 
 // GET /api/leads/:id/emails
-const getLeadEmails = async (req, res) => {
+const getLeadEmails = async (req, res, next) => {
     try {
         const { id: leadId } = req.params;
         const emails = await prisma.emailLog.findMany({
@@ -78,7 +78,7 @@ const getLeadEmails = async (req, res) => {
         });
         res.json(emails);
     } catch (error) {
-        res.status(500).json({ message: "Failed to fetch emails", error: error.message });
+        return next(error);
     }
 };
 
