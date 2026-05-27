@@ -8,7 +8,7 @@ import {
     Zap, XCircle, AlertCircle, RefreshCw, Settings2,
     ClipboardList, Plug, Loader2, ArrowUpRight, Eye, EyeOff, Copy, CheckCheck,
     CheckCircle2, Wifi, WifiOff, Activity, Clock, ShieldAlert, TrendingUp,
-    ChevronLeft, ChevronRight, Search, Filter,
+    ChevronLeft, ChevronRight, Search, Filter, KeyRound, Code2, HelpCircle,
 } from "lucide-react";
 
 // ── SVG icons ─────────────────────────────────────────────────────────────────
@@ -87,6 +87,17 @@ const PROVIDERS = [
             { key: "pageCount",  label: "Pages",       icon: "📄" },
             { key: "leadCount",  label: "Leads synced", icon: "👥" },
         ],
+        setupGuide: {
+            title: "How to get your Meta Access Token & Page ID",
+            steps: [
+                { label: "Open Meta for Developers", detail: "Go to developers.facebook.com → My Apps → select your app (or create one)." },
+                { label: "Generate a Page Access Token", detail: "In your app dashboard → Tools → Graph API Explorer. Select your Facebook Page from the dropdown, then click \"Generate Access Token\". Copy the token — it starts with EAA…" },
+                { label: "Get your Page ID", detail: "Go to your Facebook Page → About (scroll down) → you'll see \"Page ID\" as a number. Or in Graph API Explorer, run GET /me?fields=id,name with your page token." },
+                { label: "Paste & Save", detail: "Enter the token and Page ID in the fields above, then click Save & Activate." },
+            ],
+            note: "For long-lived tokens (60 days), exchange using Graph API: GET /oauth/access_token?grant_type=fb_exchange_token. For permanent tokens, use a System User in Meta Business Manager.",
+            links: [{ label: "Graph API Explorer", url: "https://developers.facebook.com/tools/explorer" }],
+        },
     },
     {
         key: "whatsapp_cloud",
@@ -106,25 +117,45 @@ const PROVIDERS = [
             { key: "phoneNumber",     label: "Phone number",    icon: "📱" },
             { key: "templatesSynced", label: "Templates synced", icon: "📋" },
         ],
+        setupGuide: {
+            title: "How to set up WhatsApp Cloud API",
+            steps: [
+                { label: "Create a Meta App", detail: "Go to developers.facebook.com → Create App → choose Business type. Add the WhatsApp product to your app." },
+                { label: "Get your Phone Number ID & WABA ID", detail: "In your app → WhatsApp → Getting Started. You'll see the Phone Number ID and WhatsApp Business Account ID listed on that page." },
+                { label: "Generate a Permanent Token", detail: "Go to Meta Business Manager → System Users → Add System User (Admin role). Then assign your WhatsApp app, generate a token with whatsapp_business_messaging and whatsapp_business_management permissions." },
+                { label: "Paste & Save", detail: "Enter the three values above and click Save & Activate. The CRM can now send WhatsApp messages to your leads." },
+            ],
+            note: "The token from the Getting Started page expires in 24 hours — always use a System User permanent token for production.",
+            links: [{ label: "Meta Business Manager", url: "https://business.facebook.com/settings/system-users" }],
+        },
     },
     {
         key: "google_ads",
         name: "Google Ads",
-        desc: "Connect Google Ads to track campaigns and import leads.",
+        desc: "Receive leads from Google Ads Lead Form Extensions via webhook.",
         Icon: GoogleIcon,
         grad: "from-orange-400 to-red-500",
         bg: "bg-orange-50", border: "border-orange-100", chip: "text-orange-700 bg-orange-50",
         oauth: false,
-        tags: ["Ad Accounts", "Campaigns", "Offline Conversions", "Lead Import"],
+        tags: ["Lead Form Extensions", "Webhook", "Auto Lead Import"],
         configFields: [
-            { key: "developerToken", label: "Developer Token",    placeholder: "From Google Ads API Center",         type: "password" },
-            { key: "customerId",     label: "Customer ID",        placeholder: "123-456-7890 (no dashes required)",  type: "text" },
-            { key: "refreshToken",   label: "Refresh Token",      placeholder: "OAuth refresh token",                type: "password" },
+            { key: "webhookKey", label: "Webhook Key", placeholder: "Secret key you'll set in Google Ads → Lead Form → Webhook", type: "password" },
         ],
         metaKeys: [
-            { key: "campaignCount", label: "Campaigns",  icon: "📊" },
-            { key: "accountName",   label: "Account",    icon: "🏢" },
+            { key: "leadsReceived", label: "Leads Received", icon: "📥" },
         ],
+        webhookPath: "/api/google-ads/webhook",
+        setupGuide: {
+            title: "How to connect Google Ads Lead Form Extensions",
+            steps: [
+                { label: "Choose a Webhook Key", detail: "Make up any secret string (e.g. \"myads_secret_123\"). Type it in the Webhook Key field above and save. This is your shared secret — you'll enter the same value in Google Ads." },
+                { label: "Copy the Webhook URL", detail: "After saving, copy the Webhook URL shown above (ends in /api/google-ads/webhook)." },
+                { label: "Open your Google Ads campaign", detail: "In Google Ads, go to your Search or Performance Max campaign → Ads & Extensions → Extensions → Lead Form Extension. Open or create a Lead Form." },
+                { label: "Paste the Webhook URL & Key", detail: "Scroll to the \"Lead delivery\" section → choose Webhook. Paste the Webhook URL, then enter the same Webhook Key you chose in step 1." },
+                { label: "Send a test lead", detail: "Click \"Send test\" in Google Ads. The CRM will receive a sample lead — check your Leads list to confirm it arrived." },
+            ],
+            note: "No OAuth or Google account connection needed — leads are pushed to the CRM automatically whenever someone submits a Lead Form ad.",
+        },
     },
     {
         key: "email_smtp",
@@ -147,6 +178,16 @@ const PROVIDERS = [
             { key: "host",     label: "SMTP host",  icon: "🖥️" },
             { key: "fromName", label: "From name",  icon: "✉️" },
         ],
+        setupGuide: {
+            title: "How to set up Email / SMTP",
+            steps: [
+                { label: "Gmail — create an App Password", detail: "In your Google Account → Security → 2-Step Verification must be ON → App Passwords → select \"Mail\" + \"Other\" → Generate. Use the 16-character password here (not your normal Gmail password)." },
+                { label: "Fill in the fields", detail: "Host: smtp.gmail.com · Port: 587 · Username: your full Gmail address · Password: the App Password from step 1 · From Name: what recipients see as sender name." },
+                { label: "Enable TLS/SSL toggle", detail: "Leave the TLS/SSL toggle ON for port 587 (STARTTLS). Turn it OFF only if your host uses port 25 (unencrypted)." },
+                { label: "Save & test", detail: "Click Save & Activate. The CRM will send a test connection to verify credentials." },
+            ],
+            note: "Other providers: Outlook → smtp-mail.outlook.com:587 | SendGrid → smtp.sendgrid.net:587 (username: apikey, password: your SendGrid API key) | Mailgun → smtp.mailgun.org:587.",
+        },
     },
     {
         key: "linkedin_serper",
@@ -163,6 +204,16 @@ const PROVIDERS = [
         metaKeys: [
             { key: "searchQuota", label: "Search quota", icon: "🔍" },
         ],
+        setupGuide: {
+            title: "How to get a Serper API Key",
+            steps: [
+                { label: "Sign up at Serper.dev", detail: "Go to serper.dev and create a free account. The free plan includes 2,500 searches — enough to get started." },
+                { label: "Copy your API key", detail: "After signing in, your API key is shown on the dashboard homepage. Click to copy it." },
+                { label: "Paste & Save", detail: "Paste the key in the field above and click Save & Activate. The CRM will use it to search LinkedIn profiles for leads." },
+            ],
+            note: "Each lead search uses roughly 1–3 Serper credits. Monitor your quota at serper.dev/dashboard.",
+            links: [{ label: "Serper Dashboard", url: "https://serper.dev/dashboard" }],
+        },
     },
     {
         key: "salestrail",
@@ -178,6 +229,16 @@ const PROVIDERS = [
             { key: "pass", label: "Webhook Password", placeholder: "From Salestrail settings", type: "password" },
         ],
         webhookPath: "/api/salestrail/webhook",
+        setupGuide: {
+            title: "How to connect Salestrail",
+            steps: [
+                { label: "Copy the Webhook URL", detail: "Copy the Webhook URL shown above (ends in /api/salestrail/webhook)." },
+                { label: "Open Salestrail settings", detail: "Log in to your Salestrail account → Settings → Integrations → Push API / Webhook." },
+                { label: "Paste URL and set credentials", detail: "Enter the Webhook URL. Set a Username and Password of your choice (you make these up — they're for Basic Auth verification). Enter the same Username and Password in the fields above." },
+                { label: "Save on both sides", detail: "Save in Salestrail, then Save & Activate in the CRM. Call logs will now sync automatically after each call." },
+            ],
+            note: "The CRM will match call logs to existing leads by phone number. Unmatched calls are still stored in the call log.",
+        },
         metaKeys: [
             { key: "callsSynced",  label: "Calls synced",   icon: "📞" },
             { key: "webhookReady", label: "Webhook",         icon: "🔗" },
@@ -185,18 +246,28 @@ const PROVIDERS = [
     },
     {
         key: "website_webhook",
-        name: "Website Contact Form",
-        desc: "Post contact form submissions to the DCRM webhook and auto-create leads.",
+        name: "Website Lead Form",
+        desc: "Embed a contact form on your website. Leads come directly into the CRM.",
         Icon: WebhookIcon,
         grad: "from-sky-400 to-cyan-500",
         bg: "bg-sky-50", border: "border-sky-100", chip: "text-sky-700 bg-sky-50",
         oauth: false,
-        tags: ["POST endpoint", "Auto Lead", "No Auth required", "JSON body"],
-        webhookPath: "/api/webhooks/leads",
-        alwaysConnected: true,
+        tags: ["Embed Widget", "Auto Lead", "API Key", "Any Website"],
+        webhookPath: "/api/public/leads",
+        embedWidget: true,
         metaKeys: [
             { key: "leadsReceived", label: "Leads received", icon: "📥" },
         ],
+        setupGuide: {
+            title: "How to embed the lead form on your website",
+            steps: [
+                { label: "Generate an API Key", detail: "Click \"Generate Key\" below. A unique key starting with wk_ will be created and saved automatically." },
+                { label: "Copy the HTML snippet", detail: "Copy the \"Plain HTML Form\" snippet shown below. It includes a ready-made form and a small JavaScript block that POSTs to your CRM." },
+                { label: "Paste into your website", detail: "Paste the snippet anywhere in your website's HTML — inside a page, a modal, or a sidebar. It works on any website: WordPress, Wix, Webflow, plain HTML, etc." },
+                { label: "Test it", detail: "Fill in the form on your website and submit. Within seconds a new lead should appear in your CRM Leads list with source \"Website\"." },
+            ],
+            note: "The API key is tied to your CRM workspace. Anyone with this key can submit leads — keep it out of public repositories. You can regenerate it any time (old embeds will stop working until updated).",
+        },
     },
 ];
 
@@ -446,27 +517,45 @@ function useOAuthPopup(onSuccess) {
 // ── Configure Sheet ───────────────────────────────────────────────────────────
 
 function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl }) {
-    const [form, setForm]     = useState({});
-    const [show, setShow]     = useState({});
-    const [saving, setSaving] = useState(false);
+    const [tab, setTab]           = useState("configure");
+    const [form, setForm]         = useState({});
+    const [show, setShow]         = useState({});
+    const [saving, setSaving]     = useState(false);
+    const [apiKey, setApiKey]     = useState("");
+    const [showEmbed, setShowEmbed] = useState(false);
+    const [activeStep, setActiveStep] = useState(0);
 
     useEffect(() => {
         if (open) {
+            setTab("configure");
+            setActiveStep(0);
             const initial = {};
             (provider?.configFields || []).forEach(f => { initial[f.key] = ""; });
             setForm(initial);
             setShow({});
+            if (provider?.embedWidget) {
+                const existing = integration?.metadata?.apiKey || "";
+                setApiKey(existing);
+                setShowEmbed(!!existing);
+            }
         }
-    }, [open, provider]);
+    }, [open, provider, integration]);
 
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+    const generateApiKey = () => {
+        const key = "wk_" + Array.from(crypto.getRandomValues(new Uint8Array(18)))
+            .map(b => b.toString(16).padStart(2, "0")).join("");
+        setApiKey(key);
+        setShowEmbed(true);
+    };
 
     const handleSave = async () => {
         setSaving(true);
         try {
-            const payload = { config: { ...form } };
-            if (provider.extras?.includes("secure")) payload.config.secure = form.secure || false;
-            const res = await api.put(`/integration-hub/${provider.key}/configure`, payload);
+            const config = provider?.embedWidget ? { apiKey } : { ...form };
+            if (provider?.extras?.includes("secure")) config.secure = form.secure || false;
+            const res = await api.put(`/integration-hub/${provider.key}/configure`, { config });
             if (res.data.ok === false) toast.error(res.data.message || "Failed");
             else { toast.success(res.data.message || "Saved & connected"); onSaved?.(); onClose(); }
         } catch (err) {
@@ -474,76 +563,314 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
         } finally { setSaving(false); }
     };
 
-    const inputCls = "w-full px-3 py-2 rounded-lg border border-zinc-200 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition placeholder-zinc-400";
-    const labelCls = "block text-xs font-semibold text-zinc-600 mb-1";
-    const webhookUrl = backendUrl + (provider?.webhookPath || "");
+    const inputCls = "w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition placeholder-zinc-400 bg-white";
+    const labelCls = "block text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1.5";
+    const publicUrl = backendUrl + "/api/public/leads";
+
+    const htmlFormCode = apiKey ? `<form id="crm-lead-form">
+  <input name="name"  placeholder="Your Name"  required />
+  <input name="email" placeholder="Email"       type="email" />
+  <input name="phone" placeholder="Phone"       type="tel" />
+  <textarea name="message" placeholder="Message"></textarea>
+  <button type="submit">Send</button>
+</form>
+<script>
+document.getElementById('crm-lead-form').onsubmit = async function(e) {
+  e.preventDefault();
+  const data = Object.fromEntries(new FormData(e.target));
+  const res = await fetch('${publicUrl}?key=${apiKey}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (res.ok) alert('Thank you! We will be in touch.');
+};
+</script>` : "";
+
+    const guide = provider?.setupGuide;
+    const hasTabs = !!guide;
 
     return (
-        <Sheet open={open} onClose={onClose} title={`Configure ${provider?.name}`} size="md">
-            <Sheet.Body>
-                <div className="space-y-4">
-                    {provider?.webhookPath && (
-                        <div>
-                            <p className={labelCls}>Webhook URL</p>
-                            <div className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
-                                <code className="flex-1 text-xs text-zinc-700 break-all">{webhookUrl}</code>
-                                <CopyButton text={webhookUrl} />
+        <Sheet open={open} onClose={onClose} title={null} size="lg">
+            {/* Custom header with provider branding + tabs */}
+            <div className="px-6 pt-5 pb-0 border-b border-zinc-100">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${provider?.grad || "from-zinc-400 to-zinc-600"} flex items-center justify-center shadow-sm`}>
+                        {provider?.Icon && <provider.Icon s={20} />}
+                    </div>
+                    <div>
+                        <h2 className="text-base font-bold text-zinc-900">{provider?.name}</h2>
+                        <p className="text-xs text-zinc-400">{provider?.desc}</p>
+                    </div>
+                    <button onClick={onClose} className="ml-auto text-zinc-400 hover:text-zinc-600 transition-colors">
+                        <XCircle size={18} />
+                    </button>
+                </div>
+                {hasTabs && (
+                    <div className="flex gap-1">
+                        {[
+                            { id: "configure", label: "Configure", icon: Settings2 },
+                            { id: "guide",     label: "Setup Guide", icon: HelpCircle },
+                        ].map(t => (
+                            <button key={t.id} onClick={() => setTab(t.id)}
+                                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold rounded-t-lg border-b-2 transition-all ${
+                                    tab === t.id
+                                        ? "border-orange-500 text-orange-600 bg-orange-50/50"
+                                        : "border-transparent text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50"
+                                }`}>
+                                <t.icon size={13} />{t.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <Sheet.Body className="!pt-5">
+                <AnimatePresence mode="wait">
+
+                {/* ── CONFIGURE TAB ── */}
+                {tab === "configure" && (
+                    <motion.div key="configure"
+                        initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.18 }}
+                        className="space-y-5">
+
+                        {provider?.embedWidget ? (
+                            <>
+                                {/* API Key row */}
+                                <div className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4 space-y-3">
+                                    <div className="flex items-center gap-2">
+                                        <KeyRound size={14} className="text-zinc-400" />
+                                        <span className="text-xs font-bold text-zinc-600 uppercase tracking-wide">API Key</span>
+                                        {apiKey && <span className="ml-auto text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">Active</span>}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex-1 flex items-center gap-2 bg-white border border-zinc-200 rounded-xl px-3 py-2.5 min-w-0">
+                                            <code className="flex-1 text-xs text-zinc-700 break-all select-all font-mono">
+                                                {apiKey || <span className="text-zinc-400 font-sans not-italic">No key yet — click Generate</span>}
+                                            </code>
+                                            {apiKey && <CopyButton text={apiKey} />}
+                                        </div>
+                                        <button onClick={generateApiKey}
+                                            className="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold text-white bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 rounded-xl transition-all shadow-sm whitespace-nowrap">
+                                            <RefreshCw size={12} />{apiKey ? "Regenerate" : "Generate Key"}
+                                        </button>
+                                    </div>
+                                    {apiKey && <p className="text-[11px] text-zinc-400 flex items-center gap-1"><ShieldAlert size={11} className="text-amber-400" />Keep this private — anyone with this key can submit leads to your CRM.</p>}
+                                </div>
+
+                                {showEmbed && apiKey && (
+                                    <>
+                                        {/* Endpoint */}
+                                        <div className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs font-bold text-zinc-600 uppercase tracking-wide">API Endpoint</span>
+                                                <CopyButton text={`${publicUrl}?key=${apiKey}`} />
+                                            </div>
+                                            <div className="bg-white border border-zinc-200 rounded-xl px-3 py-2.5">
+                                                <code className="text-xs text-zinc-700 break-all font-mono">{publicUrl}?key={apiKey}</code>
+                                            </div>
+                                            <p className="text-[11px] text-zinc-400">
+                                                POST JSON with{" "}
+                                                {["name","email","phone","message"].map((f,i,a) => (
+                                                    <span key={f}><code className="bg-zinc-100 text-zinc-600 px-1 py-0.5 rounded text-[10px] font-mono">{f}</code>{i < a.length-1 ? ", " : ""}</span>
+                                                ))}
+                                            </p>
+                                        </div>
+
+                                        {/* Embed snippet */}
+                                        <div className="rounded-2xl border border-zinc-200 overflow-hidden">
+                                            <div className="flex items-center justify-between px-4 py-3 bg-zinc-800">
+                                                <div className="flex items-center gap-2">
+                                                    <Code2 size={13} className="text-zinc-400" />
+                                                    <span className="text-xs font-semibold text-zinc-300">HTML Embed Snippet</span>
+                                                    <span className="text-[10px] text-zinc-500 bg-zinc-700 px-2 py-0.5 rounded-full">paste into your website</span>
+                                                </div>
+                                                <CopyButton text={htmlFormCode} />
+                                            </div>
+                                            <pre className="bg-zinc-900 text-emerald-300 text-[11px] font-mono p-4 overflow-x-auto whitespace-pre-wrap break-all leading-[1.7]">{htmlFormCode}</pre>
+                                        </div>
+                                    </>
+                                )}
+                            </>
+                        ) : (
+                            <>
+                                {provider?.webhookPath && (
+                                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-zinc-600 uppercase tracking-wide">Webhook URL</span>
+                                            <CopyButton text={backendUrl + provider.webhookPath} />
+                                        </div>
+                                        <div className="bg-white border border-zinc-200 rounded-xl px-3 py-2.5">
+                                            <code className="text-xs text-zinc-700 break-all font-mono">{backendUrl + provider.webhookPath}</code>
+                                        </div>
+                                        <p className="text-[11px] text-zinc-400">Paste this URL into the integration settings on the provider&apos;s side.</p>
+                                    </div>
+                                )}
+
+                                {(provider?.configFields || []).length > 0 && (
+                                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4 space-y-4">
+                                        <span className="text-xs font-bold text-zinc-600 uppercase tracking-wide">Credentials</span>
+                                        <div className="space-y-4 pt-1">
+                                            {(provider?.configFields || []).map(f => {
+                                                const isPass    = f.type === "password";
+                                                const isVisible = show[f.key];
+                                                return (
+                                                    <div key={f.key} className={f.width || ""}>
+                                                        <label className={labelCls}>{f.label}</label>
+                                                        <div className="relative">
+                                                            <input
+                                                                type={isPass && !isVisible ? "password" : "text"}
+                                                                placeholder={f.placeholder}
+                                                                value={form[f.key] || ""}
+                                                                onChange={e => set(f.key, e.target.value)}
+                                                                className={inputCls + (isPass ? " pr-10" : "")}
+                                                            />
+                                                            {isPass && (
+                                                                <button type="button" onClick={() => setShow(s => ({ ...s, [f.key]: !s[f.key] }))}
+                                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+                                                                    {isVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {provider?.extras?.includes("secure") && (
+                                    <div className="flex items-center gap-3 p-4 bg-zinc-50 rounded-2xl border border-zinc-200">
+                                        <button type="button" onClick={() => set("secure", !form.secure)}
+                                            className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${form.secure ? "bg-orange-500" : "bg-zinc-300"}`}>
+                                            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.secure ? "translate-x-4" : ""}`} />
+                                        </button>
+                                        <div>
+                                            <p className="text-sm font-semibold text-zinc-700">Use TLS / SSL</p>
+                                            <p className="text-xs text-zinc-400">Enable for port 465 (SSL) or 587 (STARTTLS)</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </motion.div>
+                )}
+
+                {/* ── SETUP GUIDE TAB ── */}
+                {tab === "guide" && guide && (
+                    <motion.div key="guide"
+                        initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.18 }}
+                        className="space-y-4">
+
+                        {/* Step progress bar */}
+                        <div className="flex items-center gap-1.5 px-1">
+                            {guide.steps.map((_, i) => (
+                                <button key={i} onClick={() => setActiveStep(i)}
+                                    className={`h-1.5 rounded-full transition-all duration-300 ${i === activeStep ? "flex-1 bg-orange-500" : i < activeStep ? "w-6 bg-orange-300" : "w-6 bg-zinc-200"}`} />
+                            ))}
+                        </div>
+
+                        {/* Active step card */}
+                        <AnimatePresence mode="wait">
+                            <motion.div key={activeStep}
+                                initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+                                transition={{ duration: 0.16 }}
+                                className="rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50 to-amber-50 p-5">
+                                <div className="flex items-start gap-4">
+                                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center text-white font-black text-lg shadow-md shrink-0">
+                                        {activeStep + 1}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-bold text-zinc-900 mb-1.5">{guide.steps[activeStep].label}</p>
+                                        <p className="text-sm text-zinc-600 leading-relaxed">{guide.steps[activeStep].detail}</p>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </AnimatePresence>
+
+                        {/* All steps list */}
+                        <div className="rounded-2xl border border-zinc-200 overflow-hidden">
+                            <div className="px-4 py-2.5 bg-zinc-50 border-b border-zinc-100">
+                                <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wide">All Steps</span>
                             </div>
-                            {provider?.alwaysConnected && (
-                                <p className="text-xs text-zinc-400 mt-1.5">POST JSON to this URL. No authentication required. Leads are created automatically.</p>
+                            <div className="divide-y divide-zinc-100">
+                                {guide.steps.map((step, i) => (
+                                    <button key={i} onClick={() => setActiveStep(i)}
+                                        className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors ${i === activeStep ? "bg-orange-50" : "hover:bg-zinc-50"}`}>
+                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 transition-colors ${
+                                            i < activeStep ? "bg-emerald-100 text-emerald-600" :
+                                            i === activeStep ? "bg-orange-500 text-white" :
+                                            "bg-zinc-100 text-zinc-400"
+                                        }`}>
+                                            {i < activeStep ? <CheckCircle2 size={13} /> : i + 1}
+                                        </span>
+                                        <span className={`text-xs font-semibold ${i === activeStep ? "text-orange-700" : i < activeStep ? "text-zinc-400 line-through" : "text-zinc-700"}`}>
+                                            {step.label}
+                                        </span>
+                                        {i === activeStep && <ChevronRight size={13} className="ml-auto text-orange-400" />}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Note callout */}
+                        {guide.note && (
+                            <div className="flex gap-3 p-4 rounded-2xl bg-blue-50 border border-blue-100">
+                                <HelpCircle size={15} className="text-blue-400 shrink-0 mt-0.5" />
+                                <p className="text-xs text-blue-700 leading-relaxed"><span className="font-bold text-blue-800">Tip: </span>{guide.note}</p>
+                            </div>
+                        )}
+
+                        {/* External links */}
+                        {guide.links?.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                                {guide.links.map((l, i) => (
+                                    <a key={i} href={l.url} target="_blank" rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-zinc-700 to-zinc-800 hover:from-zinc-600 hover:to-zinc-700 rounded-xl transition-all shadow-sm">
+                                        <ArrowUpRight size={12} />{l.label}
+                                    </a>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Prev / Next navigation */}
+                        <div className="flex items-center justify-between pt-1">
+                            <button onClick={() => setActiveStep(s => Math.max(0, s - 1))}
+                                disabled={activeStep === 0}
+                                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-zinc-500 hover:text-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors rounded-xl hover:bg-zinc-100">
+                                <ChevronLeft size={14} />Previous
+                            </button>
+                            {activeStep < guide.steps.length - 1 ? (
+                                <button onClick={() => setActiveStep(s => s + 1)}
+                                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 rounded-xl transition-all shadow-sm">
+                                    Next<ChevronRight size={14} />
+                                </button>
+                            ) : (
+                                <button onClick={() => setTab("configure")}
+                                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 rounded-xl transition-all shadow-sm">
+                                    <CheckCircle2 size={13} />Go to Configure
+                                </button>
                             )}
                         </div>
-                    )}
-
-                    {(provider?.configFields || []).map(f => {
-                        const isPass    = f.type === "password";
-                        const isVisible = show[f.key];
-                        return (
-                            <div key={f.key} className={f.width || ""}>
-                                <label className={labelCls}>{f.label}</label>
-                                <div className="relative">
-                                    <input
-                                        type={isPass && !isVisible ? "password" : "text"}
-                                        placeholder={f.placeholder}
-                                        value={form[f.key] || ""}
-                                        onChange={e => set(f.key, e.target.value)}
-                                        className={inputCls + (isPass ? " pr-10" : "")}
-                                    />
-                                    {isPass && (
-                                        <button type="button" onClick={() => setShow(s => ({ ...s, [f.key]: !s[f.key] }))}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
-                                            {isVisible ? <EyeOff size={14} /> : <Eye size={14} />}
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })}
-
-                    {provider?.extras?.includes("secure") && (
-                        <div className="flex items-center gap-3 p-3.5 bg-zinc-50 rounded-lg border border-zinc-200">
-                            <button type="button" onClick={() => set("secure", !form.secure)}
-                                className={`relative w-10 h-6 rounded-full transition-colors ${form.secure ? "bg-orange-500" : "bg-zinc-300"}`}>
-                                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.secure ? "translate-x-4" : ""}`} />
-                            </button>
-                            <div>
-                                <p className="text-sm font-medium text-zinc-700">Use TLS/SSL</p>
-                                <p className="text-xs text-zinc-500">Enable for port 465 (SSL) or 587 (STARTTLS)</p>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </Sheet.Body>
-            <Sheet.Footer>
-                <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-800 transition-colors">Cancel</button>
-                {!provider?.alwaysConnected && (
-                    <button onClick={handleSave} disabled={saving}
-                        className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 transition-all"
-                        style={{ background: "linear-gradient(135deg,#F97316,#EA580C)" }}>
-                        {saving ? <><Loader2 size={14} className="animate-spin" />Testing…</> : "Save & Connect"}
-                    </button>
+                    </motion.div>
                 )}
-            </Sheet.Footer>
+                </AnimatePresence>
+            </Sheet.Body>
+
+            {tab === "configure" && (
+                <Sheet.Footer>
+                    <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-700 transition-colors">Cancel</button>
+                    {(provider?.embedWidget ? !!apiKey : !provider?.alwaysConnected) && (
+                        <button onClick={handleSave} disabled={saving}
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60 transition-all shadow-sm"
+                            style={{ background: "linear-gradient(135deg,#F97316,#EA580C)" }}>
+                            {saving ? <><Loader2 size={14} className="animate-spin" />Saving…</> : "Save & Activate"}
+                        </button>
+                    )}
+                </Sheet.Footer>
+            )}
         </Sheet>
     );
 }

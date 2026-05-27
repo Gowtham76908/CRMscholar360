@@ -28,7 +28,7 @@ const getLeads = async (req, res, next) => {
             });
         }
 
-        const { page, limit, status, assignedTo, startDate, endDate, search, sortBy, sortOrder, isSearchLead, score_min, mine } = validationResult.data;
+        const { page, limit, status, assignedTo, startDate, endDate, search, sortBy, sortOrder, isSearchLead, score_min, score_max, mine, source, category, enquiryType, sla } = validationResult.data;
 
         const rawFilters = {
             status,
@@ -37,7 +37,12 @@ const getLeads = async (req, res, next) => {
             endDate,
             isSearchLead,
             score_min,
-            mine
+            score_max,
+            mine,
+            source,
+            category,
+            enquiryType,
+            sla,
         };
 
         const filters = Object.fromEntries(

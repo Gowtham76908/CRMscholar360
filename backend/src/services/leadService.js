@@ -49,8 +49,32 @@ const getLeads = async ({
         where.isSearchLead = filters.isSearchLead;
     }
 
-    if (filters.score_min !== undefined) {
-        where.score = { gte: filters.score_min };
+    if (filters.score_min !== undefined || filters.score_max !== undefined) {
+        where.score = {};
+        if (filters.score_min !== undefined) where.score.gte = filters.score_min;
+        if (filters.score_max !== undefined) where.score.lte = filters.score_max;
+    }
+
+    if (filters.source)      where.source      = filters.source;
+    if (filters.category)    where.category    = filters.category;
+    if (filters.enquiryType) where.enquiryType = filters.enquiryType;
+
+    // SLA filter: leads with no activity beyond N days (only active statuses qualify)
+    if (filters.sla) {
+        const cutoffMs = filters.sla === "breach" ? 7 * 86_400_000 : 3 * 86_400_000;
+        const cutoff   = new Date(Date.now() - cutoffMs);
+        where.status   = { in: ["NEW", "CONTACTED", "FOLLOW_UP"] };
+        const slaOr = [
+            { lastActivityAt: { lt: cutoff } },
+            { AND: [{ lastActivityAt: null }, { updatedAt: { lt: cutoff } }] },
+        ];
+        // Merge with any existing OR scope (e.g. manager team filter)
+        if (where.OR) {
+            where.AND = [...(where.AND || []), { OR: where.OR }, { OR: slaOr }];
+            delete where.OR;
+        } else {
+            where.OR = slaOr;
+        }
     }
 
     // Date range filter

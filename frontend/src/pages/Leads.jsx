@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Search, Filter, Edit, Plus, Upload, Phone, PhoneCall, Play, Pause, SearchCheck, Users, History, Mail, ChevronLeft, ChevronRight as ChevronRightIcon, LayoutGrid, List, Zap } from "lucide-react";
+import { Search, Filter, Edit, Plus, Upload, Phone, PhoneCall, Play, Pause, SearchCheck, Users, History, Mail, ChevronLeft, ChevronRight as ChevronRightIcon, LayoutGrid, List, Zap, X, SlidersHorizontal, AlertTriangle, ChevronDown, User, Calendar, Star, Tag, Globe, CheckCircle2 } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import api from "../api/axios";
 import { Loader2, Merge } from "lucide-react";
@@ -44,17 +44,39 @@ const getPages = (current, total) => {
     return result;
 };
 
+function FilterChip({ label, onRemove }) {
+    return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-xs font-semibold text-indigo-700">
+            {label}
+            <button onClick={onRemove} className="ml-0.5 text-indigo-400 hover:text-indigo-700"><X className="h-3 w-3" /></button>
+        </span>
+    );
+}
+
 const Leads = () => {
     const [searchParams, setSearchParams] = useSearchParams();
 
-    const activeTab    = searchParams.get("tab")    || "leads";
-    const searchTerm   = searchParams.get("search") || "";
-    const statusFilter = searchParams.get("status") || "ALL";
+    const activeTab    = searchParams.get("tab")         || "leads";
+    const searchTerm   = searchParams.get("search")      || "";
+    const statusFilter = searchParams.get("status")      || "ALL";
     const page         = parseInt(searchParams.get("page") || "1", 10);
-    const sortBy       = searchParams.get("sortBy")    || "createdAt";
-    const sortOrder    = searchParams.get("sortOrder") || "desc";
-    const scoreMin     = searchParams.get("score_min") || "";
-    const mineFilter   = searchParams.get("mine")      || "";
+    const sortBy       = searchParams.get("sortBy")      || "createdAt";
+    const sortOrder    = searchParams.get("sortOrder")   || "desc";
+    const scoreMin     = searchParams.get("score_min")   || "";
+    const scoreMax     = searchParams.get("score_max")   || "";
+    const mineFilter   = searchParams.get("mine")        || "";
+    const sourceFilter = searchParams.get("source")      || "";
+    const categoryFilter = searchParams.get("category") || "";
+    const enquiryFilter  = searchParams.get("enquiryType") || "";
+    const slaFilter      = searchParams.get("sla")       || "";
+    const dateFrom       = searchParams.get("startDate") || "";
+    const dateTo         = searchParams.get("endDate")   || "";
+    const assignedToFilter = searchParams.get("assignedTo") || "";
+
+    const [filterOpen, setFilterOpen] = useState(false);
+
+    // Count active filters (excluding status which has its own tab row)
+    const activeFilterCount = [sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, scoreMin, scoreMax, mineFilter, assignedToFilter].filter(Boolean).length;
 
     const [localSearch, setLocalSearch] = useState(searchTerm);
 
@@ -79,10 +101,17 @@ const Leads = () => {
         return () => clearTimeout(timer);
     }, [localSearch, setSearchParams, searchTerm]);
 
+    const setParam  = (key, val) => setSearchParams(p => { const n = new URLSearchParams(p); if (val) n.set(key, val); else n.delete(key); n.set("page", "1"); return n; }, { replace: true });
     const setActiveTab    = (v) => setSearchParams(p => { const next = new URLSearchParams(p); next.set("tab", v); next.set("page", "1"); return next; }, { replace: true });
     const setSearchTerm   = (v) => setSearchParams(p => { const next = new URLSearchParams(p); if (v) next.set("search", v); else next.delete("search"); next.set("page", "1"); return next; }, { replace: true });
     const setStatusFilter = (v) => setSearchParams(p => { const next = new URLSearchParams(p); next.set("status", v); next.set("page", "1"); return next; }, { replace: true });
     const setPage         = (v) => setSearchParams(p => { const next = new URLSearchParams(p); next.set("page", String(v)); return next; }, { replace: true });
+    const clearAllFilters = () => setSearchParams(p => {
+        const next = new URLSearchParams(p);
+        ["source","category","enquiryType","sla","startDate","endDate","score_min","score_max","mine","assignedTo","status"].forEach(k => next.delete(k));
+        next.set("page", "1");
+        return next;
+    }, { replace: true });
     const limit = 20;
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingLead, setEditingLead] = useState(null);
@@ -91,7 +120,7 @@ const Leads = () => {
     const { user } = useAuth();
 
     const { data: leadsData, isLoading, isFetching } = useQuery({
-        queryKey: ["leads", page, searchTerm, statusFilter, activeTab, sortBy, sortOrder, scoreMin, mineFilter],
+        queryKey: ["leads", page, searchTerm, statusFilter, activeTab, sortBy, sortOrder, scoreMin, scoreMax, mineFilter, sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, assignedToFilter],
         queryFn: async () => {
             const params = {
                 page,
@@ -102,13 +131,28 @@ const Leads = () => {
                 sortBy,
                 sortOrder,
                 score_min: scoreMin ? parseInt(scoreMin, 10) : undefined,
+                score_max: scoreMax ? parseInt(scoreMax, 10) : undefined,
                 mine: mineFilter === "true" ? true : undefined,
+                source: sourceFilter || undefined,
+                category: categoryFilter || undefined,
+                enquiryType: enquiryFilter || undefined,
+                sla: slaFilter || undefined,
+                startDate: dateFrom || undefined,
+                endDate: dateTo || undefined,
+                assignedTo: assignedToFilter || undefined,
             };
             const res = await api.get("/leads", { params });
             return res.data;
         },
         staleTime: 60_000,
         placeholderData: (prev) => prev,
+    });
+
+    const { data: teamMembers = [] } = useQuery({
+        queryKey: ["team-members-simple"],
+        queryFn: () => api.get("/users").then(r => Array.isArray(r.data) ? r.data : r.data?.users || []),
+        staleTime: 5 * 60_000,
+        enabled: isManager,
     });
 
     const { data: orgSettings } = useQuery({
@@ -331,33 +375,180 @@ const Leads = () => {
                 </button>
             </div>
 
-            {/* Filters */}
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row gap-4">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Search leads by name or email..."
-                        className="pl-10 w-full border border-gray-300 rounded-lg py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                        value={localSearch}
-                        onChange={(e) => setLocalSearch(e.target.value)}
-                    />
+            {/* Search + Filter bar */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                {/* Top row: search + filter toggle */}
+                <div className="flex items-center gap-3 p-3">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Search by name, phone or email…"
+                            className="pl-10 w-full border border-gray-200 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none bg-gray-50"
+                            value={localSearch}
+                            onChange={(e) => setLocalSearch(e.target.value)}
+                        />
+                        {localSearch && (
+                            <button onClick={() => setLocalSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Status pills */}
+                    <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+                        {["ALL","NEW","CONTACTED","FOLLOW_UP","CONVERTED","LOST"].map(s => (
+                            <button key={s} onClick={() => setStatusFilter(s)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                                    statusFilter === s
+                                        ? "bg-indigo-600 text-white shadow-sm"
+                                        : "text-gray-500 hover:bg-gray-100"
+                                }`}>
+                                {s === "ALL" ? "All" : s === "FOLLOW_UP" ? "Follow Up" : s.charAt(0) + s.slice(1).toLowerCase()}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Filter toggle button */}
+                    <button onClick={() => setFilterOpen(o => !o)}
+                        className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-semibold border transition-all shrink-0 ${
+                            filterOpen || activeFilterCount > 0
+                                ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+                                : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                        }`}>
+                        <SlidersHorizontal className="h-4 w-4" />
+                        Filters
+                        {activeFilterCount > 0 && (
+                            <span className="bg-indigo-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{activeFilterCount}</span>
+                        )}
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${filterOpen ? "rotate-180" : ""}`} />
+                    </button>
                 </div>
-                <div className="relative w-full sm:w-48">
-                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <select
-                        className="pl-10 w-full border border-gray-300 rounded-lg py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500 appearance-none bg-white"
-                        value={statusFilter}
-                        onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-                    >
-                        <option value="ALL">All Status</option>
-                        <option value="NEW">New</option>
-                        <option value="CONTACTED">Contacted</option>
-                        <option value="FOLLOW_UP">Follow Up</option>
-                        <option value="CONVERTED">Converted</option>
-                        <option value="LOST">Lost</option>
-                    </select>
-                </div>
+
+                {/* Active filter chips row */}
+                {activeFilterCount > 0 && !filterOpen && (
+                    <div className="flex items-center gap-2 px-3 pb-3 flex-wrap">
+                        {sourceFilter    && <FilterChip label={`Source: ${sourceFilter.toLowerCase()}`}    onRemove={() => setParam("source", "")} />}
+                        {categoryFilter  && <FilterChip label={`Category: ${categoryFilter}`}               onRemove={() => setParam("category", "")} />}
+                        {enquiryFilter   && <FilterChip label={`Type: ${enquiryFilter}`}                    onRemove={() => setParam("enquiryType", "")} />}
+                        {slaFilter       && <FilterChip label={`SLA: ${slaFilter}`}                         onRemove={() => setParam("sla", "")} />}
+                        {mineFilter      && <FilterChip label="My Leads"                                     onRemove={() => setParam("mine", "")} />}
+                        {assignedToFilter && <FilterChip label={`Assigned: ${teamMembers.find(m => m.id === assignedToFilter)?.name || "…"}`} onRemove={() => setParam("assignedTo", "")} />}
+                        {(scoreMin || scoreMax) && <FilterChip label={`Score: ${scoreMin||"0"}–${scoreMax||"100"}`} onRemove={() => { setParam("score_min",""); setParam("score_max",""); }} />}
+                        {(dateFrom || dateTo)   && <FilterChip label={`Date: ${dateFrom||"…"} → ${dateTo||"…"}`}   onRemove={() => { setParam("startDate",""); setParam("endDate",""); }} />}
+                        <button onClick={clearAllFilters} className="text-xs text-red-500 hover:text-red-700 font-semibold ml-1">Clear all</button>
+                    </div>
+                )}
+
+                {/* Expanded filter panel */}
+                {filterOpen && (
+                    <div className="border-t border-gray-100 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                        {/* Source */}
+                        <div>
+                            <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2"><Globe className="h-3 w-3" />Source</label>
+                            <div className="flex flex-wrap gap-1.5">
+                                {["FACEBOOK","INSTAGRAM","GMAIL","WEBSITE","PHONE_CALL","LINKEDIN"].map(s => (
+                                    <button key={s} onClick={() => setParam("source", sourceFilter === s ? "" : s)}
+                                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all ${sourceFilter === s ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"}`}>
+                                        {s === "PHONE_CALL" ? "Phone" : s.charAt(0) + s.slice(1).toLowerCase()}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Category */}
+                        <div>
+                            <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2"><Star className="h-3 w-3" />Category</label>
+                            <div className="flex flex-wrap gap-1.5">
+                                {[
+                                    { v: "PREMIUM", cls: "bg-purple-600 border-purple-600", idle: "border-purple-200 text-purple-700 hover:border-purple-400" },
+                                    { v: "HOT",     cls: "bg-red-500 border-red-500",       idle: "border-red-200 text-red-600 hover:border-red-400" },
+                                    { v: "WARM",    cls: "bg-amber-500 border-amber-500",   idle: "border-amber-200 text-amber-700 hover:border-amber-400" },
+                                    { v: "COLD",    cls: "bg-blue-500 border-blue-500",     idle: "border-blue-200 text-blue-600 hover:border-blue-400" },
+                                ].map(({ v, cls, idle }) => (
+                                    <button key={v} onClick={() => setParam("category", categoryFilter === v ? "" : v)}
+                                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all ${categoryFilter === v ? `${cls} text-white` : `bg-white ${idle}`}`}>
+                                        {v}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* SLA */}
+                        <div>
+                            <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2"><AlertTriangle className="h-3 w-3" />SLA Status</label>
+                            <div className="flex flex-wrap gap-1.5">
+                                {[
+                                    { v: "warning", label: "Warning (3+ days)", cls: "bg-amber-500 border-amber-500", idle: "border-amber-200 text-amber-700 hover:border-amber-400" },
+                                    { v: "breach",  label: "Breach (7+ days)",  cls: "bg-red-500 border-red-500",     idle: "border-red-200 text-red-600 hover:border-red-400"   },
+                                ].map(({ v, label, cls, idle }) => (
+                                    <button key={v} onClick={() => setParam("sla", slaFilter === v ? "" : v)}
+                                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all ${slaFilter === v ? `${cls} text-white` : `bg-white ${idle}`}`}>
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Score range */}
+                        <div>
+                            <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2"><Tag className="h-3 w-3" />Score Range</label>
+                            <div className="flex items-center gap-2">
+                                <input type="number" min="0" max="100" placeholder="Min" value={scoreMin}
+                                    onChange={e => setParam("score_min", e.target.value)}
+                                    className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-400 outline-none" />
+                                <span className="text-gray-400 text-xs">to</span>
+                                <input type="number" min="0" max="100" placeholder="Max" value={scoreMax}
+                                    onChange={e => setParam("score_max", e.target.value)}
+                                    className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-400 outline-none" />
+                            </div>
+                        </div>
+
+                        {/* Date range */}
+                        <div>
+                            <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2"><Calendar className="h-3 w-3" />Created Between</label>
+                            <div className="flex items-center gap-2">
+                                <input type="date" value={dateFrom}
+                                    onChange={e => setParam("startDate", e.target.value)}
+                                    className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-400 outline-none" />
+                                <span className="text-gray-400 text-xs">→</span>
+                                <input type="date" value={dateTo}
+                                    onChange={e => setParam("endDate", e.target.value)}
+                                    className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-400 outline-none" />
+                            </div>
+                        </div>
+
+                        {/* Assigned to (manager/admin only) */}
+                        {isManager && (
+                            <div>
+                                <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2"><User className="h-3 w-3" />Assigned To</label>
+                                <div className="flex items-center gap-2">
+                                    <select value={assignedToFilter} onChange={e => setParam("assignedTo", e.target.value)}
+                                        className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-400 outline-none bg-white">
+                                        <option value="">Anyone</option>
+                                        <option value="unassigned">Unassigned</option>
+                                        {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                    </select>
+                                    <button onClick={() => setParam("mine", mineFilter ? "" : "true")}
+                                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all whitespace-nowrap ${mineFilter ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"}`}>
+                                        <CheckCircle2 className="h-3 w-3" />Mine only
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Clear / close row */}
+                        <div className="sm:col-span-2 lg:col-span-3 flex items-center justify-between pt-2 border-t border-gray-100">
+                            <button onClick={clearAllFilters} className="text-xs font-semibold text-red-500 hover:text-red-700 flex items-center gap-1">
+                                <X className="h-3 w-3" />Clear all filters
+                            </button>
+                            <button onClick={() => setFilterOpen(false)} className="text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Bulk Action Bar */}

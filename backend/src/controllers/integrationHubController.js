@@ -168,6 +168,16 @@ const configure = async (req, res, next) => {
 
         // website_webhook is always connected (just show the URL)
         if (platform === "website_webhook") {
+            // Persist apiKey in metadata so safeIntegration can return it to the UI
+            // (config is stripped by safeIntegration to avoid leaking secrets, but apiKey
+            //  must be visible to the user so they can copy their existing embed code)
+            if (config?.apiKey) {
+                updateData.metadata = {
+                    ...(integration.metadata || {}),
+                    ...(updateData.metadata || {}),
+                    apiKey: config.apiKey,
+                };
+            }
             await prisma.integration.update({
                 where: { platform },
                 data: { ...updateData, isConnected: true, status: "CONNECTED", errorMessage: null },

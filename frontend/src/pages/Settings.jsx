@@ -8,6 +8,7 @@ import api from "../api/axios";
 import {
     Loader2, User, Bell, Lock, Download, Trash2, Save, Shield, Smartphone,
     Eye, EyeOff, Camera, X, CheckCircle, Mail, Layers, Plus, GripVertical, Clock,
+    Calendar, ExternalLink, Unlink,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import AuditLogs from "../components/AuditLogs";
@@ -45,6 +46,7 @@ const TABS = [
     { id: "security",      icon: Lock,     label: "Security" },
     { id: "notifications", icon: Bell,     label: "Notifications" },
     { id: "data",          icon: Download, label: "Data Export" },
+    { id: "integrations",  icon: Calendar, label: "Integrations" },
 ];
 
 const ADMIN_TABS = [
@@ -524,11 +526,111 @@ function LeadFieldsSettings() {
     );
 }
 
+// ─── Google Calendar Settings ────────────────────────────────────────────────
+
+function GoogleCalendarSettings() {
+    const queryClient = useQueryClient();
+    const { data, isLoading } = useQuery({
+        queryKey: ["gcal-status"],
+        queryFn: () => api.get("/google/calendar/status").then(r => r.data),
+    });
+
+    const connectMutation = useMutation({
+        mutationFn: () => api.get("/google/auth").then(r => r.data),
+        onSuccess: ({ url }) => { window.location.href = url; },
+        onError: () => toast.error("Failed to initiate Google sign-in"),
+    });
+
+    const disconnectMutation = useMutation({
+        mutationFn: () => api.post("/google/calendar/disconnect"),
+        onSuccess: () => {
+            toast.success("Google Calendar disconnected");
+            queryClient.invalidateQueries({ queryKey: ["gcal-status"] });
+        },
+        onError: () => toast.error("Failed to disconnect"),
+    });
+
+    if (isLoading) return (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <Loader2 className="h-5 w-5 animate-spin text-gray-400 mx-auto" />
+        </div>
+    );
+
+    const connected = data?.connected;
+    const connectedAt = data?.connectedAt ? new Date(data.connectedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : null;
+
+    return (
+        <div className="space-y-4">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+                <h2 className="text-base font-bold text-gray-900 mb-1">Integrations</h2>
+                <p className="text-sm text-gray-500 mb-6">Connect third-party services to your account.</p>
+
+                <div className="flex items-center justify-between p-4 rounded-xl border border-gray-200 bg-gray-50">
+                    <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center shadow-sm">
+                            <Calendar className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-semibold text-gray-900">Google Calendar</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                                {connected
+                                    ? `Connected${connectedAt ? ` on ${connectedAt}` : ""}. Reminders sync automatically.`
+                                    : "Connect to sync reminders and get calendar notifications."}
+                            </p>
+                        </div>
+                    </div>
+
+                    {connected ? (
+                        <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-0.5">
+                                <CheckCircle className="h-3 w-3" /> Connected
+                            </span>
+                            <button
+                                onClick={() => disconnectMutation.mutate()}
+                                disabled={disconnectMutation.isPending}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 border border-red-200 rounded-xl hover:bg-red-50 disabled:opacity-50 transition-colors"
+                            >
+                                {disconnectMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5" />}
+                                Disconnect
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => connectMutation.mutate()}
+                            disabled={connectMutation.isPending}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        >
+                            {connectMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                            Connect Google
+                        </button>
+                    )}
+                </div>
+
+                {connected && (
+                    <div className="mt-4 p-4 rounded-xl border border-blue-100 bg-blue-50">
+                        <p className="text-xs text-blue-700 font-medium mb-1">How it works</p>
+                        <ul className="text-xs text-blue-600 space-y-1 list-disc list-inside">
+                            <li>When you create a reminder, you can add it directly to your Google Calendar.</li>
+                            <li>Google Calendar will send you email and popup notifications at the reminder time.</li>
+                            <li>Reminders appear as 30-minute events with a 10-minute popup alert.</li>
+                        </ul>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ─── Main Settings Component ──────────────────────────────────────────────────
 
 const Settings = () => {
     const { user, refreshUser } = useAuth();
-    const [activeTab, setActiveTab] = useState("profile");
+    const [activeTab, setActiveTab] = useState(() => {
+        const params = new URLSearchParams(window.location.search);
+        const gcal = params.get("gcal");
+        if (gcal) return "integrations";
+        return "profile";
+    });
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState({ type: "", text: "" });
     const [showCurrentPass, setShowCurrentPass] = useState(false);
@@ -539,6 +641,17 @@ const Settings = () => {
     const [selectedPhotoFile, setSelectedPhotoFile] = useState(null);
     const [isEditMode, setIsEditMode] = useState(false);
     const fileInputRef = useRef(null);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const gcal = params.get("gcal");
+        if (!gcal) return;
+        if (gcal === "connected") toast.success("Google Calendar connected successfully!");
+        else if (gcal === "denied") toast.info("Google Calendar connection cancelled.");
+        else if (gcal === "no_refresh_token") toast.error("Google sign-in didn't return a refresh token. Please try connecting again.");
+        else toast.error("Google Calendar connection failed. Please try again.");
+        window.history.replaceState({}, "", window.location.pathname);
+    }, []);
 
     const { register: registerProfile, handleSubmit: handleProfileSubmit } = useForm({
         resolver: zodResolver(profileSchema),
@@ -809,6 +922,8 @@ const Settings = () => {
                             </div>
                         </div>
                     )}
+
+                    {activeTab === "integrations" && <GoogleCalendarSettings />}
 
                     {activeTab === "email"       && user?.role === "SUPER_ADMIN" && <SmtpSettings />}
                     {activeTab === "lead-fields" && user?.role === "SUPER_ADMIN" && <LeadFieldsSettings />}

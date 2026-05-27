@@ -168,6 +168,11 @@ app.use("/api/email-templates",  require("./routes/emailTemplates"));
 app.use("/api/leads/:id/journey", require("./routes/journey"));
 // Public — no auth middleware (email clients load pixel without session)
 app.use("/api/email-track",     require("./routes/emailTrack"));
+app.use("/api/google",          require("./routes/googleCalendar"));
+// Public — Google Ads Lead Form Extensions webhook (no auth, key-verified)
+app.use("/api/google-ads",      require("./routes/googleAdsWebhook"));
+// Public — Website embed form (wide-open CORS, API-key auth)
+app.use("/api/public/leads",    require("./routes/publicLeads"));
 
 // Global error handler — must be last middleware
 const { ApiError } = require("./utils/apiError");

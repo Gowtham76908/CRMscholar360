@@ -1,51 +1,62 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./context/AuthContext";
 import AppLayout from "./layouts/AppLayout";
-import LandingPage from "./pages/LandingPage";
-import Login from "./pages/Login";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import Dashboard from "./pages/Dashboard";
-import Team from "./pages/Team";
-import Tasks from "./pages/Tasks";
-import Leads from "./pages/Leads";
-import Integrations from "./pages/Integrations";
-import IntegrationHub from "./pages/IntegrationHub";
-import Settings from "./pages/Settings";
-import Reports from "./pages/Reports";
-import Departments from "./pages/Departments";
-import DepartmentDetails from "./pages/DepartmentDetails";
-import Messages from "./pages/Messages";
-import Attendance from "./pages/Attendance";
-import Leave from "./pages/Leave";
-import Leaderboard from "./pages/Leaderboard";
-import SearchLeads from "./pages/SearchLeads";
-import LinkedInLeads from "./pages/LinkedInLeads";
-import Kanban from "./pages/Kanban";
-import Sprints from "./pages/Sprints";
-import SprintAnalytics from "./pages/SprintAnalytics";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import TaskDetail from "./pages/TaskDetail";
-import LeadDetail from "./pages/LeadDetail";
-import InvoiceBilling from "./pages/InvoiceBilling";
-import SalestrailCalls from "./pages/SalestrailCalls";
-import Automations from "./pages/Automations";
-import Inbox from "./pages/Inbox";
-import WhatsAppCampaigns from "./pages/WhatsAppCampaigns";
-import WhatsAppCampaignDetail from "./pages/WhatsAppCampaignDetail";
-import WhatsAppAutoReplies from "./pages/WhatsAppAutoReplies";
-import Duplicates from "./pages/Duplicates";
-import TeamManagement from "./pages/TeamManagement";
-import UnassignedLeads from "./pages/UnassignedLeads";
-import TeamPerformance from "./pages/TeamPerformance";
-import EmployeeReport from "./pages/EmployeeReport";
-import RevenueReport from "./pages/RevenueReport";
-import LeadJourney from "./pages/LeadJourney";
-import Deals from "./pages/Deals";
-import DealPipeline from "./pages/DealPipeline";
-import DealDetail from "./pages/DealDetail";
-import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
+
+// ── Eager: tiny pages needed before auth resolves ────────────────────────────
+import LandingPage    from "./pages/LandingPage";
+import Login          from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword  from "./pages/ResetPassword";
+import NotFound       from "./pages/NotFound";
+
+// ── Lazy: all protected pages ────────────────────────────────────────────────
+const Dashboard              = lazy(() => import("./pages/Dashboard"));
+const Team                   = lazy(() => import("./pages/Team"));
+const Tasks                  = lazy(() => import("./pages/Tasks"));
+const TaskDetail             = lazy(() => import("./pages/TaskDetail"));
+const Leads                  = lazy(() => import("./pages/Leads"));
+const LeadDetail             = lazy(() => import("./pages/LeadDetail"));
+const LeadJourney            = lazy(() => import("./pages/LeadJourney"));
+const Kanban                 = lazy(() => import("./pages/Kanban"));
+const Deals                  = lazy(() => import("./pages/Deals"));
+const DealPipeline           = lazy(() => import("./pages/DealPipeline"));
+const DealDetail             = lazy(() => import("./pages/DealDetail"));
+const Sprints                = lazy(() => import("./pages/Sprints"));
+const SprintAnalytics        = lazy(() => import("./pages/SprintAnalytics"));
+const SearchLeads            = lazy(() => import("./pages/SearchLeads"));
+const LinkedInLeads          = lazy(() => import("./pages/LinkedInLeads"));
+const IntegrationHub         = lazy(() => import("./pages/IntegrationHub"));
+const Settings               = lazy(() => import("./pages/Settings"));
+const Reports                = lazy(() => import("./pages/Reports"));
+const Departments            = lazy(() => import("./pages/Departments"));
+const DepartmentDetails      = lazy(() => import("./pages/DepartmentDetails"));
+const Messages               = lazy(() => import("./pages/Messages"));
+const Attendance             = lazy(() => import("./pages/Attendance"));
+const Leave                  = lazy(() => import("./pages/Leave"));
+const Leaderboard            = lazy(() => import("./pages/Leaderboard"));
+const InvoiceBilling         = lazy(() => import("./pages/InvoiceBilling"));
+const SalestrailCalls        = lazy(() => import("./pages/SalestrailCalls"));
+const Automations            = lazy(() => import("./pages/Automations"));
+const Inbox                  = lazy(() => import("./pages/Inbox"));
+const WhatsAppCampaigns      = lazy(() => import("./pages/WhatsAppCampaigns"));
+const WhatsAppCampaignDetail = lazy(() => import("./pages/WhatsAppCampaignDetail"));
+const WhatsAppAutoReplies    = lazy(() => import("./pages/WhatsAppAutoReplies"));
+const Duplicates             = lazy(() => import("./pages/Duplicates"));
+const TeamManagement         = lazy(() => import("./pages/TeamManagement"));
+const UnassignedLeads        = lazy(() => import("./pages/UnassignedLeads"));
+const TeamPerformance        = lazy(() => import("./pages/TeamPerformance"));
+const EmployeeReport         = lazy(() => import("./pages/EmployeeReport"));
+const RevenueReport          = lazy(() => import("./pages/RevenueReport"));
+
+// ── Fallback spinner ─────────────────────────────────────────────────────────
+const PageLoader = () => (
+  <div className="flex items-center justify-center h-screen">
+    <div className="h-8 w-8 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin" />
+  </div>
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -64,57 +75,59 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login"            element={<Login />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password"  element={<ResetPassword />} />
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/"                element={<LandingPage />} />
+            <Route path="/login"           element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password"  element={<ResetPassword />} />
 
-          {/* Protected Routes */}
-          <Route element={<ErrorBoundary><AppLayout /></ErrorBoundary>}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/search-leads" element={<SearchLeads />} />
-            <Route path="/linkedin-leads" element={<LinkedInLeads />} />
-            <Route path="/kanban" element={<Kanban />} />
-            <Route path="/sprints" element={<Sprints />} />
-            <Route path="/sprint-analytics/:id" element={<SprintAnalytics />} />
-            <Route path="/leads" element={<Leads />} />
-            <Route path="/deals" element={<Deals />} />
-            <Route path="/deals/pipeline" element={<DealPipeline />} />
-            <Route path="/deals/:id" element={<DealDetail />} />
-            <Route path="/leads/:id" element={<LeadDetail />} />
-            <Route path="/leads/:id/journey" element={<LeadJourney />} />
-            <Route path="/team" element={<Team />} />
-            <Route path="/inbox" element={<Inbox />} />
-            <Route path="/tasks" element={<Tasks />} />
-            <Route path="/tasks/:id" element={<TaskDetail />} />
-            <Route path="/integrations" element={<IntegrationHub />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/departments" element={<Departments />} />
-            <Route path="/departments/:id" element={<DepartmentDetails />} />
-            <Route path="/messages" element={<Messages />} />
-            <Route path="/attendance" element={<Attendance />} />
-            <Route path="/leave" element={<Leave />} />
-            <Route path="/leaderboard" element={<Leaderboard />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/invoices" element={<InvoiceBilling />} />
-            <Route path="/salestrail" element={<SalestrailCalls />} />
-            <Route path="/automations" element={<Automations />} />
-            <Route path="/whatsapp/campaigns" element={<WhatsAppCampaigns />} />
-            <Route path="/whatsapp/campaigns/:id" element={<WhatsAppCampaignDetail />} />
-            <Route path="/whatsapp/auto-replies" element={<WhatsAppAutoReplies />} />
-            <Route path="/duplicates" element={<Duplicates />} />
-            <Route path="/team-management" element={<TeamManagement />} />
-            <Route path="/unassigned-leads" element={<UnassignedLeads />} />
-            <Route path="/team-performance" element={<TeamPerformance />} />
-            <Route path="/employee-report/:id" element={<EmployeeReport />} />
-            <Route path="/revenue-report" element={<RevenueReport />} />
-            <Route path="*" element={<NotFound />} />
-          </Route>
+            {/* Protected routes */}
+            <Route element={<ErrorBoundary><AppLayout /></ErrorBoundary>}>
+              <Route path="/dashboard"                element={<Dashboard />} />
+              <Route path="/search-leads"             element={<SearchLeads />} />
+              <Route path="/linkedin-leads"           element={<LinkedInLeads />} />
+              <Route path="/kanban"                   element={<Kanban />} />
+              <Route path="/sprints"                  element={<Sprints />} />
+              <Route path="/sprint-analytics/:id"     element={<SprintAnalytics />} />
+              <Route path="/leads"                    element={<Leads />} />
+              <Route path="/deals"                    element={<Deals />} />
+              <Route path="/deals/pipeline"           element={<DealPipeline />} />
+              <Route path="/deals/:id"                element={<DealDetail />} />
+              <Route path="/leads/:id"                element={<LeadDetail />} />
+              <Route path="/leads/:id/journey"        element={<LeadJourney />} />
+              <Route path="/team"                     element={<Team />} />
+              <Route path="/inbox"                    element={<Inbox />} />
+              <Route path="/tasks"                    element={<Tasks />} />
+              <Route path="/tasks/:id"                element={<TaskDetail />} />
+              <Route path="/integrations"             element={<IntegrationHub />} />
+              <Route path="/reports"                  element={<Reports />} />
+              <Route path="/departments"              element={<Departments />} />
+              <Route path="/departments/:id"          element={<DepartmentDetails />} />
+              <Route path="/messages"                 element={<Messages />} />
+              <Route path="/attendance"               element={<Attendance />} />
+              <Route path="/leave"                    element={<Leave />} />
+              <Route path="/leaderboard"              element={<Leaderboard />} />
+              <Route path="/settings"                 element={<Settings />} />
+              <Route path="/invoices"                 element={<InvoiceBilling />} />
+              <Route path="/salestrail"               element={<SalestrailCalls />} />
+              <Route path="/automations"              element={<Automations />} />
+              <Route path="/whatsapp/campaigns"       element={<WhatsAppCampaigns />} />
+              <Route path="/whatsapp/campaigns/:id"   element={<WhatsAppCampaignDetail />} />
+              <Route path="/whatsapp/auto-replies"    element={<WhatsAppAutoReplies />} />
+              <Route path="/duplicates"               element={<Duplicates />} />
+              <Route path="/team-management"          element={<TeamManagement />} />
+              <Route path="/unassigned-leads"         element={<UnassignedLeads />} />
+              <Route path="/team-performance"         element={<TeamPerformance />} />
+              <Route path="/employee-report/:id"      element={<EmployeeReport />} />
+              <Route path="/revenue-report"           element={<RevenueReport />} />
+              <Route path="*"                         element={<NotFound />} />
+            </Route>
 
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </Suspense>
       </AuthProvider>
     </QueryClientProvider>
   );

@@ -12,7 +12,12 @@ const getLeadsSchema = z.object({
     sortOrder: z.enum(["asc", "desc"]).default("desc"),
     isSearchLead: z.any().optional().transform(v => v === 'true' || v === true ? true : v === 'false' || v === false ? false : undefined),
     score_min: z.coerce.number().int().min(0).max(100).optional(),
+    score_max: z.coerce.number().int().min(0).max(100).optional(),
     mine: z.any().optional().transform(v => v === 'true' || v === true ? true : v === 'false' || v === false ? false : undefined),
+    source: z.enum(["FACEBOOK", "INSTAGRAM", "GMAIL", "WEBSITE", "PHONE_CALL", "LINKEDIN"]).optional(),
+    category: z.enum(["PREMIUM", "HOT", "WARM", "COLD"]).optional(),
+    enquiryType: z.string().trim().max(50).optional(),
+    sla: z.enum(["breach", "warning"]).optional(),
 })
 .refine((data) => {
     if (data.startDate && data.endDate) {

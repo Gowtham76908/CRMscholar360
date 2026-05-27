@@ -1,11 +1,11 @@
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import api from "../../api/axios";
 import { toast } from "sonner";
 import {
     Phone, Mail, Building2, Briefcase, Linkedin,
     Bell, Plus, Loader2, MessageCircle, CheckCircle, XCircle,
-    ChevronDown, Sparkles,
+    ChevronDown, Sparkles, Calendar,
 } from "lucide-react";
 
 const SCORE_CONFIG = (score) => {
@@ -45,7 +45,15 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId 
     const [showReminderForm, setShowReminderForm] = useState(false);
     const [reminderMsg, setReminderMsg] = useState("");
     const [reminderAt, setReminderAt] = useState("");
+    const [addToGcal, setAddToGcal] = useState(false);
     const [scoreExpanded, setScoreExpanded] = useState(false);
+
+    const { data: gcalStatus } = useQuery({
+        queryKey: ["gcal-status"],
+        queryFn: () => api.get("/google/calendar/status").then(r => r.data),
+        staleTime: 60_000,
+    });
+    const gcalConnected = gcalStatus?.connected;
 
     const scoreConf = SCORE_CONFIG(lead.score ?? 0);
 
@@ -63,11 +71,29 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId 
 
     const addReminder = useMutation({
         mutationFn: (data) => api.post("/reminders", data),
-        onSuccess: () => {
+        onSuccess: async (res) => {
             queryClient.invalidateQueries({ queryKey: ["lead-reminders", leadId] });
+            if (addToGcal && gcalConnected) {
+                try {
+                    const reminderId = res.data?.id;
+                    await api.post("/google/calendar/events", {
+                        summary: reminderMsg.trim() || "CRM Reminder",
+                        description: `Lead: ${lead?.name || leadId}`,
+                        startTime: reminderAt,
+                        reminderId,
+                        leadId,
+                    });
+                    toast.success("Reminder set & added to Google Calendar");
+                } catch {
+                    toast.success("Reminder set (Google Calendar sync failed)");
+                }
+            } else {
+                toast.success("Reminder set");
+            }
             setShowReminderForm(false);
             setReminderMsg("");
             setReminderAt("");
+            setAddToGcal(false);
         },
     });
 
@@ -271,6 +297,19 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId 
                             onChange={e => setReminderAt(e.target.value)}
                             className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
                         />
+                        {gcalConnected && (
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={addToGcal}
+                                    onChange={e => setAddToGcal(e.target.checked)}
+                                    className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
+                                />
+                                <span className="flex items-center gap-1 text-xs text-gray-600">
+                                    <Calendar className="h-3 w-3 text-blue-500" /> Add to Google Calendar
+                                </span>
+                            </label>
+                        )}
                         <div className="flex gap-2">
                             <button
                                 type="submit"
