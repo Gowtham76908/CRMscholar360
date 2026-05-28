@@ -1,5 +1,6 @@
 const router         = require("express").Router();
 const authMiddleware = require("../middleware/authMiddleware");
+const rateLimiter    = require("../assistant/rateLimiter");
 const { chatHandler, isAssistantEnabled } = require("../assistant/assistantController");
 
 router.get("/health", (req, res) => {
@@ -12,6 +13,6 @@ router.get("/health", (req, res) => {
     });
 });
 
-router.post("/chat", authMiddleware, chatHandler);
+router.post("/chat", authMiddleware, rateLimiter.limit, chatHandler);
 
 module.exports = router;

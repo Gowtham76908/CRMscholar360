@@ -103,9 +103,13 @@ export default function AssistantWidget() {
             setMessages(m => [...m, { role: "assistant", content: reply }]);
             if (voiceOut) tts.speak(reply);
         } catch (err) {
-            const type    = err.response?.data?.error?.type;
-            const fallback = err.response?.data?.error?.message || "Something went wrong.";
-            const content = FRIENDLY_ERROR[type] || fallback;
+            const type        = err.response?.data?.error?.type;
+            const fallback    = err.response?.data?.error?.message || "Something went wrong.";
+            const retryAfter  = err.response?.headers?.["retry-after"];
+            let   content     = FRIENDLY_ERROR[type] || fallback;
+            if (type === "RATE_LIMITED" && retryAfter) {
+                content = `Too many requests. Try again in ${retryAfter}s.`;
+            }
             setMessages(m => [...m, { role: "assistant", content, error: true }]);
         } finally {
             setSending(false);
@@ -192,11 +196,27 @@ export default function AssistantWidget() {
                                 value={input}
                                 onChange={e => setInput(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                placeholder="Ask anything…"
+                                placeholder={mic.listening ? "Listening…" : "Ask anything…"}
                                 rows={1}
                                 disabled={sending}
                                 className="flex-1 resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500 max-h-32"
                             />
+                            {mic.supported && (
+                                <button
+                                    onClick={handleMicClick}
+                                    disabled={sending}
+                                    aria-label={mic.listening ? "Stop listening" : "Speak your message"}
+                                    title={mic.listening ? "Listening — click to stop" : "Click to speak"}
+                                    className={cn(
+                                        "h-9 w-9 rounded-xl flex items-center justify-center transition-colors shrink-0 disabled:cursor-not-allowed",
+                                        mic.listening
+                                            ? "bg-red-500 hover:bg-red-600 text-white animate-pulse"
+                                            : "bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:bg-gray-50 disabled:text-gray-400",
+                                    )}
+                                >
+                                    <Mic className="h-4 w-4" />
+                                </button>
+                            )}
                             <button
                                 onClick={handleSend}
                                 disabled={!input.trim() || sending}
@@ -207,7 +227,7 @@ export default function AssistantWidget() {
                             </button>
                         </div>
                         <p className="text-[10px] text-gray-400 mt-1.5 px-1">
-                            Enter to send · Shift+Enter for new line
+                            Enter to send · Shift+Enter for new line{mic.supported && " · 🎙 to speak"}
                         </p>
                     </div>
                 </div>

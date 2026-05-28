@@ -13,6 +13,7 @@ const ROLE_TOOLS = {
         "count_leads_by_status",
         "list_my_tasks",
         "get_pipeline_summary",
+        "get_top_leads_by_revenue",
     ],
     MANAGER: [
         "search_leads",
@@ -20,6 +21,7 @@ const ROLE_TOOLS = {
         "list_my_tasks",
         "get_pipeline_summary",
         "get_revenue_stats",
+        "get_top_leads_by_revenue",
     ],
     SUPER_ADMIN: [
         "search_leads",
@@ -27,6 +29,7 @@ const ROLE_TOOLS = {
         "list_my_tasks",
         "get_pipeline_summary",
         "get_revenue_stats",
+        "get_top_leads_by_revenue",
     ],
 };
 

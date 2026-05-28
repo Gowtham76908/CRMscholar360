@@ -118,6 +118,7 @@ const Leads = () => {
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const queryClient = useQueryClient();
     const { user } = useAuth();
+    const isManager = ["SUPER_ADMIN", "MANAGER"].includes(user?.role);
 
     const { data: leadsData, isLoading, isFetching } = useQuery({
         queryKey: ["leads", page, searchTerm, statusFilter, activeTab, sortBy, sortOrder, scoreMin, scoreMax, mineFilter, sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, assignedToFilter],
@@ -226,8 +227,6 @@ const Leads = () => {
             setSelectedLeads([...selectedLeads, id]);
         }
     };
-
-    const isManager = ["SUPER_ADMIN", "MANAGER"].includes(user?.role);
 
     const smartAssignMutation = useMutation({
         mutationFn: (leadIds) => api.post("/leads/bulk-smart-assign", { leadIds }).then((r) => r.data),

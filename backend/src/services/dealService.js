@@ -236,6 +236,46 @@ const getDealInvoices = async (id, userId, role) => {
     });
 };
 
+const getTopLeadsByRevenue = async (userId, role, { stage = "WON", limit = 5 } = {}) => {
+    const where = { ...rbacWhere(userId, role), stage };
+
+    const grouped = await prisma.deal.groupBy({
+        by:      ["leadId"],
+        where,
+        _sum:    { amount: true },
+        _count:  { _all: true },
+        orderBy: { _sum: { amount: "desc" } },
+        take:    Math.max(1, Math.min(20, limit)),
+    });
+
+    const leadIds = grouped.map(g => g.leadId).filter(Boolean);
+    if (leadIds.length === 0) return { stage, count: 0, leads: [] };
+
+    const leads = await prisma.lead.findMany({
+        where:  { id: { in: leadIds } },
+        select: { id: true, name: true, status: true, email: true, phone: true, company: true },
+    });
+    const leadMap = new Map(leads.map(l => [l.id, l]));
+
+    return {
+        stage,
+        count: grouped.length,
+        leads: grouped.map(g => {
+            const l = leadMap.get(g.leadId);
+            return {
+                leadId:      g.leadId,
+                leadName:    l?.name    ?? "(unknown lead)",
+                leadStatus:  l?.status  ?? null,
+                email:       l?.email   ?? null,
+                phone:       l?.phone   ?? null,
+                company:     l?.company ?? null,
+                totalAmount: g._sum.amount || 0,
+                dealCount:   g._count._all,
+            };
+        }),
+    };
+};
+
 const getRevenueStats = async () => {
     const invoices = await prisma.invoice.findMany({
         where: { status: { not: "CANCELLED" } },
@@ -267,4 +307,4 @@ const getRevenueStats = async () => {
     };
 };
 
-module.exports = { createDeal, listDeals, getDealById, updateDeal, softDeleteDeal, getPipelineDeals, getPipelineMembers, getDealInvoices, getRevenueStats };
+module.exports = { createDeal, listDeals, getDealById, updateDeal, softDeleteDeal, getPipelineDeals, getPipelineMembers, getDealInvoices, getRevenueStats, getTopLeadsByRevenue };

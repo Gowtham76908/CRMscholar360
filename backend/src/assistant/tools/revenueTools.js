@@ -1,4 +1,4 @@
-const { getPipelineDeals, getRevenueStats } = require("../../services/dealService");
+const { getPipelineDeals, getRevenueStats, getTopLeadsByRevenue } = require("../../services/dealService");
 
 const get_pipeline_summary = {
     name:        "get_pipeline_summary",
@@ -25,4 +25,28 @@ const get_revenue_stats = {
     execute: async (_args, _ctx) => getRevenueStats(),
 };
 
-module.exports = { get_pipeline_summary, get_revenue_stats };
+const get_top_leads_by_revenue = {
+    name:        "get_top_leads_by_revenue",
+    description: "Top leads ranked by total deal amount in a given stage. Use this for questions like 'top customers by revenue', 'biggest accounts', 'which leads brought the most money', 'top deals in negotiation'. Defaults to WON (realised revenue). Returns lead id (use for entity links), name, status, contact, summed amount, and deal count. RBAC: EMPLOYEE = own deals, MANAGER = team, SUPER_ADMIN = all. Amounts in INR.",
+    parameters:  {
+        type: "object",
+        properties: {
+            stage: {
+                type:        "string",
+                enum:        ["WON", "NEW", "NEGOTIATION", "LOST"],
+                description: "Deal stage to aggregate. WON = realised revenue, NEW/NEGOTIATION = pipeline value, LOST = lost opportunities. Default WON.",
+            },
+            limit: {
+                type:        "integer",
+                minimum:     1,
+                maximum:     20,
+                description: "How many top leads to return (default 5).",
+            },
+        },
+        required: [],
+    },
+    execute: async ({ stage, limit }, { userId, role }) =>
+        getTopLeadsByRevenue(userId, role, { stage: stage ?? "WON", limit: limit ?? 5 }),
+};
+
+module.exports = { get_pipeline_summary, get_revenue_stats, get_top_leads_by_revenue };
