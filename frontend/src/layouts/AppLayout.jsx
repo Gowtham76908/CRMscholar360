@@ -8,6 +8,7 @@ import ContextPanel from "../components/nav/ContextPanel";
 import MobileNav from "../components/nav/MobileNav";
 import Navbar from "../components/Navbar";
 import CommandPalette from "../components/CommandPalette";
+import AssistantWidget from "../components/AssistantWidget";
 
 export default function AppLayout() {
     const { isAuthenticated, loading } = useAuth();
@@ -78,6 +79,7 @@ export default function AppLayout() {
             <MobileNav onModeClick={handleModeClick} />
 
             <CommandPalette />
+            <AssistantWidget />
             <Toaster
                 position="bottom-right"
                 richColors

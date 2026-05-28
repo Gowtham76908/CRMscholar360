@@ -125,6 +125,7 @@ app.use("/api/demo-booking", require("./routes/demoBooking")); // public booking
 // Every router listed here MUST call router.use(authMiddleware) at its top.
 // Adding a new router? Ensure it starts with router.use(authMiddleware) before
 // any route definitions — otherwise its endpoints will be publicly accessible.
+app.use("/api/assistant",        require("./routes/assistant"));
 app.use("/api/users",           userRoutes);
 app.use("/api/leads",           leadRoutes);
 app.use("/api/team",            teamRoutes);
