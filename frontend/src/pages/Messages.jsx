@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from "react";
-import { StreamChat } from "stream-chat";
+import { useState, lazy, Suspense } from "react";
 import {
     Chat,
     Channel,
@@ -12,24 +11,19 @@ import {
     useChannelStateContext,
     MessageSimple,
 } from "stream-chat-react";
-import {
-    StreamVideo,
-    StreamVideoClient,
-    StreamCall,
-    StreamTheme,
-    SpeakerLayout,
-    CallControls,
-} from "@stream-io/video-react-sdk";
-import "@stream-io/video-react-sdk/dist/css/styles.css";
 import "stream-chat-react/dist/css/v2/index.css";
 
+// Video calling pulls in the heavy @stream-io/video-react-sdk. Load it only
+// when a call actually starts, so opening Messages stays light.
+const VideoCall = lazy(() => import("../components/VideoCall"));
+
 import { useAuth } from "../context/AuthContext";
+import { useChat } from "../context/ChatContext";
 import api from "../api/axios";
 import { toast } from "sonner";
 import {
-    Loader2, Video, Search, Plus, X, User, UserPlus, Users,
-    Check, CheckCheck, MessageSquare, Hash, AtSign, Sparkles,
-    Phone, RefreshCw,
+    Loader2, Video, Search, Plus, X, UserPlus, Users,
+    Check, CheckCheck, MessageSquare, Hash, AtSign,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -206,51 +200,19 @@ const CustomChannelHeader = ({ onCall, onAddMember, onShowMembers }) => {
 // ── Main page ─────────────────────────────────────────────────────────────────
 const Messages = () => {
     const { user } = useAuth();
-    const [chatClient,    setChatClient]    = useState(null);
-    const [videoClient,   setVideoClient]   = useState(null);
+    const { chatClient, videoCreds } = useChat();
     const [isCreating,    setIsCreating]    = useState(false);
     const [activeCall,    setActiveCall]    = useState(null);
     const [userSearch,    setUserSearch]    = useState("");
     const [activeChannel, setActiveChannel] = useState(null);
-    const [loading,       setLoading]       = useState(true);
-    const [initError,     setInitError]     = useState(null);
     const [showAddMember, setShowAddMember] = useState(false);
     const [showMembers,   setShowMembers]   = useState(false);
-    const [seeding,       setSeeding]       = useState(false);
 
     const { data: allUsers } = useQuery({
         queryKey: ["chatUsers"],
         queryFn:  () => api.get("/chat/users").then(r => r.data),
         enabled:  !!user,
     });
-
-    useEffect(() => {
-        let _chat, _video, mounted = true;
-        const init = async () => {
-            setLoading(true);
-            setInitError(null);
-            try {
-                const { data } = await api.post("/chat/token");
-                const { token, apiKey, user: su } = data;
-                if (!mounted) return;
-                const client = StreamChat.getInstance(apiKey);
-                if (client.userID !== su.id) await client.connectUser(su, token);
-                _chat  = client;
-                _video = new StreamVideoClient({ apiKey, user: su, token });
-                if (mounted) { setChatClient(client); setVideoClient(_video); setLoading(false); }
-            } catch (e) {
-                console.error(e);
-                if (mounted) { setInitError("Failed to connect to chat server."); setLoading(false); }
-            }
-        };
-        if (user) init();
-        else setLoading(false);
-        return () => {
-            mounted = false;
-            _chat?.disconnectUser().catch(() => {});
-            _video?.disconnectUser().catch(() => {});
-        };
-    }, [user]);
 
     const startDM = async (targetId) => {
         try {
@@ -264,25 +226,13 @@ const Messages = () => {
         }
     };
 
-    const seedData = async () => {
-        setSeeding(true);
-        try {
-            await api.post("/chat/seed");
-            toast.success("Demo data seeded! Refresh channels.");
-        } catch {
-            toast.error("Seed failed — check backend logs.");
-        } finally {
-            setSeeding(false);
-        }
-    };
-
     const filteredUsers = (allUsers || []).filter(u =>
         u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
         u.email?.toLowerCase().includes(userSearch.toLowerCase())
     );
 
-    // ── Loading ──
-    if (loading) return (
+    // Chat connection is owned by ChatContext (connects once after login).
+    if (!chatClient) return (
         <div className="flex-1 flex flex-col items-center justify-center h-full bg-[#FAFAFA]">
             <div className="h-12 w-12 rounded-2xl bg-[#FFF7ED] border border-[#FED7AA] flex items-center justify-center mb-4">
                 <Loader2 className="h-6 w-6 animate-spin text-[#F97316]" />
@@ -291,27 +241,18 @@ const Messages = () => {
         </div>
     );
 
-    if (initError) return (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#FAFAFA]">
-            <div className="h-14 w-14 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mb-4">
-                <X className="h-7 w-7 text-red-500" />
-            </div>
-            <h3 className="text-base font-bold text-[#18181B] mb-1">Connection Error</h3>
-            <p className="text-sm text-[#71717A] max-w-xs mb-5">{initError}</p>
-            <button onClick={() => window.location.reload()}
-                className="px-5 py-2 bg-[#F97316] text-white rounded-xl hover:bg-[#FB923C] transition-colors font-medium text-sm">
-                Retry
-            </button>
-        </div>
-    );
-
-    if (!chatClient || !videoClient) return null;
-
     return (
         <div className="h-[calc(100vh-4rem)] bg-white rounded-2xl overflow-hidden border border-[#E4E4E7] shadow-sm flex">
             <Chat client={chatClient} theme="messaging light">
                 {activeCall ? (
-                    <VideoCallComponent client={videoClient} callId={activeCall} onLeave={() => setActiveCall(null)} />
+                    <Suspense fallback={
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-950 text-white gap-3">
+                            <Loader2 className="animate-spin h-8 w-8 text-[#F97316]" />
+                            <p className="text-gray-400 text-sm">Loading call…</p>
+                        </div>
+                    }>
+                        <VideoCall creds={videoCreds} callId={activeCall} onLeave={() => setActiveCall(null)} />
+                    </Suspense>
                 ) : (
                     <div className="flex w-full h-full">
 
@@ -325,18 +266,11 @@ const Messages = () => {
                                     </div>
                                     <span className="font-bold text-[#18181B] text-sm">Messages</span>
                                 </div>
-                                <div className="flex items-center gap-1">
-                                    <button onClick={seedData} disabled={seeding}
-                                        title="Seed demo data"
-                                        className="p-1.5 rounded-lg text-[#71717A] hover:text-[#F97316] hover:bg-[#FFF7ED] transition-colors disabled:opacity-50">
-                                        <RefreshCw className={`h-3.5 w-3.5 ${seeding ? "animate-spin" : ""}`} />
-                                    </button>
-                                    <button onClick={() => setIsCreating(v => !v)}
-                                        className="p-1.5 rounded-lg text-[#71717A] hover:text-[#F97316] hover:bg-[#FFF7ED] transition-colors"
-                                        title="New group">
-                                        <Plus className="h-3.5 w-3.5" />
-                                    </button>
-                                </div>
+                                <button onClick={() => setIsCreating(v => !v)}
+                                    className="p-1.5 rounded-lg text-[#71717A] hover:text-[#F97316] hover:bg-[#FFF7ED] transition-colors"
+                                    title="New group">
+                                    <Plus className="h-4 w-4" />
+                                </button>
                             </div>
 
                             {/* Search */}
@@ -388,11 +322,10 @@ const Messages = () => {
                                     </div>
                                 ) : (
                                     <>
-                                        {/* Teams / Groups */}
+                                        {/* Groups */}
                                         <div className="px-2">
-                                            <div className="flex items-center justify-between px-2 py-1.5">
-                                                <span className="text-[10px] font-bold text-[#71717A] uppercase tracking-widest">Teams / Groups</span>
-                                                <span className="text-[9px] font-bold text-[#F97316] bg-[#FFF7ED] border border-[#FED7AA] px-1.5 py-0.5 rounded-full">BETA</span>
+                                            <div className="flex items-center px-2 py-1.5">
+                                                <span className="text-[10px] font-bold text-[#71717A] uppercase tracking-widest">Groups</span>
                                             </div>
                                             <ChannelList
                                                 filters={{ type: "team", members: { $in: [user.id] } }}
@@ -448,14 +381,6 @@ const Messages = () => {
                                         </div>
                                     </>
                                 )}
-                            </div>
-
-                            {/* Bottom: AI hint */}
-                            <div className="px-3 py-3 border-t border-[#E4E4E7]">
-                                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#FFF7ED] border border-[#FED7AA]">
-                                    <Sparkles className="h-3.5 w-3.5 text-[#F97316] shrink-0" />
-                                    <span className="text-[11px] text-[#71717A] leading-tight">AI summarize, task creation and lead linking coming soon</span>
-                                </div>
                             </div>
                         </div>
 
@@ -587,7 +512,7 @@ const CreateGroupView = ({ onClose, client, users, currentUser, setActiveChannel
 };
 
 // ── Add Member Modal ──────────────────────────────────────────────────────────
-const AddMemberModal = ({ channel, onClose, allUsers, currentUser }) => {
+const AddMemberModal = ({ channel, onClose, allUsers }) => {
     const [busy, setBusy] = useState(false);
     const memberIds = Object.keys(channel?.state?.members || {});
     const available = (allUsers || []).filter(u => !memberIds.includes(u.id));
@@ -598,7 +523,7 @@ const AddMemberModal = ({ channel, onClose, allUsers, currentUser }) => {
             await api.post("/chat/sync-user", { userId: uid });
             await channel.addMembers([uid]);
             toast.success("Member added!");
-        } catch (e) {
+        } catch {
             toast.error("Failed to add member.");
         } finally {
             setBusy(false);
@@ -696,53 +621,5 @@ const Modal = ({ title, onClose, children }) => (
     </div>
 );
 
-// ── Video Call ────────────────────────────────────────────────────────────────
-const VideoCallComponent = ({ client, callId, onLeave }) => {
-    const [call, setCall]   = useState(null);
-    const [err, setErr]     = useState(null);
-    const callRef           = useRef(null);
-
-    useEffect(() => {
-        const c = client.call("default", callId);
-        callRef.current = c;
-        c.join({ create: true }).then(() => setCall(c)).catch(e => {
-            console.error(e);
-            setErr("Failed to connect to call.");
-        });
-        return () => { callRef.current?.leave().catch(() => {}); };
-    }, [client, callId]);
-
-    if (err) return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-950 text-white gap-4">
-            <p className="text-red-400">{err}</p>
-            <button onClick={onLeave} className="bg-red-600 px-4 py-2 rounded-xl">Go Back</button>
-        </div>
-    );
-    if (!call) return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-950 text-white gap-3">
-            <Loader2 className="animate-spin h-8 w-8 text-[#F97316]" />
-            <p className="text-gray-400 text-sm">Connecting…</p>
-        </div>
-    );
-
-    return (
-        <StreamVideo client={client}>
-            <StreamCall call={call}>
-                <div className="w-full h-full flex flex-col bg-gray-950 relative">
-                    <div className="absolute top-4 left-4 z-50">
-                        <button onClick={onLeave}
-                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-medium shadow-lg transition-colors text-sm">
-                            End Call
-                        </button>
-                    </div>
-                    <StreamTheme>
-                        <SpeakerLayout />
-                        <CallControls onLeave={onLeave} />
-                    </StreamTheme>
-                </div>
-            </StreamCall>
-        </StreamVideo>
-    );
-};
 
 export default Messages;

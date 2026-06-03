@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./context/AuthContext";
+import { ChatProvider } from "./context/ChatContext";
 import AppLayout from "./layouts/AppLayout";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -85,7 +86,7 @@ function App() {
             <Route path="/reset-password"  element={<ResetPassword />} />
 
             {/* Protected routes */}
-            <Route element={<ErrorBoundary><AppLayout /></ErrorBoundary>}>
+            <Route element={<ErrorBoundary><ChatProvider><AppLayout /></ChatProvider></ErrorBoundary>}>
               <Route path="/dashboard"                element={<Dashboard />} />
               <Route path="/search-leads"             element={<SearchLeads />} />
               <Route path="/linkedin-leads"           element={<LinkedInLeads />} />

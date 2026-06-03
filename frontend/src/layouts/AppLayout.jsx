@@ -3,6 +3,7 @@ import { useState, useCallback, useMemo } from "react";
 import { Loader2 } from "lucide-react";
 import { Toaster } from "sonner";
 import { useAuth } from "../context/AuthContext";
+import { useChat } from "../context/ChatContext";
 import NavigationRail, { getModeFromPath } from "../components/nav/NavigationRail";
 import ContextPanel from "../components/nav/ContextPanel";
 import MobileNav from "../components/nav/MobileNav";
@@ -12,6 +13,7 @@ import AssistantWidget from "../components/AssistantWidget";
 
 export default function AppLayout() {
     const { isAuthenticated, loading } = useAuth();
+    const { totalUnread } = useChat();
     const location = useLocation();
     const navigate  = useNavigate();
 
@@ -58,6 +60,7 @@ export default function AppLayout() {
             <NavigationRail
                 panelOpen={panelOpen}
                 onModeClick={handleModeClick}
+                unreadCounts={{ communicate: totalUnread }}
             />
 
             {/* Zone 2 — Context Panel (240px) */}
@@ -76,7 +79,7 @@ export default function AppLayout() {
             </div>
 
             {/* Mobile bottom navigation */}
-            <MobileNav onModeClick={handleModeClick} />
+            <MobileNav onModeClick={handleModeClick} unreadCounts={{ communicate: totalUnread }} />
 
             <CommandPalette />
             <AssistantWidget />
