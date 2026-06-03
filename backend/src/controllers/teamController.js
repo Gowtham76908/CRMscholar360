@@ -1,6 +1,15 @@
 const prisma = require("../utils/prisma");
 const bcrypt = require("bcrypt");
 const { upsertUserToStream } = require("./chatController");
+const { getTeamMemberIds } = require("../services/organizationService");
+
+// A manager may only act on members of their own team; a super admin on anyone.
+async function canManage(reqUser, targetId) {
+    if (reqUser.role === "SUPER_ADMIN") return true;
+    if (reqUser.role !== "MANAGER") return false;
+    const teamIds = await getTeamMemberIds(reqUser.userId);
+    return teamIds.includes(targetId);
+}
 
 // Create User (Super Admin only)
 const createUser = async (req, res, next) => {
@@ -33,7 +42,11 @@ const createUser = async (req, res, next) => {
             }
         }
 
-        const { managerId } = req.body;
+        // Managers can only create employees, and the new hire joins their own team.
+        let { managerId } = req.body;
+        if (req.user.role === "MANAGER") {
+            managerId = req.user.userId;
+        }
         if (managerId) {
             const { validateManagerAssignment } = require("../services/organizationService");
             const check = await validateManagerAssignment("__new__", managerId);
@@ -71,7 +84,14 @@ const createUser = async (req, res, next) => {
 // Get Team (Super Admin only)
 const getTeam = async (req, res, next) => {
     try {
+        // Managers see only their own team (plus themselves); super admins see everyone.
+        const where = {};
+        if (req.user.role === "MANAGER") {
+            const teamIds = await getTeamMemberIds(req.user.userId);
+            where.id = { in: [...teamIds, req.user.userId] };
+        }
         const team = await prisma.user.findMany({
+            where,
             select: {
                 id: true,
                 name: true,
@@ -104,6 +124,9 @@ const toggleUserAccess = async (req, res, next) => {
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
+        if (!(await canManage(req.user, id))) {
+            return res.status(403).json({ message: "You can only manage members of your own team" });
+        }
 
         const updatedUser = await prisma.user.update({
             where: { id },
@@ -121,13 +144,22 @@ const toggleUserAccess = async (req, res, next) => {
 const updateUser = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { name, phone, role, department, jobTitle, managerId } = req.body;
+        let { name, phone, role, department, jobTitle, managerId } = req.body;
 
         if (role === "SUPER_ADMIN") {
             return res.status(403).json({ message: "Cannot assign SUPER_ADMIN role" });
         }
         if (role === "MANAGER" && req.user.role !== "SUPER_ADMIN") {
             return res.status(403).json({ message: "Only Super Admins can assign the Manager role" });
+        }
+
+        if (!(await canManage(req.user, id))) {
+            return res.status(403).json({ message: "You can only manage members of your own team" });
+        }
+        // Managers cannot change a member's role or reassign them to another team.
+        if (req.user.role === "MANAGER") {
+            role = undefined;
+            managerId = undefined;
         }
 
         if (managerId !== undefined && managerId !== null) {
@@ -178,10 +210,14 @@ const updateUser = async (req, res, next) => {
     }
 };
 
-// Hard Delete User (Remove from DB)
+// Hard Delete User (Remove from DB) — destructive, SUPER_ADMIN only
 const deleteUser = async (req, res, next) => {
     try {
         const { id } = req.params;
+
+        if (req.user.role !== "SUPER_ADMIN") {
+            return res.status(403).json({ message: "Only Super Admins can permanently delete users" });
+        }
 
         const user = await prisma.user.findUnique({ where: { id } });
         if (!user) {

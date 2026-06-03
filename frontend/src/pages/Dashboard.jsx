@@ -561,7 +561,7 @@ const Dashboard = () => {
     });
 
     const completeTask = useMutation({
-        mutationFn: (id) => api.patch(`/tasks/${id}`, { status: "COMPLETED" }),
+        mutationFn: (id) => api.patch(`/tasks/${id}/status`, { status: "COMPLETED" }),
         onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["tasks"] }); toast.success("Task marked complete"); },
         onError: () => toast.error("Failed to update task"),
     });

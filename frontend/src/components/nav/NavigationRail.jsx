@@ -67,9 +67,12 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
     const location = useLocation();
     const { user, onlineStatus } = useAuth();
     const isSuperAdmin = user?.role === "SUPER_ADMIN";
+    const isManager    = isSuperAdmin || user?.role === "MANAGER";
     const activeMode   = getModeFromPath(location.pathname);
 
-    const visibleModes = MODES.filter(m => !m.adminOnly || isSuperAdmin);
+    // The Admin mode is shown to managers too; AdminPanel gates individual links
+    // so managers only see what they're allowed to manage.
+    const visibleModes = MODES.filter(m => !m.adminOnly || isManager);
 
     // Keyboard shortcuts 1–5 for mode switching
     useEffect(() => {

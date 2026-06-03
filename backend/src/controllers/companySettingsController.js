@@ -1,5 +1,8 @@
 const prisma = require("../utils/prisma");
 const { createTransporter } = require("../services/emailService");
+const { invalidateAssistantSettings } = require("../assistant/settingsCache");
+
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
 const DEFAULT_SETTINGS = {
     companyName: "HEXITE TECHNOLOGIES PRIVATE LIMITED",
@@ -48,6 +51,7 @@ const ALLOWED_UPDATE_FIELDS = [
     "branch", "defaultTaxRate", "defaultNotes", "logoUrl", "currency",
     "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpSecure", "smtpFrom",
     "slaWarningDays", "slaBreachDays",
+    "assistantEnabled", "assistantRateLimitPerMin", "assistantMaxHistoryTurns",
 ];
 
 const updateSettings = async (req, res, next) => {
@@ -56,6 +60,20 @@ const updateSettings = async (req, res, next) => {
         for (const field of ALLOWED_UPDATE_FIELDS) {
             if (req.body[field] !== undefined) data[field] = req.body[field];
         }
+
+        // Clamp / coerce assistant fields so a bad UI input can't break the runtime.
+        if (data.assistantEnabled !== undefined) {
+            data.assistantEnabled = Boolean(data.assistantEnabled);
+        }
+        if (data.assistantRateLimitPerMin !== undefined) {
+            data.assistantRateLimitPerMin = clamp(parseInt(data.assistantRateLimitPerMin, 10) || 30, 1, 600);
+        }
+        if (data.assistantMaxHistoryTurns !== undefined) {
+            data.assistantMaxHistoryTurns = clamp(parseInt(data.assistantMaxHistoryTurns, 10) || 6, 0, 50);
+        }
+
+        const touchedAssistant = ["assistantEnabled", "assistantRateLimitPerMin", "assistantMaxHistoryTurns"]
+            .some((k) => data[k] !== undefined);
 
         let settings = await prisma.companySettings.findFirst();
         if (!settings) {
@@ -66,6 +84,9 @@ const updateSettings = async (req, res, next) => {
                 data,
             });
         }
+
+        if (touchedAssistant) invalidateAssistantSettings();
+
         res.json(settings);
     } catch (error) {
         return next(error);

@@ -10,7 +10,7 @@ router.use(authMiddleware);
 router.post("/token", chatController.createToken);
 
 // Create Group (Admin Only)
-router.post("/group", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), chatController.createGroupChannel);
+router.post("/group", roleMiddleware(["SUPER_ADMIN"]), chatController.createGroupChannel);
 
 // Start Direct Chat (Syncs users)
 router.post("/start", chatController.startDirectChat);
@@ -25,6 +25,6 @@ router.post("/sync-user", chatController.syncUserToStream);
 router.post("/sync-all-users", roleMiddleware(["SUPER_ADMIN"]), chatController.syncAllUsers);
 
 // Seed demo channels + messages
-router.post("/seed", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), chatController.seedDemoData);
+router.post("/seed", roleMiddleware(["SUPER_ADMIN"]), chatController.seedDemoData);
 
 module.exports = router;

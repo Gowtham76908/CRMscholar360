@@ -40,7 +40,7 @@ const formatRemindAt = (dt) => {
     return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + ` ${timeStr}`;
 };
 
-export default function LeadSidebar({ lead, reminders, remindersLoading, leadId }) {
+export default function LeadSidebar({ lead, reminders, remindersLoading, leadId, hideContact = false }) {
     const queryClient = useQueryClient();
     const [showReminderForm, setShowReminderForm] = useState(false);
     const [reminderMsg, setReminderMsg] = useState("");
@@ -108,7 +108,8 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId 
 
     return (
         <aside className="space-y-4">
-            {/* Contact Details */}
+            {/* Contact Details — hidden when the hero header already shows phone/email/assignee */}
+            {!hideContact && (
             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Contact</h3>
                 <ul className="space-y-2.5">
@@ -179,6 +180,7 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId 
                     )}
                 </ul>
             </div>
+            )}
 
             {/* Lead Score */}
             <div className={`border border-gray-200 rounded-xl p-4 shadow-sm ${scoreConf.bg}`}>

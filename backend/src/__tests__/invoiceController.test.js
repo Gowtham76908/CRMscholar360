@@ -10,11 +10,13 @@ jest.mock("../utils/prisma", () => ({
     $queryRaw: jest.fn(),
     invoice: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         findMany: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
         count: jest.fn(),
         groupBy: jest.fn(),
+        aggregate: jest.fn(),
     },
     invoiceItem: {
         deleteMany: jest.fn(),
@@ -62,6 +64,20 @@ function makeReq(overrides = {}) {
         ...overrides,
     };
 }
+
+// Mimics the global error handler in app.js so controllers that throw ApiError
+// can be exercised in isolation. Flattens code+message to top-level so the
+// test assertions can use `expect.objectContaining({ message })`.
+function makeNext(res) {
+    return (err) => {
+        if (!err) return;
+        const status = err.status || 500;
+        res.status(status).json({ code: err.code, message: err.message });
+    };
+}
+
+// Convenience wrapper: invokes a controller with auto-wired next.
+const invoke = (controller, req, res) => controller(req, res, makeNext(res));
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -132,7 +148,7 @@ describe("createInvoice — validation", () => {
     test("returns 400 when clientName is missing", async () => {
         const req = makeReq({ body: { items: [{ price: 100, quantity: 1, taxRate: 0 }] } });
         const res = mockRes();
-        await createInvoice(req, res);
+        await invoke(createInvoice, req, res);
         expect(res.status).toHaveBeenCalledWith(400);
         expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: "Client name is required" }));
     });
@@ -140,7 +156,7 @@ describe("createInvoice — validation", () => {
     test("returns 400 when items array is empty", async () => {
         const req = makeReq({ body: { clientName: "Acme Corp", items: [] } });
         const res = mockRes();
-        await createInvoice(req, res);
+        await invoke(createInvoice, req, res);
         expect(res.status).toHaveBeenCalledWith(400);
         expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: "At least one item is required" }));
     });
@@ -148,7 +164,7 @@ describe("createInvoice — validation", () => {
     test("returns 400 when items is not provided", async () => {
         const req = makeReq({ body: { clientName: "Acme Corp" } });
         const res = mockRes();
-        await createInvoice(req, res);
+        await invoke(createInvoice, req, res);
         expect(res.status).toHaveBeenCalledWith(400);
     });
 
@@ -170,7 +186,7 @@ describe("createInvoice — validation", () => {
             },
         });
         const res = mockRes();
-        await createInvoice(req, res);
+        await invoke(createInvoice, req, res);
         expect(res.status).toHaveBeenCalledWith(201);
         expect(res.json).toHaveBeenCalledWith(mockInvoice);
     });
@@ -180,15 +196,15 @@ describe("createInvoice — validation", () => {
 
 describe("getInvoice", () => {
     test("returns 404 when invoice not found or soft-deleted", async () => {
-        prisma.invoice.findUnique.mockResolvedValue(null);
+        prisma.invoice.findFirst.mockResolvedValue(null);
         const req = makeReq({ params: { id: "inv-missing" } });
         const res = mockRes();
-        await getInvoice(req, res);
+        await invoke(getInvoice, req, res);
         expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test("returns invoice with totalPaid and balance attached", async () => {
-        prisma.invoice.findUnique.mockResolvedValue({
+        prisma.invoice.findFirst.mockResolvedValue({
             id: "inv-1", total: 500, payments: [
                 { type: "CREDIT", amount: 200 },
                 { type: "CREDIT", amount: 100 },
@@ -196,7 +212,7 @@ describe("getInvoice", () => {
         });
         const req = makeReq({ params: { id: "inv-1" } });
         const res = mockRes();
-        await getInvoice(req, res);
+        await invoke(getInvoice, req, res);
         const data = res.json.mock.calls[0][0];
         expect(data.totalPaid).toBe(300);
         expect(data.balance).toBe(200);
@@ -210,7 +226,7 @@ describe("updateInvoice — guards", () => {
         prisma.invoice.findUnique.mockResolvedValue(null);
         const req = makeReq({ params: { id: "inv-gone" }, body: {} });
         const res = mockRes();
-        await updateInvoice(req, res);
+        await invoke(updateInvoice, req, res);
         expect(res.status).toHaveBeenCalledWith(404);
     });
 
@@ -218,7 +234,7 @@ describe("updateInvoice — guards", () => {
         prisma.invoice.findUnique.mockResolvedValue({ id: "inv-1", status: "PAID" });
         const req = makeReq({ params: { id: "inv-1" }, body: { clientName: "New Name" } });
         const res = mockRes();
-        await updateInvoice(req, res);
+        await invoke(updateInvoice, req, res);
         expect(res.status).toHaveBeenCalledWith(400);
         expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: "Cannot edit a paid invoice" }));
     });
@@ -231,7 +247,7 @@ describe("deleteInvoice", () => {
         prisma.invoice.findUnique.mockResolvedValue(null);
         const req = makeReq({ params: { id: "inv-none" } });
         const res = mockRes();
-        await deleteInvoice(req, res);
+        await invoke(deleteInvoice, req, res);
         expect(res.status).toHaveBeenCalledWith(404);
     });
 
@@ -239,7 +255,7 @@ describe("deleteInvoice", () => {
         prisma.invoice.findUnique.mockResolvedValue({ id: "inv-1", status: "PAID" });
         const req = makeReq({ params: { id: "inv-1" } });
         const res = mockRes();
-        await deleteInvoice(req, res);
+        await invoke(deleteInvoice, req, res);
         expect(res.status).toHaveBeenCalledWith(409);
         expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("Paid invoices") }));
     });
@@ -249,7 +265,7 @@ describe("deleteInvoice", () => {
         prisma.invoice.update.mockResolvedValue({});
         const req = makeReq({ params: { id: "inv-1" } });
         const res = mockRes();
-        await deleteInvoice(req, res);
+        await invoke(deleteInvoice, req, res);
         expect(prisma.invoice.update).toHaveBeenCalledWith(
             expect.objectContaining({ data: expect.objectContaining({ deletedAt: expect.any(Date) }) })
         );
@@ -263,21 +279,21 @@ describe("addPayment", () => {
     test("returns 400 when amount is missing", async () => {
         const req = makeReq({ params: { id: "inv-1" }, body: {} });
         const res = mockRes();
-        await addPayment(req, res);
+        await invoke(addPayment, req, res);
         expect(res.status).toHaveBeenCalledWith(400);
     });
 
     test("returns 400 when amount is zero", async () => {
         const req = makeReq({ params: { id: "inv-1" }, body: { amount: 0 } });
         const res = mockRes();
-        await addPayment(req, res);
+        await invoke(addPayment, req, res);
         expect(res.status).toHaveBeenCalledWith(400);
     });
 
     test("returns 400 when amount is negative", async () => {
         const req = makeReq({ params: { id: "inv-1" }, body: { amount: -50 } });
         const res = mockRes();
-        await addPayment(req, res);
+        await invoke(addPayment, req, res);
         expect(res.status).toHaveBeenCalledWith(400);
     });
 
@@ -285,7 +301,7 @@ describe("addPayment", () => {
         prisma.invoice.findUnique.mockResolvedValue(null);
         const req = makeReq({ params: { id: "inv-none" }, body: { amount: 100 } });
         const res = mockRes();
-        await addPayment(req, res);
+        await invoke(addPayment, req, res);
         expect(res.status).toHaveBeenCalledWith(404);
     });
 
@@ -297,7 +313,7 @@ describe("addPayment", () => {
 
         const req = makeReq({ params: { id: "inv-1" }, body: { amount: 100, type: "CREDIT" } });
         const res = mockRes();
-        await addPayment(req, res);
+        await invoke(addPayment, req, res);
 
         expect(prisma.invoice.update).toHaveBeenCalledWith(
             expect.objectContaining({ data: expect.objectContaining({ status: "PAID" }) })
@@ -316,7 +332,7 @@ describe("addPayment", () => {
 
         const req = makeReq({ params: { id: "inv-1" }, body: { amount: 200, type: "CREDIT" } });
         const res = mockRes();
-        await addPayment(req, res);
+        await invoke(addPayment, req, res);
 
         expect(prisma.invoice.update).toHaveBeenCalledWith(
             expect.objectContaining({ data: expect.objectContaining({ status: "PARTIALLY_PAID" }) })
@@ -335,7 +351,7 @@ describe("addPayment", () => {
 
         const req = makeReq({ params: { id: "inv-1" }, body: { amount: 50, type: "DEBIT" } });
         const res = mockRes();
-        await addPayment(req, res);
+        await invoke(addPayment, req, res);
 
         // totalPaid (credits only) = 0, which is NOT >= 500 and NOT > 0
         const updateCall = prisma.invoice.update.mock.calls[0][0];
@@ -358,7 +374,7 @@ describe("deletePayment — status recalculation", () => {
 
         const req = makeReq({ params: { id: "inv-1", paymentId: "pay-old" } });
         const res = mockRes();
-        await deletePayment(req, res);
+        await invoke(deletePayment, req, res);
 
         expect(prisma.invoice.update).toHaveBeenCalledWith(
             expect.objectContaining({ data: expect.objectContaining({ status: "PAID" }) })
@@ -374,7 +390,7 @@ describe("deletePayment — status recalculation", () => {
 
         const req = makeReq({ params: { id: "inv-1", paymentId: "pay-last" } });
         const res = mockRes();
-        await deletePayment(req, res);
+        await invoke(deletePayment, req, res);
 
         expect(prisma.invoice.update).toHaveBeenCalledWith(
             expect.objectContaining({ data: expect.objectContaining({ status: "SENT" }) })

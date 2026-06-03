@@ -58,6 +58,7 @@ model User {
   notesAuthored      ManagerNote[] @relation("NoteAuthor")
   notesReceived      ManagerNote[] @relation("NoteSubject")
   importJobs         ImportJob[]
+  assistantRequestLogs AssistantRequestLog[]
 
   @@index([phoneNormalized])
   @@index([managerId])
@@ -737,7 +738,25 @@ model CompanySettings {
   smtpSecure      Boolean  @default(false)
   slaWarningDays  Int      @default(3)
   slaBreachDays   Int      @default(7)
+  assistantEnabled         Boolean @default(true)
+  assistantRateLimitPerMin Int     @default(30)
+  assistantMaxHistoryTurns Int     @default(6)
   updatedAt       DateTime @updatedAt
+}
+
+model AssistantRequestLog {
+  id          String   @id @default(uuid())
+  userId      String
+  status      String   // SUCCESS | ERROR | RATE_LIMITED | DISABLED
+  totalTokens Int      @default(0)
+  primaryTool String?
+  latencyMs   Int      @default(0)
+  inputMode   String   @default("chat")
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model EmailTemplate {

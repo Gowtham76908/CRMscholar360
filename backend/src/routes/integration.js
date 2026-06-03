@@ -10,6 +10,6 @@ router.use(authMiddleware);
 router.get("/", integrationController.getIntegrations);
 
 // Toggle integration (Admin only)
-router.patch("/:id/toggle", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), integrationController.toggleIntegration);
+router.patch("/:id/toggle", roleMiddleware(["SUPER_ADMIN"]), integrationController.toggleIntegration);
 
 module.exports = router;

@@ -1,6 +1,7 @@
 const prisma = require("../utils/prisma");
 const { currentFYStart } = require("../utils/attendance");
 const { createNotification } = require("../services/notificationService");
+const { getTeamMemberIds } = require("../services/organizationService");
 
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-IN", { dateStyle: "medium" });
 
@@ -31,6 +32,12 @@ const applyLeave = async (req, res, next) => {
 
         if (!fromDate || !toDate || !reason || !approverIds || approverIds.length === 0) {
             return res.status(400).json({ message: "All fields are required" });
+        }
+
+        // Accountability: you cannot be your own approver. A manager's leave must
+        // be approved by someone above them, never self-approved.
+        if (approverIds.includes(userId)) {
+            return res.status(400).json({ message: "You cannot select yourself as an approver." });
         }
 
         // Calculate total days
@@ -239,10 +246,16 @@ const getPendingLeaves = async (req, res, next) => {
     }
 };
 
-// Get All Leaves (Admin)
-const getAllLeaves = async (_req, res) => {
+// Get All Leaves (Admin) — managers see only their own team's leaves
+const getAllLeaves = async (req, res, next) => {
     try {
+        const where = {};
+        if (req.user.role === "MANAGER") {
+            const teamIds = await getTeamMemberIds(req.user.userId);
+            where.userId = { in: [...teamIds, req.user.userId] };
+        }
         const leaves = await prisma.leave.findMany({
+            where,
             include: {
                 user: {
                     select: {
@@ -285,6 +298,12 @@ const approveLeave = async (req, res, next) => {
 
         if (!leave) {
             return res.status(404).json({ message: "Leave not found" });
+        }
+
+        // Accountability guard: no one approves their own leave, even if somehow
+        // listed as an approver. Their leave must be signed off higher up the chain.
+        if (leave.userId === userId) {
+            return res.status(403).json({ message: "You cannot approve your own leave request." });
         }
 
         const approval = leave.approvals.find(a => a.approverId === userId);

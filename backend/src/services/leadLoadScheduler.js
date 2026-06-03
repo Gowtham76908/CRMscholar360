@@ -6,6 +6,10 @@ const { calculatePerformanceScore } = require("./leadDistributionEngine");
  * Recalculates per-employee metrics every hour (repair / drift-correction).
  * currentLeadLoad is kept real-time by the engine; this job is the safety net.
  *
+ * NOTE: currentLeadLoad is a CONCURRENT-OPEN counter (despite the legacy
+ * "maxDailyLeads" field name). See leadDistributionEngine.js header for
+ * the full semantics.
+ *
  * Fields updated:
  *   currentLeadLoad      — open leads (NEW | CONTACTED | FOLLOW_UP)
  *   responseSpeed        — avg hours assignedAt → firstResponseAt (capped 24 h)

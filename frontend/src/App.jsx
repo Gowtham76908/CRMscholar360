@@ -31,6 +31,7 @@ const LinkedInLeads          = lazy(() => import("./pages/LinkedInLeads"));
 const IntegrationHub         = lazy(() => import("./pages/IntegrationHub"));
 const Settings               = lazy(() => import("./pages/Settings"));
 const Reports                = lazy(() => import("./pages/Reports"));
+const AssistantUsage         = lazy(() => import("./pages/AssistantUsage"));
 const Departments            = lazy(() => import("./pages/Departments"));
 const DepartmentDetails      = lazy(() => import("./pages/DepartmentDetails"));
 const Messages               = lazy(() => import("./pages/Messages"));
@@ -103,6 +104,7 @@ function App() {
               <Route path="/tasks/:id"                element={<TaskDetail />} />
               <Route path="/integrations"             element={<IntegrationHub />} />
               <Route path="/reports"                  element={<Reports />} />
+              <Route path="/ai-usage"                 element={<AssistantUsage />} />
               <Route path="/departments"              element={<Departments />} />
               <Route path="/departments/:id"          element={<DepartmentDetails />} />
               <Route path="/messages"                 element={<Messages />} />

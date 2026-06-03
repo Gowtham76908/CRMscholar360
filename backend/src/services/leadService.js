@@ -25,16 +25,29 @@ const getLeads = async ({
     // SUPER_ADMIN — everything
     if (role === "EMPLOYEE" || filters.mine) {
         where.assignedToId = userId;
-    } else if (role === "MANAGER" && !filters.assignedTo) {
+    } else if (role === "MANAGER") {
         const teamIds = await getTeamMemberIds(userId);
         if (teamIds.length > 0) {
-            // Show team leads plus unassigned leads the admin can claim
-            where.OR = [
-                { assignedToId: { in: teamIds } },
-                { assignedToId: null },
-            ];
+            if (filters.assignedTo) {
+                // A manager may filter to a single member, but ONLY within their own
+                // team — never another team's. An out-of-team id is clamped back to
+                // the team scope so it can't be used to read foreign leads.
+                where.OR = teamIds.includes(filters.assignedTo)
+                    ? [{ assignedToId: filters.assignedTo }]
+                    : [{ assignedToId: { in: teamIds } }, { assignedToId: null }];
+            } else {
+                // Show team leads plus unassigned leads the manager can claim
+                where.OR = [
+                    { assignedToId: { in: teamIds } },
+                    { assignedToId: null },
+                ];
+            }
+        } else if (filters.assignedTo) {
+            // Unseeded manager (no team rows): honour the explicit filter. This is a
+            // misconfiguration anyway; the IDOR fix above covers all seeded managers.
+            where.assignedToId = filters.assignedTo;
         }
-        // If no team yet, admin sees all (backward compat for unseeded managers)
+        // If no team yet and no filter, sees all (backward compat for unseeded managers)
     } else if (filters.assignedTo) {
         where.assignedToId = filters.assignedTo;
     }

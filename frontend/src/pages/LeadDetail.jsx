@@ -851,7 +851,6 @@ export default function LeadDetail() {
     const [searchParams] = useSearchParams();
     const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
 
-    const [activeTab, setActiveTab] = useState("overview");
     const [noteText, setNoteText] = useState("");
     const [showTaskModal, setShowTaskModal] = useState(false);
     const [showWaModal, setShowWaModal] = useState(false);
@@ -872,19 +871,19 @@ export default function LeadDetail() {
     const { data: activities = [] } = useQuery({
         queryKey: ["lead-activities", id],
         queryFn: () => api.get(`/leads/${id}/activities`).then(r => r.data?.data ?? r.data),
-        enabled: !!lead && activeTab === "activity",
+        enabled: !!lead,
     });
 
     const { data: notes = [] } = useQuery({
         queryKey: ["lead-notes", id],
         queryFn: () => api.get(`/leads/${id}/notes`).then(r => r.data),
-        enabled: !!lead && activeTab === "activity",
+        enabled: !!lead,
     });
 
     const { data: callsData, isLoading: callsLoading } = useQuery({
         queryKey: ["lead-calls", id],
         queryFn: () => api.get(`/calls/${id}`).then(r => r.data),
-        enabled: !!lead && activeTab === "activity",
+        enabled: !!lead,
     });
 
     const { data: tasksData, isLoading: tasksLoading } = useQuery({
@@ -911,13 +910,13 @@ export default function LeadDetail() {
     const { data: waMessages = [] } = useQuery({
         queryKey: ["lead-whatsapp", id],
         queryFn: () => api.get(`/whatsapp/${id}/messages`).then(r => r.data),
-        enabled: !!lead && activeTab === "activity",
+        enabled: !!lead,
     });
 
     const { data: emailLogs = [] } = useQuery({
         queryKey: ["lead-emails", id],
         queryFn: () => api.get(`/leads/${id}/emails`).then(r => r.data),
-        enabled: !!lead && activeTab === "activity",
+        enabled: !!lead,
     });
 
     const { data: leadDeals = [], isLoading: dealsLoading } = useQuery({
@@ -1098,196 +1097,235 @@ export default function LeadDetail() {
                 )}
             </div>
 
-            {/* ── Lead Header ───────────────────────────────────────────────── */}
-            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
+            {/* ── Lead Hero Header ──────────────────────────────────────────── */}
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
                 {coViewers.length > 0 && (
-                    <div className="flex items-center gap-2 mb-3 px-0.5">
+                    <div className="flex items-center gap-2 px-5 py-2 bg-indigo-50/50 border-b border-indigo-100">
                         <div className="flex -space-x-1.5">
                             {coViewers.slice(0, 4).map((v) => (
                                 <div
                                     key={v.userId}
                                     title={`${v.userName} is also viewing`}
                                     style={{ backgroundColor: v.avatarColor }}
-                                    className="h-6 w-6 rounded-full flex items-center justify-center text-[9px] font-black text-white ring-2 ring-white flex-shrink-0"
+                                    className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-black text-white ring-2 ring-white flex-shrink-0"
                                 >
-                                    {v.userName?.slice(0, 2).toUpperCase() ?? "?"}
+                                    {v.userName?.slice(0, 1).toUpperCase() ?? "?"}
                                 </div>
                             ))}
                         </div>
-                        <span className="text-[11px] text-gray-400">
+                        <span className="text-xs text-indigo-700 font-medium">
                             {coViewers.length === 1
                                 ? `${coViewers[0].userName} is also viewing`
-                                : `${coViewers.length} others viewing`}
+                                : `${coViewers.length} teammates viewing`}
                         </span>
                     </div>
                 )}
-                <div className="flex items-start gap-4">
-                    <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-                        <span className="text-lg font-black text-white">{initials(lead.name)}</span>
+
+                {/* Hero row: avatar + name + status + score */}
+                <div className="p-6">
+                    <div className="flex items-start gap-5">
+                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-md">
+                            <span className="text-xl font-black text-white">{initials(lead.name)}</span>
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-3 flex-wrap">
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2.5 flex-wrap mb-1">
+                                        <h1 className="text-2xl font-black text-gray-900 truncate leading-tight">{lead.name}</h1>
+                                        <StatusDropdown leadId={id} currentStatus={lead.status} lead={lead} />
+                                    </div>
+                                    {(lead.company || lead.jobTitle) && (
+                                        <p className="text-sm text-gray-600 truncate">
+                                            {lead.company && <span className="font-semibold text-gray-700">{lead.company}</span>}
+                                            {lead.company && lead.jobTitle && <span className="text-gray-300 mx-1.5">·</span>}
+                                            {lead.jobTitle && <span>{lead.jobTitle}</span>}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {lead.score != null && (
+                                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-100 flex-shrink-0">
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-bold text-purple-600 uppercase tracking-wider leading-none">Score</p>
+                                            <p className="text-xl font-black text-purple-700 leading-tight">{lead.score}</p>
+                                        </div>
+                                        <div className="w-1 h-8 rounded-full bg-purple-200" />
+                                        <p className="text-xs font-bold text-purple-700">
+                                            {lead.score >= 81 ? "Premium" : lead.score >= 61 ? "Hot" : lead.score >= 31 ? "Warm" : "Cold"}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Source / Enquiry / Category chips */}
+                            <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                                <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">
+                                    {SOURCE_LABEL[lead.source] ?? lead.source}
+                                </span>
+                                {lead.enquiryType && (
+                                    <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">
+                                        {lead.enquiryType}
+                                    </span>
+                                )}
+                                {lead.category && (
+                                    <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-100 uppercase tracking-wide">
+                                        {lead.category}
+                                    </span>
+                                )}
+                                {lead.status === "FOLLOW_UP" && (
+                                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                        <Clock className="h-3 w-3" /> Follow-up needed
+                                    </span>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                            <h1 className="text-xl font-black text-gray-900 truncate">{lead.name}</h1>
-                            <StatusDropdown leadId={id} currentStatus={lead.status} lead={lead} />
-                            {lead.category && (
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-100 uppercase tracking-wide">
-                                    {lead.category}
-                                </span>
-                            )}
-                        </div>
+                    {/* Contact strip — phone / email / assigned-to */}
+                    <div className="mt-5 pt-5 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {lead.phone ? (
+                            <a href={`tel:${lead.phone}`} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
+                                <div className="h-9 w-9 rounded-lg bg-green-50 flex items-center justify-center flex-shrink-0 group-hover:bg-green-100 transition-colors">
+                                    <Phone className="h-4 w-4 text-green-600" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none">Phone</p>
+                                    <p className="text-sm font-semibold text-gray-900 truncate group-hover:text-green-700 transition-colors">{lead.phone}</p>
+                                </div>
+                            </a>
+                        ) : <div className="flex items-center gap-3 px-3 py-2 text-gray-300">
+                                <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center"><Phone className="h-4 w-4" /></div>
+                                <p className="text-xs">No phone</p>
+                            </div>}
 
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
-                            {lead.company && <span className="font-medium text-gray-700">{lead.company}</span>}
-                            {lead.jobTitle && <span>{lead.jobTitle}</span>}
-                            <span className="text-[11px] bg-gray-100 px-2 py-0.5 rounded-full font-medium text-gray-600">
-                                {SOURCE_LABEL[lead.source] ?? lead.source}
-                            </span>
-                            {lead.enquiryType && (
-                                <span className="text-[11px] bg-gray-100 px-2 py-0.5 rounded-full font-medium text-gray-600">
-                                    {lead.enquiryType}
-                                </span>
-                            )}
-                        </div>
+                        {lead.email ? (
+                            <a href={`mailto:${lead.email}`} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors group min-w-0">
+                                <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-100 transition-colors">
+                                    <Mail className="h-4 w-4 text-blue-600" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none">Email</p>
+                                    <p className="text-sm font-semibold text-gray-900 truncate group-hover:text-blue-700 transition-colors">{lead.email}</p>
+                                </div>
+                            </a>
+                        ) : <div className="flex items-center gap-3 px-3 py-2 text-gray-300">
+                                <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center"><Mail className="h-4 w-4" /></div>
+                                <p className="text-xs">No email</p>
+                            </div>}
 
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-gray-500">
-                            {lead.phone && (
-                                <a href={`tel:${lead.phone}`} className="flex items-center gap-1 hover:text-indigo-600 transition-colors">
-                                    <Phone className="h-3 w-3" /> {lead.phone}
-                                </a>
-                            )}
-                            {lead.email && (
-                                <a href={`mailto:${lead.email}`} className="flex items-center gap-1 hover:text-indigo-600 transition-colors">
-                                    <Mail className="h-3 w-3" /> {lead.email}
-                                </a>
-                            )}
-                            {lead.assignedTo && (
-                                <span className="flex items-center gap-1">
-                                    <User className="h-3 w-3" /> {lead.assignedTo.name}
-                                </span>
-                            )}
-                            {activities.length > 0 && (
-                                <span className="flex items-center gap-1">
-                                    <Clock className="h-3 w-3" /> Last activity {relTime(activities[0]?.createdAt)}
-                                </span>
-                            )}
-                        </div>
+                        {lead.assignedTo ? (
+                            <div className="flex items-center gap-3 px-3 py-2 min-w-0">
+                                <div className="h-9 w-9 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-xs font-black text-indigo-700">{lead.assignedTo.name?.charAt(0).toUpperCase()}</span>
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none">Assigned to</p>
+                                    <p className="text-sm font-semibold text-gray-900 truncate">{lead.assignedTo.name}</p>
+                                </div>
+                            </div>
+                        ) : <div className="flex items-center gap-3 px-3 py-2 text-gray-300">
+                                <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center"><User className="h-4 w-4" /></div>
+                                <p className="text-xs">Unassigned</p>
+                            </div>}
                     </div>
-                </div>
 
-                {/* Quick action bar */}
-                <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center gap-2">
-                    <button
-                        onClick={() => initiateCall.mutate()}
-                        disabled={initiateCall.isPending || !lead.phone}
-                        title={!lead.phone ? "No phone number on record" : "Initiate call"}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:shadow-none disabled:cursor-not-allowed"
-                    >
-                        {initiateCall.isPending
-                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            : <Phone className="h-3.5 w-3.5" />}
-                        Call
-                    </button>
+                    {/* Action bar — primary on left, secondary on right */}
+                    <div className="mt-5 pt-5 border-t border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                                onClick={() => initiateCall.mutate()}
+                                disabled={initiateCall.isPending || !lead.phone}
+                                title={!lead.phone ? "No phone number on record" : "Initiate call"}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-100 disabled:text-gray-400 text-white text-sm font-bold rounded-lg shadow-sm transition-all disabled:shadow-none disabled:cursor-not-allowed"
+                            >
+                                {initiateCall.isPending
+                                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                                    : <Phone className="h-4 w-4" />}
+                                Call
+                            </button>
 
-                    <button
-                        onClick={() => lead.phone ? setShowWaModal(true) : toast.warning("No phone number on record")}
-                        title={!lead.whatsappOptIn ? "Lead has not opted in to WhatsApp" : "Send WhatsApp message"}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow-sm transition-all relative"
-                    >
-                        <MessageSquare className="h-3.5 w-3.5" />
-                        WhatsApp
-                        {!lead.whatsappOptIn && (
-                            <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-amber-400 border border-white" title="Not opted in" />
-                        )}
-                    </button>
+                            <button
+                                onClick={() => lead.phone ? setShowWaModal(true) : toast.warning("No phone number on record")}
+                                title={!lead.whatsappOptIn ? "Lead has not opted in to WhatsApp" : "Send WhatsApp message"}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-lg shadow-sm transition-all relative"
+                            >
+                                <MessageSquare className="h-4 w-4" />
+                                WhatsApp
+                                {!lead.whatsappOptIn && (
+                                    <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 border border-white" title="Not opted in" />
+                                )}
+                            </button>
 
-                    <button
-                        onClick={() => setShowEmailModal(true)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
-                    >
-                        <Mail className="h-3.5 w-3.5" /> Email
-                    </button>
+                            <button
+                                onClick={() => setShowEmailModal(true)}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg shadow-sm transition-all"
+                            >
+                                <Mail className="h-4 w-4" /> Email
+                            </button>
 
-                    <button
-                        onClick={() => setTimeout(() => noteRef.current?.focus(), 100)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
-                    >
-                        <FileText className="h-3.5 w-3.5" /> Note
-                    </button>
+                            <button
+                                onClick={() => setTimeout(() => noteRef.current?.focus(), 100)}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-lg shadow-sm transition-all"
+                            >
+                                <FileText className="h-4 w-4" /> Note
+                            </button>
+                        </div>
 
-                    {isAdmin && (
-                        <button
-                            onClick={() => setShowTaskModal(true)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
-                        >
-                            <Plus className="h-3.5 w-3.5" /> Task
-                        </button>
-                    )}
-
-                    <Link
-                        to={`/leads/${id}/journey`}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-900 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
-                    >
-                        <GitBranch className="h-3.5 w-3.5" /> Journey
-                    </Link>
-
-                    <button
-                        onClick={() => setShowDealModal(true)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
-                    >
-                        <TrendingUp className="h-3.5 w-3.5" /> Convert To Deal
-                    </button>
-
-                    <div className="ml-auto flex items-center gap-3 text-[11px] text-gray-400">
-                        {calls.length > 0 && (
-                            <span className="flex items-center gap-1">
-                                <Phone className="h-3 w-3" />
-                                Last call {relTime(calls[0]?.createdAt)}
-                            </span>
-                        )}
-                        {lead.status === "FOLLOW_UP" && (
-                            <span className="flex items-center gap-1 text-amber-600 font-semibold">
-                                <Clock className="h-3 w-3" /> Follow-up needed
-                            </span>
-                        )}
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {isAdmin && (
+                                <button
+                                    onClick={() => setShowTaskModal(true)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold border border-gray-200 rounded-lg transition-all"
+                                >
+                                    <Plus className="h-3.5 w-3.5" /> Task
+                                </button>
+                            )}
+                            <Link
+                                to={`/leads/${id}/journey`}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold border border-gray-200 rounded-lg transition-all"
+                            >
+                                <GitBranch className="h-3.5 w-3.5" /> Journey
+                            </Link>
+                            <button
+                                onClick={() => setShowDealModal(true)}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-all"
+                            >
+                                <TrendingUp className="h-3.5 w-3.5" /> Convert to Deal
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* ── Deal Room split-pane ───────────────────────────────────────── */}
-            <div className="flex flex-col md:flex-row gap-5 items-start">
+            {/* ── Main 2/3 + 1/3 grid ───────────────────────────────────────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
 
-                {/* ── LEFT: Tabbed content ──────────────────────────────────── */}
-                <div className="flex-1 min-w-0 space-y-4 w-full">
+                {/* ── LEFT: suggestions + timeline (spans 2 cols on desktop) ── */}
+                <div className="lg:col-span-2 min-w-0 space-y-4">
 
-                    {/* Tab bar */}
-                    <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
-                        {[{ id: "overview", label: "Overview" }, { id: "activity", label: "Activity" }].map(t => (
-                            <button
-                                key={t.id}
-                                onClick={() => setActiveTab(t.id)}
-                                className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-all ${
-                                    activeTab === t.id
-                                        ? "bg-white text-indigo-700 shadow-sm"
-                                        : "text-gray-500 hover:text-gray-800"
-                                }`}
-                            >
-                                {t.label}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Overview tab */}
-                    {activeTab === "overview" && (
-                        <SmartSuggestions leadId={id} lead={lead} onAction={handleSuggestionAction} />
-                    )}
-
-                    {/* Activity tab */}
-                    {activeTab === "activity" && (<>
+                    {/* Smart suggestions — surfaced, no longer behind a tab */}
+                    <SmartSuggestions leadId={id} lead={lead} onAction={handleSuggestionAction} />
 
                     {/* Timeline card */}
-                    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-
+                    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                        {/* Activity header */}
+                        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Activity className="h-4 w-4 text-gray-400" />
+                                <h2 className="text-sm font-bold text-gray-800">Activity</h2>
+                                {activities.length > 0 && (
+                                    <span className="text-xs text-gray-400 font-medium">
+                                        · Last update {relTime(activities[0]?.createdAt)}
+                                    </span>
+                                )}
+                            </div>
+                            {calls.length > 0 && (
+                                <span className="flex items-center gap-1 text-xs text-gray-400 font-medium">
+                                    <Phone className="h-3 w-3" /> Last call {relTime(calls[0]?.createdAt)}
+                                </span>
+                            )}
+                        </div>
                         {/* Inline note compose */}
                         <div className="p-4 border-b border-gray-100">
                             <form onSubmit={handleNoteSubmit} className="flex gap-2 items-end">
@@ -1421,18 +1459,17 @@ export default function LeadDetail() {
                             )}
                         </div>
                     </div>
-                    </>)}
                 </div>
 
-                {/* ── RIGHT: scrollable panel ────────────────────────────────── */}
-                <div className="w-full md:w-72 flex-shrink-0 md:sticky md:top-6 md:max-h-[calc(100vh-6rem)] md:overflow-y-auto space-y-4 pb-4">
+                {/* ── RIGHT: lead context (1/3 col, sticky on desktop) ─────── */}
+                <div className="lg:col-span-1 w-full space-y-4 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto pb-4">
 
-                    {/* Existing lead sidebar (contact, score, details, assigned, reminders, stats) */}
                     <LeadSidebar
                         lead={lead}
                         reminders={reminders}
                         remindersLoading={remindersLoading}
                         leadId={id}
+                        hideContact
                     />
 
                     {/* ── Custom Fields ───────────────────────────────────────── */}

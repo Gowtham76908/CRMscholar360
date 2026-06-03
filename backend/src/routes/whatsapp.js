@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
-const { listTemplates, sendMessage, getMessages, getInboundMessages, watiWebhook } = require("../controllers/whatsappController");
+const { listTemplates, sendMessage, getMessages, getInboundMessages, metaWebhook, verifyWebhookSubscription } = require("../controllers/whatsappController");
 const {
     createCampaign,
     startCampaign,
@@ -16,18 +16,11 @@ const {
     deleteAutoReply,
 } = require("../controllers/whatsappCampaignController");
 
-const WATI_WEBHOOK_TOKEN = process.env.WATI_WEBHOOK_TOKEN;
-
-// No auth — WATI POSTs here directly, but validate webhook token if configured
-router.post("/webhook", (req, res, next) => {
-    if (WATI_WEBHOOK_TOKEN) {
-        const token = req.headers["x-wati-token"] || req.query.token;
-        if (token !== WATI_WEBHOOK_TOKEN) {
-            return res.status(401).json({ error: "Unauthorized webhook request" });
-        }
-    }
-    next();
-}, watiWebhook);
+// Meta Cloud API webhook endpoints — no app auth (Meta posts here directly).
+// The POST handler verifies the X-Hub-Signature-256 HMAC against the app secret;
+// the GET handler responds to Meta's subscription verification handshake.
+router.get("/webhook", verifyWebhookSubscription);
+router.post("/webhook", metaWebhook);
 
 // Protected
 router.use(authMiddleware);
@@ -40,16 +33,16 @@ router.get("/:leadId/messages", getMessages);
 
 // Campaigns — write operations restricted to ADMIN+
 router.get("/campaigns", listCampaigns);
-router.post("/campaigns", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), createCampaign);
+router.post("/campaigns", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), createCampaign);
 router.get("/campaigns/:id", getCampaign);
-router.post("/campaigns/:id/start", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), startCampaign);
-router.post("/campaigns/:id/pause", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), pauseCampaign);
-router.post("/campaigns/:id/resume", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), resumeCampaign);
+router.post("/campaigns/:id/start", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), startCampaign);
+router.post("/campaigns/:id/pause", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), pauseCampaign);
+router.post("/campaigns/:id/resume", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), resumeCampaign);
 
 // Auto-replies — write operations restricted to ADMIN+
 router.get("/auto-replies", listAutoReplies);
-router.post("/auto-replies", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), createAutoReply);
-router.patch("/auto-replies/:id", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), updateAutoReply);
-router.delete("/auto-replies/:id", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), deleteAutoReply);
+router.post("/auto-replies", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), createAutoReply);
+router.patch("/auto-replies/:id", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), updateAutoReply);
+router.delete("/auto-replies/:id", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), deleteAutoReply);
 
 module.exports = router;

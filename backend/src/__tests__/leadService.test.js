@@ -220,14 +220,14 @@ describe("getLeads — pagination", () => {
         expect(take).toBe(10);
     });
 
-    test("meta totalPages is Math.ceil(total/limit)", async () => {
+    test("totalPages is Math.ceil(total/limit)", async () => {
         prisma.lead.count.mockResolvedValue(25);
         const result = await getLeads({ userId: "u", role: "SUPER_ADMIN", page: 1, limit: 10 });
 
-        expect(result.meta.totalPages).toBe(3);
-        expect(result.meta.total).toBe(25);
-        expect(result.meta.page).toBe(1);
-        expect(result.meta.limit).toBe(10);
+        expect(result.totalPages).toBe(3);
+        expect(result.total).toBe(25);
+        expect(result.page).toBe(1);
+        expect(result.limit).toBe(10);
     });
 
     test("returns data array from findMany", async () => {

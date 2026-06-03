@@ -6,7 +6,7 @@ const { getSettings, updateSettings, testSmtp } = require("../controllers/compan
 
 router.use(authMiddleware);
 router.get("/", getSettings);
-router.patch("/", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), updateSettings);
-router.post("/test-smtp", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), testSmtp);
+router.patch("/", roleMiddleware(["SUPER_ADMIN"]), updateSettings);
+router.post("/test-smtp", roleMiddleware(["SUPER_ADMIN"]), testSmtp);
 
 module.exports = router;

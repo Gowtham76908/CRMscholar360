@@ -2,6 +2,7 @@ const prisma = require("../utils/prisma");
 const bcrypt = require("bcrypt");
 const normalizePhone = require("../utils/normalizePhone");
 const { toSafeUser } = require("../utils/safeUser");
+const { ApiError, ERROR_CODES } = require("../utils/apiError");
 
 const registerUser = async (req, res, next) => {
     try {

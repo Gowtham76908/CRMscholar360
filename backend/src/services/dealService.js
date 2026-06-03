@@ -1,5 +1,6 @@
 const prisma = require("../utils/prisma");
 const paginate = require("../utils/paginate");
+const { canAccessLead } = require("./permissionService");
 
 const DEAL_SELECT = {
     id: true,
@@ -56,9 +57,18 @@ function rbacWhere(userId, role) {
     return { deletedAt: null, OR: [{ createdById: userId }, { assignedEmployeeId: userId }] };
 }
 
-const createDeal = async ({ leadId, title, amount, stage, currency, notes, createdById, assignedEmployeeId }) => {
-    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true } });
+const createDeal = async ({ leadId, title, amount, stage, currency, notes, createdById, createdByRole, assignedEmployeeId }) => {
+    const lead = await prisma.lead.findUnique({
+        where: { id: leadId },
+        select: { id: true, assignedToId: true },
+    });
     if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
+
+    // Block silent lead enumeration: callers can only attach deals to leads they can see.
+    // createdByRole is optional so existing internal callers (no role context) still work.
+    if (createdByRole && !(await canAccessLead(createdById, createdByRole, lead))) {
+        throw Object.assign(new Error("Lead not found"), { status: 404 });
+    }
 
     const deal = await prisma.deal.create({
         data: { leadId, title, amount: amount ?? 0, stage: stage ?? "NEW", currency: currency ?? "INR", notes, createdById, assignedEmployeeId: assignedEmployeeId ?? null },
@@ -68,17 +78,23 @@ const createDeal = async ({ leadId, title, amount, stage, currency, notes, creat
 };
 
 const listDeals = async (userId, role, { page = 1, limit = 20, stage, search, leadId, ownerId, sortBy = "createdAt", sortOrder = "desc" } = {}) => {
-    const where = rbacWhere(userId, role);
+    const base = rbacWhere(userId, role);
+    const andClauses = [];
 
-    if (stage) where.stage = stage;
-    if (leadId) where.leadId = leadId;
-    if (ownerId) where.createdById = ownerId;
+    if (stage) andClauses.push({ stage });
+    if (leadId) andClauses.push({ leadId });
+    if (ownerId) andClauses.push({ createdById: ownerId });
     if (search) {
-        where.OR = [
-            { title: { contains: search, mode: "insensitive" } },
-            { lead: { name: { contains: search, mode: "insensitive" } } },
-        ];
+        // AND with rbacWhere's OR — overwriting where.OR would lift the RBAC scope
+        andClauses.push({
+            OR: [
+                { title: { contains: search, mode: "insensitive" } },
+                { lead: { name: { contains: search, mode: "insensitive" } } },
+            ],
+        });
     }
+
+    const where = andClauses.length ? { ...base, AND: andClauses } : base;
 
     const [raw, total] = await Promise.all([
         prisma.deal.findMany({
@@ -276,9 +292,9 @@ const getTopLeadsByRevenue = async (userId, role, { stage = "WON", limit = 5 } =
     };
 };
 
-const getRevenueStats = async () => {
+const getRevenueStats = async (scopeWhere = {}) => {
     const invoices = await prisma.invoice.findMany({
-        where: { status: { not: "CANCELLED" } },
+        where: { status: { not: "CANCELLED" }, ...scopeWhere },
         select: { total: true, status: true, payments: { select: { amount: true, type: true } } },
     });
 

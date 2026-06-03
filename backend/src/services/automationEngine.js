@@ -133,60 +133,45 @@ async function executeAction(action, lead, childContext = {}, tx = prisma) {
 
         case "SEND_WHATSAPP": {
             if (!lead.phone) return { action: "SEND_WHATSAPP", skipped: true, reason: "no_phone" };
+            if (!lead.whatsappOptIn) return { action: "SEND_WHATSAPP", skipped: true, reason: "no_opt_in" };
             const normalized = normalizePhone(lead.phone);
             if (!normalized) return { action: "SEND_WHATSAPP", skipped: true, reason: "invalid_phone" };
-            try {
-                const params = (cfg.parameters || []).map(p =>
-                    p === "{{lead.name}}" ? lead.name : p
-                );
-                const result = await sendTemplateMessage(normalized, cfg.templateName, params);
-                await tx.whatsAppMessage.create({
-                    data: {
-                        leadId: lead.id,
-                        userId: null,
-                        phone: normalized,
-                        direction: "OUTBOUND",
-                        templateName: cfg.templateName,
-                        messageBody: cfg.templateName,
-                        status: result.status,
-                        watiMessageId: result.watiMessageId,
-                        providerPayload: result.raw,
-                        sentAt: new Date(),
-                    },
-                });
-                await tx.activity.create({
-                    data: {
-                        leadId: lead.id,
-                        userId: null,
-                        action: "WHATSAPP_SENT",
-                        metadata: { templateName: cfg.templateName, source: "automation" },
-                    }
-                });
-            } catch (e) {
-                console.warn(`[AutomationEngine] SEND_WHATSAPP failed for lead ${lead.id}: ${e.message}`);
-                return { action: "SEND_WHATSAPP", skipped: true, reason: e.message };
-            }
-            return { action: "SEND_WHATSAPP", templateName: cfg.templateName };
+
+            // Pending side-effect: HTTP call runs OUTSIDE the Prisma transaction (in
+            // runRulesForLead, after commit). We just record the intent here so the
+            // tx stays short — the DB row + activity log are written after the send
+            // returns. See SIDE_EFFECTS handling below.
+            const params = (cfg.parameters || []).map(p =>
+                p === "{{lead.name}}" ? lead.name : p
+            );
+            return {
+                action: "SEND_WHATSAPP",
+                templateName: cfg.templateName,
+                _sideEffect: {
+                    kind: "whatsapp",
+                    leadId: lead.id,
+                    phone: normalized,
+                    templateName: cfg.templateName,
+                    params,
+                },
+            };
         }
 
         case "SEND_EMAIL": {
             if (!lead.email) return { action: "SEND_EMAIL", skipped: true, reason: "no_email" };
-            try {
-                const body = (cfg.body || "Hi {{lead.name}}, thank you for your enquiry.").replace(/\{\{lead\.name\}\}/g, lead.name);
-                await sendEmail({ to: lead.email, subject: cfg.subject || "Message from our team", text: body });
-                await tx.activity.create({
-                    data: {
-                        leadId: lead.id,
-                        userId: null,
-                        action: "EMAIL_SENT",
-                        metadata: { subject: cfg.subject, source: "automation" },
-                    }
-                });
-            } catch (e) {
-                console.warn(`[AutomationEngine] SEND_EMAIL failed for lead ${lead.id}: ${e.message}`);
-                return { action: "SEND_EMAIL", skipped: true, reason: e.message };
-            }
-            return { action: "SEND_EMAIL", subject: cfg.subject };
+            // Same pattern as SEND_WHATSAPP — defer the HTTP call to after-commit.
+            const body = (cfg.body || "Hi {{lead.name}}, thank you for your enquiry.").replace(/\{\{lead\.name\}\}/g, lead.name);
+            return {
+                action: "SEND_EMAIL",
+                subject: cfg.subject,
+                _sideEffect: {
+                    kind:    "email",
+                    leadId:  lead.id,
+                    to:      lead.email,
+                    subject: cfg.subject || "Message from our team",
+                    body,
+                },
+            };
         }
 
         default:
@@ -386,6 +371,76 @@ async function runRulesForLead(triggerType, lead, context = null) {
                 }
             });
         }
+
+        // ── Execute deferred side-effects (HTTP calls) AFTER the tx commits ──
+        // Keeping these outside the transaction prevents the DB connection from
+        // being held open for up to 15 seconds per external send.
+        if (!failed) {
+            for (const result of results) {
+                if (result?._sideEffect) {
+                    runSideEffect(result._sideEffect).catch(err =>
+                        console.error(`[AutomationEngine] side-effect ${result._sideEffect.kind} failed:`, err.message)
+                    );
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Execute a side-effect (external HTTP call) AFTER the rule transaction commits.
+ * Writes its own DB record + activity log on success/failure. Failures are logged
+ * but do not roll back the rule.
+ */
+async function runSideEffect(side) {
+    if (side.kind === "whatsapp") {
+        const result = await sendTemplateMessage(side.phone, side.templateName, side.params);
+        await prisma.whatsAppMessage.create({
+            data: {
+                leadId:          side.leadId,
+                userId:          null,
+                phone:           side.phone,
+                direction:       "OUTBOUND",
+                templateName:    side.templateName,
+                messageBody:     side.templateName,
+                status:          result.status,
+                watiMessageId:   result.watiMessageId,
+                providerPayload: result.raw,
+                sentAt:          new Date(),
+            },
+        });
+        await prisma.activity.create({
+            data: {
+                leadId: side.leadId,
+                userId: null,
+                action: result.status === "SENT" ? "WHATSAPP_SENT" : "WHATSAPP_FAILED",
+                metadata: { templateName: side.templateName, source: "automation", status: result.status },
+            },
+        });
+        return;
+    }
+    if (side.kind === "email") {
+        try {
+            await sendEmail({ to: side.to, subject: side.subject, text: side.body });
+            await prisma.activity.create({
+                data: {
+                    leadId: side.leadId,
+                    userId: null,
+                    action: "EMAIL_SENT",
+                    metadata: { subject: side.subject, source: "automation" },
+                },
+            });
+        } catch (err) {
+            await prisma.activity.create({
+                data: {
+                    leadId: side.leadId,
+                    userId: null,
+                    action: "EMAIL_FAILED",
+                    metadata: { subject: side.subject, source: "automation", error: err.message },
+                },
+            });
+        }
+        return;
     }
 }
 

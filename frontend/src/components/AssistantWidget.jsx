@@ -36,11 +36,16 @@ export default function AssistantWidget() {
     const [voiceOut, setVoiceOut] = useState(() => localStorage.getItem("asst-voice-out") === "true");
     const scrollRef = useRef(null);
     const inputRef  = useRef(null);
+    // Tracks whether the *current* draft was dictated; reset on manual typing or send.
+    const usedVoiceForCurrentDraft = useRef(false);
 
     // Voice input: append finalised transcript to whatever's already in the input
     const mic = useSpeechRecognition({
         onResult: ({ final }) => {
-            if (final) setInput(prev => (prev ? `${prev.trim()} ${final}`.trim() : final.trim()));
+            if (final) {
+                usedVoiceForCurrentDraft.current = true;
+                setInput(prev => (prev ? `${prev.trim()} ${final}`.trim() : final.trim()));
+            }
         },
         onError:  (err) => {
             if (err === "not-allowed") toast.error("Microphone access denied. Check browser permissions.");
@@ -95,9 +100,12 @@ export default function AssistantWidget() {
         setSending(true);
 
         try {
+            const inputMode = usedVoiceForCurrentDraft.current ? "voice" : "chat";
+            usedVoiceForCurrentDraft.current = false;
             const res = await api.post("/assistant/chat", {
                 message:     trimmed,
                 currentPage: pathname,
+                inputMode,
             });
             const reply = res.data?.reply || "I didn't get a response. Try rephrasing.";
             setMessages(m => [...m, { role: "assistant", content: reply }]);
@@ -194,7 +202,10 @@ export default function AssistantWidget() {
                             <textarea
                                 ref={inputRef}
                                 value={input}
-                                onChange={e => setInput(e.target.value)}
+                                onChange={e => {
+                                    usedVoiceForCurrentDraft.current = false;
+                                    setInput(e.target.value);
+                                }}
                                 onKeyDown={handleKeyDown}
                                 placeholder={mic.listening ? "Listening…" : "Ask anything…"}
                                 rows={1}

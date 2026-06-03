@@ -8,7 +8,7 @@ import api from "../api/axios";
 import {
     Loader2, User, Bell, Lock, Download, Trash2, Save, Shield, Smartphone,
     Eye, EyeOff, Camera, X, CheckCircle, Mail, Layers, Plus, GripVertical, Clock,
-    Calendar, ExternalLink, Unlink,
+    Calendar, ExternalLink, Unlink, Bot,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import AuditLogs from "../components/AuditLogs";
@@ -50,11 +50,12 @@ const TABS = [
 ];
 
 const ADMIN_TABS = [
-    { id: "email",       icon: Mail,       label: "Email (SMTP)" },
-    { id: "lead-fields", icon: Layers,     label: "Lead Fields" },
-    { id: "lead-sla",    icon: Clock,      label: "Lead SLA" },
-    { id: "audit",       icon: Shield,     label: "Audit Logs" },
-    { id: "sessions",    icon: Smartphone, label: "Sessions" },
+    { id: "email",        icon: Mail,       label: "Email (SMTP)" },
+    { id: "lead-fields",  icon: Layers,     label: "Lead Fields" },
+    { id: "lead-sla",     icon: Clock,      label: "Lead SLA" },
+    { id: "ai-assistant", icon: Bot,        label: "AI Assistant" },
+    { id: "audit",        icon: Shield,     label: "Audit Logs" },
+    { id: "sessions",     icon: Smartphone, label: "Sessions" },
 ];
 
 // ─── SMTP Settings ────────────────────────────────────────────────────────────
@@ -360,6 +361,122 @@ function SlaSettings() {
                 >
                     {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                     Save SLA Settings
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function AssistantSettings() {
+    const qc = useQueryClient();
+    const { data: existing, isLoading } = useQuery({
+        queryKey: ["company-settings"],
+        queryFn: () => api.get("/company-settings").then((r) => r.data),
+    });
+
+    const [form, setForm] = useState({
+        assistantEnabled: true,
+        assistantRateLimitPerMin: 30,
+        assistantMaxHistoryTurns: 6,
+    });
+
+    useEffect(() => {
+        if (existing) {
+            setForm({
+                assistantEnabled:         existing.assistantEnabled         ?? true,
+                assistantRateLimitPerMin: existing.assistantRateLimitPerMin ?? 30,
+                assistantMaxHistoryTurns: existing.assistantMaxHistoryTurns ?? 6,
+            });
+        }
+    }, [existing]);
+
+    const save = useMutation({
+        mutationFn: () => api.patch("/company-settings", {
+            assistantEnabled:         Boolean(form.assistantEnabled),
+            assistantRateLimitPerMin: Math.max(1, Math.min(600, Number(form.assistantRateLimitPerMin) || 30)),
+            assistantMaxHistoryTurns: Math.max(0, Math.min(50,  Number(form.assistantMaxHistoryTurns) || 6)),
+        }),
+        onSuccess: () => {
+            toast.success("AI Assistant settings saved");
+            qc.invalidateQueries({ queryKey: ["company-settings"] });
+        },
+        onError: () => toast.error("Failed to save"),
+    });
+
+    if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-indigo-400" /></div>;
+
+    return (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-6">
+            <div>
+                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <Bot className="h-4 w-4 text-indigo-500" /> AI Assistant
+                </h2>
+                <p className="text-sm text-gray-400 mt-0.5">
+                    Controls the in-app chat + voice assistant. Changes take effect within a few seconds for all users.
+                </p>
+            </div>
+
+            <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 border border-gray-100">
+                <div>
+                    <p className="text-sm font-semibold text-gray-900">Assistant enabled</p>
+                    <p className="text-xs text-gray-500 mt-0.5">When off, the chat widget returns a "currently disabled" message.</p>
+                </div>
+                <button
+                    type="button"
+                    role="switch"
+                    aria-checked={form.assistantEnabled}
+                    onClick={() => setForm((f) => ({ ...f, assistantEnabled: !f.assistantEnabled }))}
+                    className={cn(
+                        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                        form.assistantEnabled ? "bg-indigo-600" : "bg-gray-300",
+                    )}
+                >
+                    <span className={cn(
+                        "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform",
+                        form.assistantEnabled ? "translate-x-5" : "translate-x-0.5",
+                    )} />
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        Rate limit (requests / user / min)
+                    </label>
+                    <input
+                        type="number"
+                        min="1"
+                        max="600"
+                        className={inputCls(false)}
+                        value={form.assistantRateLimitPerMin}
+                        onChange={(e) => setForm((f) => ({ ...f, assistantRateLimitPerMin: e.target.value }))}
+                    />
+                    <p className="text-xs text-gray-400">Caps each user's chat sends per minute. 1–600.</p>
+                </div>
+                <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        Max history turns
+                    </label>
+                    <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        className={inputCls(false)}
+                        value={form.assistantMaxHistoryTurns}
+                        onChange={(e) => setForm((f) => ({ ...f, assistantMaxHistoryTurns: e.target.value }))}
+                    />
+                    <p className="text-xs text-gray-400">How many prior exchanges the assistant remembers. 0 disables memory.</p>
+                </div>
+            </div>
+
+            <div className="flex justify-end">
+                <button
+                    onClick={() => save.mutate()}
+                    disabled={save.isPending}
+                    className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+                >
+                    {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Save Assistant Settings
                 </button>
             </div>
         </div>
@@ -928,6 +1045,7 @@ const Settings = () => {
                     {activeTab === "email"       && user?.role === "SUPER_ADMIN" && <SmtpSettings />}
                     {activeTab === "lead-fields" && user?.role === "SUPER_ADMIN" && <LeadFieldsSettings />}
                     {activeTab === "lead-sla"    && user?.role === "SUPER_ADMIN" && <SlaSettings />}
+                    {activeTab === "ai-assistant" && user?.role === "SUPER_ADMIN" && <AssistantSettings />}
                     {activeTab === "audit"       && user?.role === "SUPER_ADMIN" && <AuditLogs />}
                     {activeTab === "sessions"    && user?.role === "SUPER_ADMIN" && <SessionManager />}
 

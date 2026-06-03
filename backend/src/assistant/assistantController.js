@@ -1,5 +1,8 @@
 const { handleChat } = require("./assistantService");
 const { ApiError }   = require("../utils/apiError");
+const { getAssistantSettings } = require("./settingsCache");
+const prisma = require("../utils/prisma");
+const logger = require("../utils/logger");
 
 const STATUS_FOR = {
     TIMEOUT:       504,
@@ -7,15 +10,23 @@ const STATUS_FOR = {
     PROVIDER_DOWN: 503,
 };
 
-// Operational kill-switch — flip ASSISTANT_ENABLED=false in env to stop accepting
-// chat requests without redeploying code. Defaults to enabled when unset.
-const isAssistantEnabled = () => {
-    const v = (process.env.ASSISTANT_ENABLED ?? "true").toLowerCase().trim();
-    return v !== "false" && v !== "0" && v !== "off" && v !== "no";
+// Operational kill-switch — flip via Settings UI (CompanySettings.assistantEnabled).
+// Env var ASSISTANT_ENABLED still works as a fallback when the DB is unreachable.
+const isAssistantEnabled = async () => {
+    const { enabled } = await getAssistantSettings();
+    return enabled;
 };
 
 const chatHandler = async (req, res, next) => {
-    if (!isAssistantEnabled()) {
+    const userId    = req.user?.userId;
+    const inputMode = req.body?.inputMode === "voice" ? "voice" : "chat";
+
+    if (!(await isAssistantEnabled())) {
+        if (userId) {
+            prisma.assistantRequestLog.create({
+                data: { userId, status: "DISABLED", inputMode },
+            }).catch((err) => logger.warn({ err: err.message }, "Failed to log DISABLED"));
+        }
         return res.status(503).json({
             error: { type: "DISABLED", message: "The assistant is temporarily disabled." },
         });
@@ -34,6 +45,7 @@ const chatHandler = async (req, res, next) => {
             role:        req.user.role,
             message:     message.trim(),
             currentPage: currentPage ?? null,
+            inputMode,
         });
 
         res.json({

@@ -1,16 +1,22 @@
 const prisma = require("../utils/prisma");
+const { ApiError, ERROR_CODES } = require("../utils/apiError");
 
 const createReminder = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leadId, taskId, remindAt, message } = req.body;
 
+        const when = new Date(remindAt);
+        if (!remindAt || isNaN(when.getTime())) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "A valid remindAt date is required");
+        }
+
         const reminder = await prisma.reminder.create({
             data: {
-                userId, // Remind the creator? or passed userId? usually remind oneself
+                userId,
                 leadId,
                 taskId,
-                remindAt: new Date(remindAt),
+                remindAt: when,
                 message
             }
         });

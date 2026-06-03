@@ -7,6 +7,6 @@ const roleMiddleware = require("../middleware/roleMiddleware");
 router.use(authMiddleware);
 
 // Only Admins can view audit logs
-router.get("/", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), auditController.getAuditLogs);
+router.get("/", roleMiddleware(["SUPER_ADMIN"]), auditController.getAuditLogs);
 
 module.exports = router;

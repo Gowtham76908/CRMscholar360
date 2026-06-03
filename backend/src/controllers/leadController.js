@@ -8,9 +8,12 @@ const { getLeadsSchema } = require("../validations/lead.validation");
 const normalizePhone = require("../utils/normalizePhone");
 const { runRulesForLead } = require("../services/automationEngine");
 const { getSuggestionsForLead, dismissSuggestion } = require("../services/followUpSuggestionService");
-const { adjustLeadLoad, assignLeads: smartAssignLeads, batchAssignLeads } = require("../services/leadDistributionEngine");
+const { adjustLeadLoad, assignLeads: smartAssignLeads, batchAssignLeads, assignLeadOrAlert: autoAssignLead } = require("../services/leadDistributionEngine");
 const XLSX = require("xlsx");
 const { ApiError, ERROR_CODES } = require("../utils/apiError");
+const { canAccessLead, canReassignLeadTo } = require("../services/permissionService");
+const { getTeamMemberIds } = require("../services/organizationService");
+const { csvField } = require("../utils/csv");
 
 // Get Leads
 const getLeads = async (req, res, next) => {
@@ -103,8 +106,10 @@ const createLead = async (req, res, next) => {
             metadata: { source, score, category }
         });
 
-        // Fire automation rules async — don't block the response
+        // Fire automation rules + auto-assign async — don't block the response
         runRulesForLead("LEAD_CREATED", newLead).catch(console.error);
+        autoAssignLead(newLead.id, { actorId: userId, reason: "AUTO_ASSIGNMENT" })
+            .catch(err => console.error(`[AutoAssign] createLead ${newLead.id}:`, err.message || err));
 
         res.status(201).json({ message: "Lead created successfully", lead: newLead });
     } catch (error) {
@@ -115,12 +120,27 @@ const createLead = async (req, res, next) => {
 // Update Lead Status (and other details)
 const updateLead = async (req, res, next) => {
     try {
-        const { userId } = req.user;
+        const { userId, role } = req.user;
         const { id } = req.params;
         const { status, name, email, phone, source, enquiryType, assignedToId, nextFollowUpAt } = req.body;
 
         const currentLead = await prisma.lead.findUnique({ where: { id } });
         if (!currentLead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
+
+        // RBAC: caller must be able to see this lead. Without this check any
+        // authenticated user could PATCH /:id with arbitrary fields (IDOR).
+        if (!(await canAccessLead(userId, role, currentLead))) {
+            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You do not have access to this lead");
+        }
+
+        // Only managers/admins may change the assignee.
+        if (
+            assignedToId !== undefined &&
+            assignedToId !== currentLead.assignedToId &&
+            !(await canReassignLeadTo(userId, role, assignedToId))
+        ) {
+            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You cannot reassign this lead");
+        }
 
         // Stage gate: CONVERTED requires at least phone or email
         if (status === "CONVERTED" && currentLead.status !== "CONVERTED") {
@@ -192,8 +212,9 @@ const updateLead = async (req, res, next) => {
             runRulesForLead("LEAD_ASSIGNED", updatedLead).catch(console.error);
         }
 
-        // Decrement load when lead leaves the active pool
-        const terminalStatuses = ["CONVERTED", "LOST", "CLOSED"];
+        // Decrement load when lead leaves the active pool. "CLOSED" was a dead
+        // string (not in the LeadStatus enum); MERGED was missing.
+        const terminalStatuses = ["CONVERTED", "LOST", "MERGED"];
         const wasActive = !terminalStatuses.includes(currentLead.status);
         const isNowTerminal = terminalStatuses.includes(status);
         if (status && wasActive && isNowTerminal && updatedLead.assignedToId) {
@@ -226,12 +247,16 @@ const updateLead = async (req, res, next) => {
 // Assign Lead
 const assignLead = async (req, res, next) => {
     try {
-        const { userId } = req.user; // Admin ID
+        const { userId, role } = req.user;
         const { id } = req.params;
         const { assignedToId } = req.body;
 
         if (!assignedToId) {
             throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "assignedToId is required");
+        }
+
+        if (!(await canReassignLeadTo(userId, role, assignedToId))) {
+            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You cannot assign leads to this user");
         }
 
         const user = await prisma.user.findUnique({ where: { id: assignedToId } });
@@ -382,7 +407,7 @@ const getLead = async (req, res, next) => {
             },
         });
         if (!lead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
-        if (role === "EMPLOYEE" && lead.assignedToId !== userId) {
+        if (!(await canAccessLead(userId, role, lead))) {
             throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Access denied");
         }
         res.json(lead);
@@ -396,10 +421,12 @@ const getLeadActivities = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { userId, role } = req.user;
-        if (role === "EMPLOYEE") {
+        if (role !== "SUPER_ADMIN") {
             const lead = await prisma.lead.findUnique({ where: { id }, select: { assignedToId: true } });
             if (!lead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
-            if (lead.assignedToId !== userId) throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Access denied");
+            if (!(await canAccessLead(userId, role, lead))) {
+                throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Access denied");
+            }
         }
         const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
         const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
@@ -420,8 +447,6 @@ const getLeadActivities = async (req, res, next) => {
     }
 };
 
-// RFC 4180: escape internal quotes by doubling them, then wrap field in quotes
-const csvField = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 
 // In-memory set of userIds with an active export — prevents concurrent exports per user.
 // Single-process safe; for multi-process deployments a distributed lock (e.g. Redis) would be needed.
@@ -438,11 +463,17 @@ const exportLeads = async (req, res, next) => {
         activeExports.add(userId);
 
         try {
-            // Apply the same role-based scoping used in getLeads — prevents TEAM_LEAD from
-            // exfiltrating the entire lead database via a single export request.
+            // Apply the same role-based scoping used in getLeads — prevents a non-admin
+            // from exfiltrating the entire lead database via a single export request.
+            // EMPLOYEE → own leads, MANAGER → team (+ unassigned), SUPER_ADMIN → all.
             const where = {};
             if (role === "EMPLOYEE") {
                 where.assignedToId = userId;
+            } else if (role === "MANAGER") {
+                const teamIds = await getTeamMemberIds(userId);
+                if (teamIds.length > 0) {
+                    where.OR = [{ assignedToId: { in: teamIds } }, { assignedToId: null }];
+                }
             }
 
             const headers = ["Name", "Email", "Phone", "Source", "Type", "Status", "Score", "Category", "Assigned To", "Created At"];

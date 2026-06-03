@@ -3,7 +3,7 @@ import {
     Building, MessageSquare, Clock, Calendar, LogOut, SearchCheck,
     Linkedin, Receipt, PhoneCall, Bot, Send, Search,
     Inbox, ChevronLeft, ChevronRight, GitMerge, Trophy,
-    UserCheck, AlertCircle, TrendingUp, Zap, UserCog, Puzzle, HandCoins, LayoutGrid, IndianRupee,
+    UserCheck, AlertCircle, TrendingUp, Zap, UserCog, Puzzle, HandCoins, LayoutGrid, IndianRupee, Sparkles,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../lib/utils";
@@ -36,6 +36,7 @@ const NAV = [
     { group: "Team",      icon: Trophy,        label: "Leaderboard",        path: "/leaderboard",       managerOnly: true },
     { group: "Team",      icon: PhoneCall,     label: "Salestrail Calls",   path: "/salestrail",        managerOnly: true },
     { group: "Team",      icon: BarChart,      label: "Reports",            path: "/reports",           managerOnly: true },
+    { group: "Team",      icon: Sparkles,      label: "AI Usage",           path: "/ai-usage",          managerOnly: true },
 
     // ── Super Admin only ──────────────────────────────────────────────────────
     { group: "Intelligence", icon: Bot,         label: "Automations",      path: "/automations",            superAdminOnly: true },

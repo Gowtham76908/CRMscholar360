@@ -1,23 +1,46 @@
 /**
  * Lead Distribution Engine
  *
- * Scores managers and employees to fairly distribute leads.
- * All assignments run inside a serializable Prisma transaction that
- * locks the target EmployeeProfile row, preventing duplicate ownership
- * under concurrent bulk imports.
+ * Distributes leads to employees by simple ROUND-ROBIN over an eligibility
+ * filter. No "best employee" scoring — every employee in the pool gets work
+ * in turn. The cursor is each employee's lastAssignedAt timestamp: whoever
+ * was assigned the longest ago (or never) is next.
  *
- * Manager priority (per lead):
- *   40% team workload ratio (lower = better)
- *   30% active available employee count (more = better)
- *   20% time since most-recent team assignment (longer = better)
- *   10% average team performance score (higher = better)
+ * Example: 10 employees, all idle.
+ *   - 5 leads arrive  → emp 1..5 receive them (their lastAssignedAt is set)
+ *   - 5 more arrive   → emp 6..10 receive them (they still have null lastAssignedAt)
+ *   - 5 more arrive   → emp 1..5 receive them again (oldest in queue)
  *
- * Employee priority:
- *   35% workload headroom  (1 – load/max)
- *   25% availability       (ONLINE + accepting = 1.0, else 0)
- *   20% assignment cooldown (time since lastAssignedAt, capped at 8 h)
- *   10% performance score
- *   10% response speed     (lower hours = better, capped at 24 h)
+ * Eligibility (hard gates):
+ *   isActive === true                (user is active)
+ *   isAcceptingLeads === true        (employee toggle says they want leads)
+ *   availabilityStatus !== ON_LEAVE   (not on approved leave)
+ *
+ * OFFLINE is NOT a hard exclusion — an off-desk employee is still working.
+ * They take their turn in the rotation just like ONLINE employees.
+ *
+ * NO LOAD CAP — the engine does not refuse to route based on how many open
+ * leads an employee already has. Distribution is pure round-robin: if you
+ * are eligible, you take your turn. If an employee falls behind, their queue
+ * grows visibly via the currentLeadLoad metric and admins address it as a
+ * people problem (toggle isAcceptingLeads, set ON_LEAVE, or have a chat).
+ *
+ * METRICS — currentLeadLoad / maxDailyLeads:
+ *   These are tracked for visibility only, not enforced as a routing gate.
+ *   currentLeadLoad reflects open-status leads (NEW | CONTACTED | FOLLOW_UP):
+ *     - increments on assignment (+1)
+ *     - decrements when the lead transitions to a terminal status (-1)
+ *     - is reconciled hourly from actual open-lead count (drift correction)
+ *   maxDailyLeads is informational — admins can compare currentLeadLoad
+ *   against it to see who is over their target workload.
+ *
+ * All assignments run inside a serializable Prisma transaction that locks
+ * the target EmployeeProfile row, preventing duplicate assignments under
+ * concurrent intake. On lock-time eligibility failure (employee flipped to
+ * ON_LEAVE or stopped accepting leads between the snapshot and the lock),
+ * the engine retries with the next candidate in the queue (up to 3 attempts).
+ *
+ * Single-lead and batch paths both use a flat employee pool across all teams.
  */
 
 const prisma = require("../utils/prisma");
@@ -41,31 +64,25 @@ function calculatePerformanceScore(profile) {
 }
 
 /**
- * Immediately adjust an employee's currentLeadLoad counter.
- * delta = +1 (new active lead) or -1 (lead closed/converted/lost).
- * Clamps to [0, maxDailyLeads] so it never goes negative.
+ * Adjust an employee's open-lead counter (metric).
+ *   delta = +1 (lead newly assigned and in an open status)
+ *   delta = -1 (lead transitioned to CONVERTED | LOST | MERGED)
+ * Clamped to 0 on the floor so concurrent decrements can't drive it negative.
+ * No upper clamp — the counter reflects reality, even when it exceeds
+ * maxDailyLeads (which is informational only). The hourly recalc job
+ * reconciles any drift against the actual open-lead count.
  */
 async function adjustLeadLoad(employeeId, delta) {
     if (!employeeId) return;
     await prisma.$executeRawUnsafe(
         `UPDATE "EmployeeProfile"
-         SET "currentLeadLoad" = GREATEST(0, LEAST("maxDailyLeads", "currentLeadLoad" + $1)),
+         SET "currentLeadLoad" = GREATEST(0, "currentLeadLoad" + $1),
              "updatedAt" = NOW()
          WHERE "employeeId" = $2`,
         delta, employeeId
     );
 }
 
-function hoursAgo(date) {
-    if (!date) return Infinity;
-    return (Date.now() - new Date(date).getTime()) / 3_600_000;
-}
-
-/** 0-1 score: more time elapsed = higher score, capped at `maxHours`. */
-function cooldownScore(date, maxHours) {
-    if (!date) return 1.0;
-    return clamp(hoursAgo(date) / maxHours, 0, 1);
-}
 
 // ── ensure profile exists ─────────────────────────────────────────────────────
 
@@ -77,167 +94,95 @@ async function ensureProfile(employeeId, tx = prisma) {
     });
 }
 
-// ── manager scoring ───────────────────────────────────────────────────────────
+// ── eligibility ───────────────────────────────────────────────────────────────
 
-async function scoreManagers() {
-    const managers = await prisma.user.findMany({
-        where: { role: { in: ["MANAGER", "SUPER_ADMIN"] }, isActive: true },
-        select: { id: true },
-    });
-
-    const scored = await Promise.all(managers.map(async (m) => {
-        const employees = await prisma.user.findMany({
-            where: { managerId: m.id, isActive: true, role: "EMPLOYEE" },
-            select: {
-                id: true,
-                employeeProfile: {
-                    select: {
-                        availabilityStatus: true,
-                        isAcceptingLeads: true,
-                        currentLeadLoad: true,
-                        maxDailyLeads: true,
-                        lastAssignedAt: true,
-                        performanceScore: true,
-                    },
-                },
-            },
-        });
-
-        const active = employees.filter(e =>
-            e.employeeProfile?.availabilityStatus === "ONLINE" &&
-            e.employeeProfile?.isAcceptingLeads === true &&
-            (e.employeeProfile?.currentLeadLoad ?? 0) < (e.employeeProfile?.maxDailyLeads ?? 20)
-        );
-
-        if (active.length === 0) return null; // manager ineligible
-
-        // 40% team workload — avg load ratio across all employees (lower = better)
-        const totalMax   = employees.reduce((s, e) => s + (e.employeeProfile?.maxDailyLeads ?? 20), 0);
-        const totalLoad  = employees.reduce((s, e) => s + (e.employeeProfile?.currentLeadLoad ?? 0), 0);
-        const teamRatio  = totalMax > 0 ? totalLoad / totalMax : 0;
-        const workloadS  = 1 - teamRatio; // invert: lower load → higher score
-
-        // 30% active employee headroom (more available employees = better)
-        const activeS = clamp(active.length / 10, 0, 1); // normalise against 10
-
-        // 20% recency — time since the most-recently-assigned employee in team
-        const latestAssigned = employees
-            .map(e => e.employeeProfile?.lastAssignedAt)
-            .filter(Boolean)
-            .sort((a, b) => new Date(b) - new Date(a))[0];
-        const recencyS = cooldownScore(latestAssigned, 4); // 4 h cap
-
-        // 10% avg team performance
-        const perfScores = employees
-            .map(e => e.employeeProfile?.performanceScore ?? 0.5)
-            .filter(Boolean);
-        const avgPerf = perfScores.length > 0
-            ? perfScores.reduce((a, b) => a + b, 0) / perfScores.length
-            : 0.5;
-
-        const score = workloadS * 0.4 + activeS * 0.3 + recencyS * 0.2 + avgPerf * 0.1;
-
-        return { managerId: m.id, score, activeCount: active.length };
-    }));
-
-    return scored.filter(Boolean).sort((a, b) => b.score - a.score);
+/**
+ * True if this employee profile is currently eligible to receive a lead.
+ * No ranking — just a yes/no gate. Ordering happens in collectCandidates().
+ */
+function isEligible(profile) {
+    if (!profile) return false;
+    if (!profile.isAcceptingLeads) return false;
+    if (profile.availabilityStatus === "ON_LEAVE") return false;
+    return true;
 }
 
-// ── employee scoring ──────────────────────────────────────────────────────────
+/**
+ * Returns every eligible employee in round-robin order:
+ *   1. Employees who were never assigned a lead (lastAssignedAt = null) come first.
+ *   2. Then by lastAssignedAt ascending (oldest first).
+ *   3. Tiebreaker: employee id ascending (deterministic).
+ *
+ * Optionally restricted to one manager's team (used by MANAGER role).
+ */
+async function collectCandidates({ forcedManager } = {}) {
+    const where = { isActive: true, role: "EMPLOYEE" };
+    if (forcedManager) where.managerId = forcedManager;
 
-function scoreEmployee(profile) {
-    const available =
-        profile.availabilityStatus === "ONLINE" && profile.isAcceptingLeads;
-    if (!available) return -1;
-
-    const load      = profile.currentLeadLoad ?? 0;
-    const maxLoad   = profile.maxDailyLeads   ?? 20;
-    if (load >= maxLoad) return -1;
-
-    const headroom  = 1 - clamp(load / maxLoad, 0, 1);           // 35%
-    const avail     = 1.0;                                         // 25% (already checked)
-    const cooldown  = cooldownScore(profile.lastAssignedAt, 8);   // 20%
-    const perf      = clamp(profile.performanceScore ?? 0.5, 0, 1); // 10%
-    const speed     = profile.responseSpeed != null
-        ? 1 - clamp(profile.responseSpeed / 24, 0, 1)             // 10%
-        : 0.5;
-
-    return headroom * 0.35 + avail * 0.25 + cooldown * 0.20 + perf * 0.10 + speed * 0.10;
-}
-
-async function findBestEmployee(managerId) {
     const employees = await prisma.user.findMany({
-        where: { managerId, isActive: true, role: "EMPLOYEE" },
+        where,
         select: {
             id: true,
-            employeeProfile: true,
+            managerId: true,
+            employeeProfile: {
+                select: {
+                    availabilityStatus: true,
+                    isAcceptingLeads: true,
+                    currentLeadLoad: true,
+                    maxDailyLeads: true,
+                    lastAssignedAt: true,
+                },
+            },
         },
     });
 
-    let best = null;
-    let bestScore = -Infinity;
-
+    const candidates = [];
     for (const emp of employees) {
         const profile = emp.employeeProfile;
-        if (!profile) continue;
-        const s = scoreEmployee(profile);
-        if (s >= 0 && s > bestScore) { bestScore = s; best = emp.id; }
+        if (!isEligible(profile)) continue;
+        candidates.push({
+            id:             emp.id,
+            managerId:      emp.managerId,
+            lastAssignedAt: profile.lastAssignedAt,
+        });
     }
 
-    return best; // null if nobody is available
+    // Round-robin queue order: never-assigned first, then oldest first.
+    candidates.sort((a, b) => {
+        const aTime = a.lastAssignedAt ? new Date(a.lastAssignedAt).getTime() : 0;
+        const bTime = b.lastAssignedAt ? new Date(b.lastAssignedAt).getTime() : 0;
+        if (aTime !== bTime) return aTime - bTime;
+        return a.id < b.id ? -1 : 1; // deterministic tiebreaker
+    });
+    return candidates;
+}
+
+async function findBestEmployee(managerId) {
+    const candidates = await collectCandidates({ forcedManager: managerId });
+    return candidates[0]?.id ?? null;
 }
 
 // ── core assignment ───────────────────────────────────────────────────────────
 
 /**
- * Assign a single lead.
- * Runs inside a serializable transaction + SELECT FOR UPDATE on the profile row
- * to prevent simultaneous duplicate assignments.
- *
- * @param {string}  leadId
- * @param {object}  opts
- * @param {string}  [opts.employeeId]  - force-assign to this employee (manual)
- * @param {string}  [opts.managerId]   - restrict search to this manager's team
- * @param {string}  [opts.actorId]     - user performing the action (for history)
- * @param {string}  [opts.reason]      - AUTO_ASSIGNMENT | MANUAL_REASSIGNMENT | CLAIMED
- * @returns {{ lead, employeeId, managerId } | { error }}
+ * Internal: the actual transactional write for a single (lead, employee) pair.
+ * Returns { lead, employeeId, managerId } on success, { error } on a known
+ * recoverable failure (EMPLOYEE_UNAVAILABLE | LEAD_NOT_FOUND).
+ * Other errors propagate.
  */
-async function assignLead(leadId, opts = {}) {
-    const {
-        employeeId: forcedEmployee,
-        managerId:  forcedManager,
-        actorId,
-        reason = "AUTO_ASSIGNMENT",
-    } = opts;
+async function _doAssign(leadId, targetEmployeeId, opts) {
+    const { actorId, reason = "AUTO_ASSIGNMENT", forced = false } = opts;
 
     try {
-        // ── 1. Pick target employee outside the transaction (scoring reads, not writes)
-        let targetEmployeeId = forcedEmployee;
-
-        if (!targetEmployeeId) {
-            let mgr = forcedManager;
-
-            if (!mgr) {
-                const ranked = await scoreManagers();
-                if (ranked.length === 0) return { error: "No eligible manager found" };
-                mgr = ranked[0].managerId;
-            }
-
-            targetEmployeeId = await findBestEmployee(mgr);
-            if (!targetEmployeeId) return { error: "No available employee in selected manager's team" };
-        }
-
-        // ── 2. Assign inside a serializable transaction with row-level lock
-        const result = await prisma.$transaction(async (tx) => {
-            // Lock profile row — prevents concurrent assignments to the same employee
+        return await prisma.$transaction(async (tx) => {
+            // Lock the target profile row to serialise concurrent assignments to the
+            // same employee.
             const profiles = await tx.$queryRawUnsafe(
                 `SELECT * FROM "EmployeeProfile" WHERE "employeeId" = $1 FOR UPDATE`,
                 targetEmployeeId
             );
-
             let profile = profiles[0];
 
-            // If no profile yet, create one and re-lock
             if (!profile) {
                 await tx.$executeRawUnsafe(
                     `INSERT INTO "EmployeeProfile" ("id","employeeId","updatedAt")
@@ -252,13 +197,11 @@ async function assignLead(leadId, opts = {}) {
                 profile = p2[0];
             }
 
-            // Guard: capacity check inside lock
-            if (!forcedEmployee) {
-                if (profile.availabilityStatus !== "ONLINE" || !profile.isAcceptingLeads) {
+            // Lock-time eligibility re-check. Manual force-assign skips this so an
+            // admin can override (e.g. assign to an on-leave employee).
+            if (!forced) {
+                if (profile.availabilityStatus === "ON_LEAVE" || !profile.isAcceptingLeads) {
                     throw new Error("EMPLOYEE_UNAVAILABLE");
-                }
-                if (profile.currentLeadLoad >= profile.maxDailyLeads) {
-                    throw new Error("CAPACITY_EXCEEDED");
                 }
             }
 
@@ -268,17 +211,15 @@ async function assignLead(leadId, opts = {}) {
             const previousEmployeeId = lead.assignedToId || null;
             const now = new Date();
 
-            // Update lead
             const updated = await tx.lead.update({
                 where: { id: leadId },
                 data:  { assignedToId: targetEmployeeId, assignedAt: now },
                 include: { assignedTo: { select: { id: true, name: true, email: true } } },
             });
 
-            // Increment new employee's load, decrement previous (if reassignment)
             await tx.$executeRawUnsafe(
                 `UPDATE "EmployeeProfile"
-                 SET "currentLeadLoad" = GREATEST(0, LEAST("maxDailyLeads", "currentLeadLoad" + 1)),
+                 SET "currentLeadLoad" = GREATEST(0, "currentLeadLoad" + 1),
                      "lastAssignedAt"  = $1,
                      "updatedAt"       = $1
                  WHERE "employeeId" = $2`,
@@ -295,17 +236,10 @@ async function assignLead(leadId, opts = {}) {
                 );
             }
 
-            // Assignment history
             await tx.assignmentHistory.create({
-                data: {
-                    leadId,
-                    employeeId:         targetEmployeeId,
-                    previousEmployeeId,
-                    reason,
-                },
+                data: { leadId, employeeId: targetEmployeeId, previousEmployeeId, reason },
             });
 
-            // Timeline event
             const employee = await tx.user.findUnique({
                 where: { id: targetEmployeeId },
                 select: { name: true, managerId: true },
@@ -313,11 +247,12 @@ async function assignLead(leadId, opts = {}) {
             await tx.activity.create({
                 data: {
                     leadId,
-                    userId: actorId || targetEmployeeId,
+                    // null for system-initiated assigns (no human actor)
+                    userId: actorId || null,
                     action: previousEmployeeId ? "LEAD_REASSIGNED" : "LEAD_ASSIGNED",
                     metadata: {
-                        newEmployeeId:      targetEmployeeId,
-                        newEmployeeName:    employee?.name,
+                        newEmployeeId:   targetEmployeeId,
+                        newEmployeeName: employee?.name,
                         previousEmployeeId,
                         reason,
                     },
@@ -329,14 +264,58 @@ async function assignLead(leadId, opts = {}) {
             isolationLevel: "Serializable",
             timeout: 10_000,
         });
-
-        return result;
     } catch (err) {
-        if (["EMPLOYEE_UNAVAILABLE", "CAPACITY_EXCEEDED", "LEAD_NOT_FOUND"].includes(err.message)) {
+        if (["EMPLOYEE_UNAVAILABLE", "LEAD_NOT_FOUND"].includes(err.message)) {
             return { error: err.message };
         }
         throw err;
     }
+}
+
+/**
+ * Assign a single lead.
+ *
+ * If `employeeId` is provided, force-assigns to that user (bypasses eligibility).
+ * Otherwise picks the next employee in round-robin order. If the lock-time
+ * eligibility check fails (another concurrent assign grabbed the slot), retries
+ * with the next candidate, up to 3 attempts total.
+ *
+ * @param {string}  leadId
+ * @param {object}  opts
+ * @param {string}  [opts.employeeId]  - force-assign to this employee (manual)
+ * @param {string}  [opts.managerId]   - restrict round-robin to this manager's team
+ * @param {string}  [opts.actorId]     - user performing the action (null for system)
+ * @param {string}  [opts.reason]      - AUTO_ASSIGNMENT | MANUAL_REASSIGNMENT | CLAIMED
+ * @returns {{ lead, employeeId, managerId } | { error }}
+ */
+async function assignLead(leadId, opts = {}) {
+    const { employeeId: forcedEmployee, managerId: forcedManager } = opts;
+
+    if (forcedEmployee) {
+        return _doAssign(leadId, forcedEmployee, { ...opts, forced: true });
+    }
+
+    const candidates = await collectCandidates({ forcedManager });
+    if (candidates.length === 0) {
+        return {
+            error: forcedManager
+                ? "No available employee in selected manager's team"
+                : "No available employee",
+        };
+    }
+
+    const MAX_ATTEMPTS = Math.min(3, candidates.length);
+    let lastError = null;
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        const result = await _doAssign(leadId, candidates[i].id, opts);
+        if (!result.error) return result;
+        // LEAD_NOT_FOUND is terminal — retrying won't help.
+        if (result.error === "LEAD_NOT_FOUND") return result;
+        // EMPLOYEE_UNAVAILABLE → status changed between snapshot and lock,
+        // try the next candidate in the queue.
+        lastError = result.error;
+    }
+    return { error: lastError || "No available employee after retries" };
 }
 
 // ── bulk assignment ───────────────────────────────────────────────────────────
@@ -372,15 +351,14 @@ async function assignLeads(leadIds, opts = {}) {
  *
  * Unlike assignLeads() (which opens one serializable transaction per lead),
  * this function:
- *   1. Scores all managers + employees ONCE.
+ *   1. Collects the flat candidate pool ONCE (employee-first, all teams).
  *   2. Distributes leads across eligible employees in memory (round-robin,
  *      score-ordered, capacity-bounded).
  *   3. Writes everything in two passes:
  *        - One transaction: updateMany per employee + EmployeeProfile counters.
  *        - Chunked createMany outside the transaction: AssignmentHistory + Activity.
  *
- * This reduces N serializable transactions → ~(2E + 2) queries for E employees,
- * making it safe for imports of 10 000+ leads.
+ * Safe for imports of 10 000+ leads.
  *
  * @param {string[]} leadIds
  * @param {{ managerId?: string, actorId?: string }} opts
@@ -391,72 +369,20 @@ async function batchAssignLeads(leadIds, opts = {}) {
 
     const { managerId: forcedManager, actorId } = opts;
 
-    // ── 1. Determine manager pool ─────────────────────────────────────────
-    let managerIds;
-    if (forcedManager) {
-        managerIds = [forcedManager];
-    } else {
-        const ranked = await scoreManagers();
-        managerIds = ranked.map(r => r.managerId);
-    }
-
-    if (managerIds.length === 0) {
-        return { assigned: 0, failed: leadIds.length, total: leadIds.length };
-    }
-
-    // ── 2. Collect eligible employees across all managers ─────────────────
-    const seenEmpIds = new Set();
-    const candidates = [];
-
-    for (const mgId of managerIds) {
-        const employees = await prisma.user.findMany({
-            where: { managerId: mgId, isActive: true, role: "EMPLOYEE" },
-            select: { id: true, employeeProfile: true },
-        });
-        for (const emp of employees) {
-            if (seenEmpIds.has(emp.id)) continue; // guard against duplicate employee rows
-            seenEmpIds.add(emp.id);
-            const profile = emp.employeeProfile;
-            if (!profile) continue;
-            const score = scoreEmployee(profile);
-            if (score < 0) continue; // unavailable or at capacity
-            const capacity = Math.max(0, (profile.maxDailyLeads ?? 20) - (profile.currentLeadLoad ?? 0));
-            if (capacity === 0) continue;
-            candidates.push({ id: emp.id, managerId: mgId, score, capacity });
-        }
-    }
-
+    // ── 1. Collect eligible employees (already ordered round-robin: never-assigned
+    //       first, then oldest lastAssignedAt). No re-sort.
+    const candidates = await collectCandidates({ forcedManager });
     if (candidates.length === 0) {
         return { assigned: 0, failed: leadIds.length, total: leadIds.length };
     }
 
-    // Best-score first so the highest-performing employees get leads first
-    candidates.sort((a, b) => b.score - a.score);
-
-    // ── 3. Distribute leads in memory (round-robin, capacity-bounded) ──────
+    // ── 2. Distribute leads in memory (pure round-robin, no cap) ───────────
     const assignmentMap = new Map(); // employeeId → leadId[]
-    const failedLeads = [];
-    let idx = 0;
 
-    for (const leadId of leadIds) {
-        let assigned = false;
-        for (let attempt = 0; attempt < candidates.length; attempt++) {
-            const c = candidates[(idx + attempt) % candidates.length];
-            if (c.capacity > 0) {
-                if (!assignmentMap.has(c.id)) assignmentMap.set(c.id, []);
-                assignmentMap.get(c.id).push(leadId);
-                c.capacity--;
-                // Advance past this slot so the next lead goes to the next candidate
-                idx = (idx + attempt + 1) % candidates.length;
-                assigned = true;
-                break;
-            }
-        }
-        if (!assigned) failedLeads.push(leadId);
-    }
-
-    if (assignmentMap.size === 0) {
-        return { assigned: 0, failed: leadIds.length, total: leadIds.length };
+    for (let i = 0; i < leadIds.length; i++) {
+        const c = candidates[i % candidates.length];
+        if (!assignmentMap.has(c.id)) assignmentMap.set(c.id, []);
+        assignmentMap.get(c.id).push(leadIds[i]);
     }
 
     // ── 4. Fetch employee names for activity log (read-only, outside tx) ──
@@ -480,14 +406,14 @@ async function batchAssignLeads(leadIds, opts = {}) {
                     data: { assignedToId: empId, assignedAt: now },
                 });
             }
-            // Increment employee load atomically (LEAST prevents exceeding maxDailyLeads)
+            // Increment employee load metric — no cap, the counter reflects reality.
             await tx.$executeRawUnsafe(
                 `UPDATE "EmployeeProfile"
-                 SET "currentLeadLoad" = LEAST("maxDailyLeads", "currentLeadLoad" + $1),
+                 SET "currentLeadLoad" = GREATEST(0, "currentLeadLoad" + $1),
                      "lastAssignedAt"  = $2,
                      "updatedAt"       = $2
                  WHERE "employeeId" = $3`,
-                assignmentMap.get(empId).length, now, empId
+                ids.length, now, empId
             );
         }
     }, { timeout: 60_000 });
@@ -502,7 +428,8 @@ async function batchAssignLeads(leadIds, opts = {}) {
             historyRows.push({ leadId, employeeId: empId, previousEmployeeId: null, reason: "AUTO_ASSIGNMENT" });
             activityRows.push({
                 leadId,
-                userId: actorId || empId,
+                // null for system-initiated assigns (no human actor)
+                userId: actorId || null,
                 action: "LEAD_ASSIGNED",
                 metadata: { newEmployeeId: empId, newEmployeeName: empNameMap.get(empId), reason: "AUTO_ASSIGNMENT" },
             });
@@ -517,19 +444,76 @@ async function batchAssignLeads(leadIds, opts = {}) {
     }
 
     return {
-        assigned: leadIds.length - failedLeads.length,
-        failed: failedLeads.length,
+        assigned: leadIds.length,
+        failed: 0,
         total: leadIds.length,
     };
 }
 
+// ── unassigned-backlog alert ──────────────────────────────────────────────────
+//
+// Replaces the cron-poll approach: when an immediate auto-assign fails (no
+// eligible employee), we push an in-app notification to admins. Throttled by an
+// in-memory cooldown so a burst of 50 failed assigns produces one alert, not 50.
+
+const UNASSIGNED_ALERT_COOLDOWN_MS = 15 * 60 * 1000;
+let _lastUnassignedAlertAt = 0;
+
+async function notifyAdminsOfUnassignedBacklog() {
+    const now = Date.now();
+    if (now - _lastUnassignedAlertAt < UNASSIGNED_ALERT_COOLDOWN_MS) return;
+    _lastUnassignedAlertAt = now;
+
+    const unassignedCount = await prisma.lead.count({ where: { assignedToId: null } });
+    if (unassignedCount === 0) return;
+
+    const admins = await prisma.user.findMany({
+        where: { role: { in: ["SUPER_ADMIN", "MANAGER"] }, isActive: true },
+        select: { id: true },
+    });
+    if (admins.length === 0) return;
+
+    const title = "Leads need manual assignment";
+    const message = `${unassignedCount} lead${unassignedCount === 1 ? "" : "s"} could not be auto-assigned — no employee was eligible. Please allocate them.`;
+
+    await Promise.all(admins.map(a =>
+        prisma.notification.create({
+            data: {
+                userId:  a.id,
+                title,
+                message,
+                type:    "UNASSIGNED_LEAD_BACKLOG",
+                link:    "/unassigned-leads",
+            },
+        }).catch(err => console.error("[Unassigned alert] notify failed:", err.message || err))
+    ));
+}
+
+/**
+ * Convenience wrapper used by intake paths: attempts auto-assignment and, on
+ * failure, fires a throttled admin notification. Always resolves with the
+ * assignLead result so callers can log / inspect.
+ */
+async function assignLeadOrAlert(leadId, opts = {}) {
+    const result = await assignLead(leadId, opts);
+    if (result?.error) {
+        // Fire-and-forget — never block the caller.
+        notifyAdminsOfUnassignedBacklog().catch(err =>
+            console.error("[Unassigned alert] cooldown handler failed:", err.message || err)
+        );
+    }
+    return result;
+}
+
 module.exports = {
     assignLead,
+    assignLeadOrAlert,
     assignLeads,
     batchAssignLeads,
-    scoreManagers,
     findBestEmployee,
+    isEligible,
     ensureProfile,
     adjustLeadLoad,
     calculatePerformanceScore,
+    notifyAdminsOfUnassignedBacklog,
 };

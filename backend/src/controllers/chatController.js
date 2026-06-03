@@ -1,10 +1,11 @@
 const { StreamChat } = require("stream-chat");
 const prisma = require("../utils/prisma");
+const { ApiError } = require("../utils/apiError");
 
 // Initialize Stream Client lazily or ensure env vars are loaded
 const getStreamClient = () => {
     if (!process.env.STREAM_API_KEY || !process.env.STREAM_SECRET_KEY) {
-        throw new Error("MISSING STREAM CREDENTIALS");
+        throw new ApiError(503, "INTEGRATION_NOT_CONFIGURED", "Team chat is not configured on this server.");
     }
     return StreamChat.getInstance(
         process.env.STREAM_API_KEY,

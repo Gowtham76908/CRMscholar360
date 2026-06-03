@@ -4,9 +4,20 @@ const path = require("path");
 const { execSync } = require("child_process");
 const axios = require("axios");
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazily constructed so that merely requiring this module (e.g. on the first
+// transcription request) never throws when OPENAI_API_KEY is absent — the SDK
+// throws "Missing credentials" at construction. Controllers gate on
+// isTranscriptionConfigured() and return a clean 503 before reaching here.
+let _openai = null;
+function getClient() {
+    if (!process.env.OPENAI_API_KEY) {
+        throw new Error("Call transcription is not configured on this server.");
+    }
+    if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    return _openai;
+}
+
+const isTranscriptionConfigured = () => !!process.env.OPENAI_API_KEY;
 
 /**
  * Get audio duration using ffprobe
@@ -82,7 +93,7 @@ async function downloadRecording(url, destPath) {
 // Pass 1: Quick transcription for context
 async function getQuickTranscription(filePath) {
     console.log("Pass 1: Quick transcription for context...");
-    const quickTranscription = await openai.audio.transcriptions.create({
+    const quickTranscription = await getClient().audio.transcriptions.create({
         file: fs.createReadStream(filePath),
         model: "whisper-1",
         response_format: "text",
@@ -96,7 +107,7 @@ async function getQuickTranscription(filePath) {
 
 // Pass 2: Full detailed transcription with context
 async function transcribeSingleFile(filePath, contextPrompt) {
-    return await openai.audio.transcriptions.create({
+    return await getClient().audio.transcriptions.create({
         file: fs.createReadStream(filePath),
         model: "whisper-1",
         response_format: "verbose_json",
@@ -110,7 +121,7 @@ async function transcribeSingleFile(filePath, contextPrompt) {
 async function generateFullSummary(fullTranscriptText) {
     console.log("Pass 3: Generating summary + metadata...");
 
-    const summaryResponse = await openai.chat.completions.create({
+    const summaryResponse = await getClient().chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
             {
@@ -293,4 +304,4 @@ async function runThreePassTranscription(filePath, cleanup = false) {
     }
 }
 
-module.exports = { transcribeFromUrl, transcribeFromFile };
+module.exports = { transcribeFromUrl, transcribeFromFile, isTranscriptionConfigured };

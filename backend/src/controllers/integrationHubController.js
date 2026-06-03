@@ -160,6 +160,7 @@ const configure = async (req, res, next) => {
             if (safeConfig.accessToken)   safeConfig.accessToken   = encrypt(safeConfig.accessToken);
             if (safeConfig.refreshToken)  safeConfig.refreshToken  = encrypt(safeConfig.refreshToken);
             if (safeConfig.developerToken) safeConfig.developerToken = encrypt(safeConfig.developerToken);
+            if (safeConfig.appSecret)     safeConfig.appSecret     = encrypt(safeConfig.appSecret);
             updateData.config = safeConfig;
         }
         if (metadata) {
@@ -201,6 +202,12 @@ const configure = async (req, res, next) => {
             });
             const logType = ok ? "CONNECTED" : "AUTH_FAILED";
             await addLog(integration.id, logType, message, ok ? "SUCCESS" : "ERROR");
+
+            // WhatsApp send/template service caches the integration config — invalidate
+            // it on reconfigure so the next send picks up the new credentials.
+            if (platform === "whatsapp_cloud") {
+                try { require("../services/whatsappService").clearConfigCache(); } catch {}
+            }
             return res.json({ ok, message });
         }
 

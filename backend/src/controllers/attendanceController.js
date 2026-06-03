@@ -1,6 +1,16 @@
 const prisma = require("../utils/prisma");
 const { calculateCompOffBalance, calculateCompOffBalanceBulk } = require("../utils/attendance");
 const { nowIST, todayIST } = require("../utils/istTime");
+const { getTeamMemberIds } = require("../services/organizationService");
+
+// User ids a requester may view/manage attendance for. SUPER_ADMIN → null (all);
+// MANAGER → their own team plus themselves. Keeps one manager's HR data private
+// from another manager's team.
+async function scopedUserIds(user) {
+    if (user.role === "SUPER_ADMIN") return null;
+    const teamIds = await getTeamMemberIds(user.userId);
+    return [...teamIds, user.userId];
+}
 
 // Check In
 const checkIn = async (req, res, next) => {
@@ -147,9 +157,17 @@ const getMyAttendance = async (req, res, next) => {
 const getAllAttendance = async (req, res, next) => {
     try {
         const { date, userId } = req.query;
+        const allowed = await scopedUserIds(req.user);
 
         let where = {};
-        if (userId) where.userId = userId;
+        if (userId) {
+            if (allowed && !allowed.includes(userId)) {
+                return res.status(403).json({ message: "Access denied: outside your team" });
+            }
+            where.userId = userId;
+        } else if (allowed) {
+            where.userId = { in: allowed };
+        }
         if (date) {
             const targetDate = new Date(date);
             targetDate.setHours(0, 0, 0, 0);
@@ -229,9 +247,12 @@ const getAdminMonthlyReport = async (req, res, next) => {
         const totalDaysInMonth = endDate.getUTCDate();
         const workingDays = totalDaysInMonth - sundayCount;
 
-        // 1. Employees
+        // 1. Employees — managers see only their own team
+        const allowed = await scopedUserIds(req.user);
+        const empWhere = { role: 'EMPLOYEE', isActive: true };
+        if (allowed) empWhere.id = { in: allowed };
         const employees = await prisma.user.findMany({
-            where: { role: 'EMPLOYEE', isActive: true },
+            where: empWhere,
             select: { id: true, name: true, email: true, department: true, jobTitle: true, createdAt: true }
         });
         const employeeIds = employees.map(e => e.id);
@@ -306,6 +327,11 @@ const getEmployeeMonthlyAttendance = async (req, res, next) => {
         const { employeeId } = req.params;
         const { month, year } = req.query;
 
+        const allowed = await scopedUserIds(req.user);
+        if (allowed && !allowed.includes(employeeId)) {
+            return res.status(403).json({ message: "Access denied: outside your team" });
+        }
+
         const targetMonth = parseInt(month) || (new Date().getMonth() + 1);
         const targetYear = parseInt(year) || new Date().getFullYear();
 
@@ -350,6 +376,11 @@ const updateAttendanceStatus = async (req, res, next) => {
 
         if (!userId || !date || !status) {
             return res.status(400).json({ message: "userId, date, and status are required" });
+        }
+
+        const allowed = await scopedUserIds(req.user);
+        if (allowed && !allowed.includes(userId)) {
+            return res.status(403).json({ message: "Access denied: outside your team" });
         }
 
         const targetDate = new Date(date);

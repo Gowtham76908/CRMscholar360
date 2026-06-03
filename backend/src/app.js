@@ -126,6 +126,7 @@ app.use("/api/demo-booking", require("./routes/demoBooking")); // public booking
 // Adding a new router? Ensure it starts with router.use(authMiddleware) before
 // any route definitions — otherwise its endpoints will be publicly accessible.
 app.use("/api/assistant",        require("./routes/assistant"));
+app.use("/api/assistant-usage",  require("./routes/assistantUsage"));
 app.use("/api/users",           userRoutes);
 app.use("/api/leads",           leadRoutes);
 app.use("/api/team",            teamRoutes);
@@ -169,7 +170,7 @@ app.use("/api/email-templates",  require("./routes/emailTemplates"));
 app.use("/api/leads/:id/journey", require("./routes/journey"));
 // Public — no auth middleware (email clients load pixel without session)
 app.use("/api/email-track",     require("./routes/emailTrack"));
-app.use("/api/google",          require("./routes/googleCalendar"));
+app.use("/api/google",          require("./routes/googleCalendar"));  // routes inside this router self-auth via authMiddleware
 // Public — Google Ads Lead Form Extensions webhook (no auth, key-verified)
 app.use("/api/google-ads",      require("./routes/googleAdsWebhook"));
 // Public — Website embed form (wide-open CORS, API-key auth)

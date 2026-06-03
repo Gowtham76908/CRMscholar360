@@ -5,7 +5,7 @@ const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
 
 router.use(authMiddleware);
-router.use(roleMiddleware(["ADMIN", "SUPER_ADMIN"]));
+router.use(roleMiddleware(["SUPER_ADMIN"]));
 
 router.get("/",             ctrl.getRules);
 router.post("/",            ctrl.createRule);

@@ -9,7 +9,7 @@ router.use(authMiddleware);
 // Search businesses via Serper API
 router.post("/", searchBusinessLeads);
 
-// Import selected search results as leads (Admin/Super Admin only)
-router.post("/import", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), importSearchedLeads);
+// Import selected search results as leads (managers + super admin)
+router.post("/import", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), importSearchedLeads);
 
 module.exports = router;

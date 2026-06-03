@@ -10,12 +10,27 @@ const logger                              = require("../utils/logger");
 const MAX_ITERATIONS       = 5;  // distinct LLM round-trips per request
 const MAX_TOTAL_TOOL_CALLS = 10; // sum of all tool calls across iterations
 
-const handleChat = async ({ userId, userName, role, message, currentPage }) => {
+const _logRequest = ({ userId, status, totalTokens, primaryTool, latencyMs, inputMode }) => {
+    prisma.assistantRequestLog.create({
+        data: {
+            userId,
+            status,
+            totalTokens: totalTokens || 0,
+            primaryTool: primaryTool || null,
+            latencyMs:   latencyMs   || 0,
+            inputMode:   inputMode === "voice" ? "voice" : "chat",
+        },
+    }).catch((err) => logger.warn({ err: err.message, status }, "Failed to write AssistantRequestLog"));
+};
+
+const handleChat = async ({ userId, userName, role, message, currentPage, inputMode }) => {
     const requestId = crypto.randomUUID().slice(0, 8);
     const provider  = getProvider();
+    const t0        = Date.now();
+    let   primaryTool = null;
 
     // Phase 4: load conversation history from contextManager
-    const history = getSession(userId);
+    const history = await getSession(userId);
 
     // Phase 5: resolve user name (one cheap indexed read) so the LLM can address them
     let resolvedUserName = userName;
@@ -53,6 +68,14 @@ const handleChat = async ({ userId, userName, role, message, currentPage }) => {
         } catch (err) {
             const normalized = provider.normalizeError(err);
             logger.error({ requestId, userId, errorType: normalized.type, err: err.message }, "Assistant provider error");
+            _logRequest({
+                userId,
+                status:      "ERROR",
+                totalTokens: usage.totalTokens,
+                primaryTool,
+                latencyMs:   Date.now() - t0,
+                inputMode,
+            });
             const wrapped = new Error(normalized.message);
             wrapped.assistantError = normalized.type;
             throw wrapped;
@@ -71,13 +94,26 @@ const handleChat = async ({ userId, userName, role, message, currentPage }) => {
             // Only persist successful turns. Cap/iteration fallback replies are skipped
             // below so future LLM calls don't see "I couldn't answer that" as context.
             if (finalReply) {
-                addTurn(userId, { userMessage: message, assistantMessage: finalReply });
+                await addTurn(userId, { userMessage: message, assistantMessage: finalReply });
             }
             logger.info(
                 { requestId, userId, iter, toolCallsTotal, totalTokens: usage.totalTokens, persisted: Boolean(finalReply) },
                 "Assistant turn complete",
             );
+            _logRequest({
+                userId,
+                status:      "SUCCESS",
+                totalTokens: usage.totalTokens,
+                primaryTool,
+                latencyMs:   Date.now() - t0,
+                inputMode,
+            });
             return { reply: finalReply, usage, requestId };
+        }
+
+        // Capture the very first tool the LLM reached for — best proxy for user intent.
+        if (!primaryTool && result.toolCalls[0]?.name) {
+            primaryTool = result.toolCalls[0].name;
         }
 
         // Enforce total tool-call cap (in addition to iteration cap)
@@ -87,6 +123,14 @@ const handleChat = async ({ userId, userName, role, message, currentPage }) => {
                 { requestId, userId, toolCallsTotal, cap: MAX_TOTAL_TOOL_CALLS },
                 "Assistant exceeded total tool-call cap",
             );
+            _logRequest({
+                userId,
+                status:      "SUCCESS",
+                totalTokens: usage.totalTokens,
+                primaryTool,
+                latencyMs:   Date.now() - t0,
+                inputMode,
+            });
             return {
                 reply: "I had to make too many lookups for that question. Try something more focused.",
                 usage,
@@ -115,10 +159,10 @@ const handleChat = async ({ userId, userName, role, message, currentPage }) => {
                 };
             }
 
-            const t0 = Date.now();
+            const t = Date.now();
             try {
                 const data = await executeTool(tc.name, tc.arguments, { userId, role, requestId });
-                logger.info({ requestId, userId, tool: tc.name, latencyMs: Date.now() - t0 }, "Tool executed");
+                logger.info({ requestId, userId, tool: tc.name, latencyMs: Date.now() - t }, "Tool executed");
                 return { id: tc.id, content: JSON.stringify(data) };
             } catch (err) {
                 logger.warn({ requestId, userId, tool: tc.name, err: err.message }, "Tool execution failed");
@@ -135,6 +179,14 @@ const handleChat = async ({ userId, userName, role, message, currentPage }) => {
         { requestId, userId, maxIter: MAX_ITERATIONS, toolCallsTotal },
         "Assistant tool-call loop reached max iterations",
     );
+    _logRequest({
+        userId,
+        status:      "SUCCESS",
+        totalTokens: usage.totalTokens,
+        primaryTool,
+        latencyMs:   Date.now() - t0,
+        inputMode,
+    });
     return {
         reply: "I needed too many steps to answer that. Could you ask something more specific?",
         usage,

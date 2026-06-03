@@ -19,15 +19,21 @@ const { createInvoiceSchema, addPaymentSchema } = require("../middleware/schemas
 
 router.use(authMiddleware);
 
-router.get("/balance-sheet", getBalanceSheet);
-router.get("/stats", getInvoiceStats);
-router.get("/", getInvoices);
-router.post("/", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(createInvoiceSchema), createInvoice);
-router.get("/:id", getInvoice);
-router.patch("/:id", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), updateInvoice);
-router.delete("/:id", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), deleteInvoice);
-router.post("/:id/send-email", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), sendEmail);
-router.post("/:id/payments", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(addPaymentSchema), addPayment);
-router.delete("/:id/payments/:paymentId", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), deletePayment);
+// All invoice access is privileged — financials are visible to MANAGER/SUPER_ADMIN
+// (the sidebar already restricts the page to SUPER_ADMIN; managers may read via deal pages).
+// Without this gate, EMPLOYEEs could list/read/aggregate any invoice in the system.
+const READ_ROLES  = ["SUPER_ADMIN", "MANAGER"];
+const WRITE_ROLES = ["SUPER_ADMIN"];
+
+router.get("/balance-sheet", roleMiddleware(READ_ROLES), getBalanceSheet);
+router.get("/stats",         roleMiddleware(READ_ROLES), getInvoiceStats);
+router.get("/",              roleMiddleware(READ_ROLES), getInvoices);
+router.post("/", roleMiddleware(WRITE_ROLES), validate(createInvoiceSchema), createInvoice);
+router.get("/:id",           roleMiddleware(READ_ROLES), getInvoice);
+router.patch("/:id",         roleMiddleware(WRITE_ROLES), updateInvoice);
+router.delete("/:id",        roleMiddleware(WRITE_ROLES), deleteInvoice);
+router.post("/:id/send-email", roleMiddleware(WRITE_ROLES), sendEmail);
+router.post("/:id/payments",   roleMiddleware(WRITE_ROLES), validate(addPaymentSchema), addPayment);
+router.delete("/:id/payments/:paymentId", roleMiddleware(WRITE_ROLES), deletePayment);
 
 module.exports = router;

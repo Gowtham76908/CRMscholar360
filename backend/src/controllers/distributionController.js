@@ -107,12 +107,10 @@ const getAvailableEmployees = async (req, res, next) => {
             orderBy: { name: "asc" },
         });
 
-        // Filter out over-capacity employees
-        const available = employees.filter(e =>
-            (e.employeeProfile?.currentLeadLoad ?? 0) < (e.employeeProfile?.maxDailyLeads ?? 20)
-        );
-
-        res.json(available);
+        // No load-cap filter: the engine no longer treats maxDailyLeads as a
+        // routing gate. currentLeadLoad is returned in the payload so admins
+        // can spot heavy queues visually.
+        res.json(employees);
     } catch (err) {
         return next(err);
     }

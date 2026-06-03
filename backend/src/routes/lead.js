@@ -24,8 +24,8 @@ const fileUpload = multer({
 router.use(authMiddleware);
 
 // Bulk Actions
-router.patch("/bulk-update", roleMiddleware(["SUPER_ADMIN", "ADMIN", "MANAGER"]), validate(bulkUpdateSchema), bulkController.bulkUpdateLeads);
-router.patch("/bulk-assign", roleMiddleware(["SUPER_ADMIN", "ADMIN", "MANAGER"]), validate(bulkAssignSchema), bulkController.bulkAssignLeads);
+router.patch("/bulk-update", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), validate(bulkUpdateSchema), bulkController.bulkUpdateLeads);
+router.patch("/bulk-assign", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), validate(bulkAssignSchema), bulkController.bulkAssignLeads);
 router.post("/bulk-smart-assign", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), bulkSmartAssignLeads);
 
 // Get Lead Stats for Dashboard
@@ -33,10 +33,10 @@ router.get("/stats",             leadController.getDashboardStats);
 router.get("/overdue-followups", leadController.getOverdueFollowUps);
 router.get("/sla-alerts",        leadController.getSLAAlerts);
 router.get("/team-stats",        leadController.getTeamStats);
-router.get("/duplicates",  roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEAD"]), leadController.getDuplicates);
+router.get("/duplicates",  roleMiddleware(["SUPER_ADMIN", "MANAGER"]), leadController.getDuplicates);
 
 // Export Leads (admin/team_lead only — prevents bulk data leakage)
-router.get("/export", roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEAD"]), leadController.exportLeads);
+router.get("/export", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), leadController.exportLeads);
 
 // Import Leads — preview (parse only, no DB writes), actual import, and status polling
 router.post("/import/preview",        roleMiddleware(["SUPER_ADMIN", "MANAGER"]), fileUpload.single("file"), leadController.previewImport);
@@ -46,8 +46,8 @@ router.get("/import/status/:jobId",   roleMiddleware(["SUPER_ADMIN", "MANAGER"])
 // Check Duplicates
 router.post("/check-duplicate", validate(checkDuplicateSchema), leadController.checkDuplicate);
 
-// Merge Leads (Admin only)
-router.post("/merge", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(mergeLeadsSchema), leadController.mergeLeads);
+// Merge Leads (managers + super admin)
+router.post("/merge", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), validate(mergeLeadsSchema), leadController.mergeLeads);
 
 // Get Lead Activities
 router.get("/:id/activities", leadController.getLeadActivities);

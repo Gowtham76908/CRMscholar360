@@ -7,8 +7,9 @@ const roleMiddleware = require("../middleware/roleMiddleware");
 // Routes require authentication
 router.use(authMiddleware);
 
-// Allow SUPER_ADMIN and ADMIN roles
-router.use(roleMiddleware(["SUPER_ADMIN", "ADMIN"]));
+// Managers may manage their own team (scoped inside teamController); hard-delete
+// and Manager-role assignment stay SUPER_ADMIN-only (enforced in the controller).
+router.use(roleMiddleware(["SUPER_ADMIN", "MANAGER"]));
 
 // Get all users
 router.get("/", teamController.getTeam);

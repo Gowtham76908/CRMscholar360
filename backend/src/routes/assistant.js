@@ -3,8 +3,8 @@ const authMiddleware = require("../middleware/authMiddleware");
 const rateLimiter    = require("../assistant/rateLimiter");
 const { chatHandler, isAssistantEnabled } = require("../assistant/assistantController");
 
-router.get("/health", (req, res) => {
-    const enabled = isAssistantEnabled();
+router.get("/health", async (req, res) => {
+    const enabled = await isAssistantEnabled();
     res.json({
         status:   enabled ? "ok" : "disabled",
         enabled,

@@ -10,11 +10,11 @@ const getLeaderboard = async (req, res, next) => {
         const startDate = new Date(Date.UTC(targetYear, targetMonth - 1, 1));
         const endDate = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999));
 
-        // Get all active employees and admins
+        // Rank all active staff (employees + managers) — super admins are excluded.
         const employees = await prisma.user.findMany({
-            where: { 
-                role: { in: ['EMPLOYEE', 'ADMIN'] }, 
-                isActive: true 
+            where: {
+                role: { in: ['EMPLOYEE', 'MANAGER'] },
+                isActive: true
             },
             select: { id: true, name: true, email: true, department: true, jobTitle: true, profilePhoto: true }
         });

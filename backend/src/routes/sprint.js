@@ -8,7 +8,7 @@ const { createSprintSchema, updateSprintSchema, addTasksToSprintSchema } = requi
 
 router.use(authMiddleware);
 
-const adminOnly = roleMiddleware(["SUPER_ADMIN", "ADMIN"]);
+const adminOnly = roleMiddleware(["SUPER_ADMIN", "MANAGER"]);
 
 // ── Read (all roles) ──────────────────────────────────────────────────────────
 router.get("/", c.getSprints);

@@ -6,9 +6,13 @@ const { list, create, update, remove } = require("../controllers/emailTemplateCo
 
 router.use(authMiddleware);
 
-router.get("/",     list);
-router.post("/",    create);
-router.patch("/:id", update);
-router.delete("/:id", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), remove);
+// Templates are a shared org resource: any user may read/use them, but only
+// managers and super admins may create, edit, or delete them.
+const MANAGE_ROLES = ["SUPER_ADMIN", "MANAGER"];
+
+router.get("/",       list);
+router.post("/",      roleMiddleware(MANAGE_ROLES), create);
+router.patch("/:id",  roleMiddleware(MANAGE_ROLES), update);
+router.delete("/:id", roleMiddleware(MANAGE_ROLES), remove);
 
 module.exports = router;

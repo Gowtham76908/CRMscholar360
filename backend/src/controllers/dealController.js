@@ -34,7 +34,7 @@ const createDeal = async (req, res, next) => {
             return res.status(400).json({ message: "leadId and title are required" });
         }
 
-        const deal = await dealService.createDeal({ leadId, title, amount, stage, currency, notes, createdById: userId, assignedEmployeeId });
+        const deal = await dealService.createDeal({ leadId, title, amount, stage, currency, notes, createdById: userId, createdByRole: role, assignedEmployeeId });
 
         await logActivity({
             leadId,

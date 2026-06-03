@@ -15,9 +15,9 @@ router.post("/webhook", verifyWebhookSignature, receiveWebhookEvent);
 router.use(authMiddleware);
 
 router.get("/status",       getStatus);
-router.post("/connect",     roleMiddleware(["SUPER_ADMIN", "ADMIN"]), connect);
-router.post("/disconnect",  roleMiddleware(["SUPER_ADMIN", "ADMIN"]), disconnect);
-router.get("/forms",        roleMiddleware(["SUPER_ADMIN", "ADMIN"]), listForms);
-router.post("/sync",        roleMiddleware(["SUPER_ADMIN", "ADMIN"]), syncLeads);
+router.post("/connect",     roleMiddleware(["SUPER_ADMIN"]), connect);
+router.post("/disconnect",  roleMiddleware(["SUPER_ADMIN"]), disconnect);
+router.get("/forms",        roleMiddleware(["SUPER_ADMIN"]), listForms);
+router.post("/sync",        roleMiddleware(["SUPER_ADMIN"]), syncLeads);
 
 module.exports = router;

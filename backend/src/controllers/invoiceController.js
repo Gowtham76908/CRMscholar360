@@ -2,6 +2,25 @@ const prisma = require("../utils/prisma");
 const { sendInvoiceEmail } = require("../services/emailService");
 const logActivity = require("../utils/activityLogger");
 const paginate = require("../utils/paginate");
+const { ApiError, ERROR_CODES } = require("../utils/apiError");
+const { getTeamMemberIds } = require("../services/organizationService");
+
+// Limits invoice reads to a manager's own hierarchy. An invoice belongs to a
+// team if its creator, its deal's owner/assigned employee, or the deal's lead
+// is on the manager's team. SUPER_ADMIN gets an empty fragment (sees all).
+async function invoiceScope(user) {
+    if (user.role === "SUPER_ADMIN") return {};
+    const teamIds = await getTeamMemberIds(user.userId);
+    const ids = [...teamIds, user.userId];
+    return {
+        OR: [
+            { createdById: { in: ids } },
+            { deal: { createdById: { in: ids } } },
+            { deal: { assignedEmployeeId: { in: ids } } },
+            { deal: { lead: { assignedToId: { in: ids } } } },
+        ],
+    };
+}
 
 // Resolve leadId from an invoice's dealId (if any), for timeline logging
 async function getLeadIdFromInvoice(invoice) {
@@ -135,7 +154,7 @@ const getInvoices = async (req, res, next) => {
         const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 100));
         const { status, type, dealId } = req.query;
 
-        const where = { deletedAt: null };
+        const where = { deletedAt: null, ...(await invoiceScope(req.user)) };
         if (status) where.status = status;
         if (type)   where.invoiceType = type;
         if (dealId) where.dealId = dealId;
@@ -186,8 +205,8 @@ const getInvoices = async (req, res, next) => {
 const getInvoice = async (req, res, next) => {
     // Soft-deleted invoices are treated as not found for regular access
     try {
-        const invoice = await prisma.invoice.findUnique({
-            where: { id: req.params.id, deletedAt: null },
+        const invoice = await prisma.invoice.findFirst({
+            where: { id: req.params.id, deletedAt: null, ...(await invoiceScope(req.user)) },
             include: {
                 items: true,
                 payments: { orderBy: { paymentDate: "desc" } },
@@ -380,22 +399,18 @@ const getBalanceSheet = async (req, res, next) => {
         const page  = Math.max(1, parseInt(req.query.page  ?? 1));
         const limit = Math.min(200, Math.max(1, parseInt(req.query.limit ?? 50)));
         const skip  = (page - 1) * limit;
-        const where = { status: { not: "CANCELLED" }, deletedAt: null };
+        const scope = await invoiceScope(req.user);
+        const where = { status: { not: "CANCELLED" }, deletedAt: null, ...scope };
         const now   = new Date();
 
-        // Aggregate summary entirely in the DB — avoids loading all invoices into JS
-        const [agg, statusCounts, overdueCount, total, pageInvoices] = await Promise.all([
-            prisma.$queryRaw`
-                SELECT
-                    COALESCE(SUM(i.total), 0)                                          AS "totalInvoiced",
-                    COALESCE(SUM(p.credit), 0)                                         AS "totalReceived"
-                FROM "Invoice" i
-                LEFT JOIN LATERAL (
-                    SELECT COALESCE(SUM(pe.amount) FILTER (WHERE pe.type = 'CREDIT'), 0) AS credit
-                    FROM "PaymentEntry" pe WHERE pe."invoiceId" = i.id
-                ) p ON true
-                WHERE i.status != 'CANCELLED'
-            `,
+        // Aggregate summary in the DB (scoped to the requester's hierarchy) —
+        // avoids loading all invoices into JS while respecting team boundaries.
+        const [invoicedAgg, receivedAgg, statusCounts, overdueCount, total, pageInvoices] = await Promise.all([
+            prisma.invoice.aggregate({ _sum: { total: true }, where }),
+            prisma.paymentEntry.aggregate({
+                _sum: { amount: true },
+                where: { type: "CREDIT", invoice: { status: { not: "CANCELLED" }, deletedAt: null, ...scope } },
+            }),
             prisma.invoice.groupBy({
                 by: ["status"],
                 where,
@@ -414,8 +429,8 @@ const getBalanceSheet = async (req, res, next) => {
             }),
         ]);
 
-        const totalInvoiced    = parseFloat(Number(agg[0]?.totalInvoiced ?? 0).toFixed(2));
-        const totalReceived    = parseFloat(Number(agg[0]?.totalReceived ?? 0).toFixed(2));
+        const totalInvoiced    = parseFloat(Number(invoicedAgg._sum.total ?? 0).toFixed(2));
+        const totalReceived    = parseFloat(Number(receivedAgg._sum.amount ?? 0).toFixed(2));
         const totalOutstanding = parseFloat((totalInvoiced - totalReceived).toFixed(2));
         const paidCount        = statusCounts.find(s => s.status === "PAID")?._count?.status ?? 0;
         const partialCount     = statusCounts.find(s => s.status === "PARTIALLY_PAID")?._count?.status ?? 0;
@@ -450,7 +465,7 @@ const getBalanceSheet = async (req, res, next) => {
 const getInvoiceStats = async (req, res, next) => {
     try {
         const { getRevenueStats } = require("../services/dealService");
-        const stats = await getRevenueStats();
+        const stats = await getRevenueStats(await invoiceScope(req.user));
         res.json(stats);
     } catch (error) {
         return next(error);

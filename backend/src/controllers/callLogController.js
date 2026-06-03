@@ -5,6 +5,14 @@ const FormData = require("form-data");
 const axios = require("axios");
 const { updateLeadScoreFromCall } = require("../services/leadScoringService");
 const { runRulesForLead } = require("../services/automationEngine");
+const { canAccessLead } = require("../services/permissionService");
+
+// Shared access check for a call log's underlying lead. Call recordings and
+// transcripts are sensitive customer data, so reads are scoped the same way
+// leads are: EMPLOYEE → own, MANAGER → team (+ unassigned), SUPER_ADMIN → all.
+async function canAccessCallLead(reqUser, assignedToId) {
+    return canAccessLead(reqUser.userId, reqUser.role, { assignedToId: assignedToId ?? null });
+}
 
 // Initiate Click2Call via Greeter
 const initiateCall = async (req, res, next) => {
@@ -26,6 +34,16 @@ const initiateCall = async (req, res, next) => {
         const normalizedAgentNumber = normalizePhone(user.phone);
         if (!normalizedAgentNumber) {
             return res.status(400).json({ message: "Your phone number is invalid. Please update your profile with a valid phone number." });
+        }
+
+        // Scope to the requester's leads — an agent shouldn't be able to dial out on,
+        // or attach call logs to, another team's lead by passing its id.
+        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true } });
+        if (!lead) {
+            return res.status(404).json({ message: "Lead not found" });
+        }
+        if (!(await canAccessCallLead(req.user, lead.assignedToId))) {
+            return res.status(403).json({ message: "Access denied" });
         }
 
         // Create a call log entry first (status: INITIATED)
@@ -88,6 +106,17 @@ const initiateCall = async (req, res, next) => {
 // This endpoint is called by Greeter (no auth required)
 const greeterWebhook = async (req, res, next) => {
     try {
+        // Optional shared-secret gate. If GREETER_WEBHOOK_SECRET is configured,
+        // every call must present it (header or query) — otherwise anyone could
+        // inject fake call logs and trigger automations. Lenient if unset (dev).
+        const secret = process.env.GREETER_WEBHOOK_SECRET;
+        if (secret) {
+            const provided = req.headers["x-greeter-secret"] || req.query.secret;
+            if (provided !== secret) {
+                return res.status(403).json({ message: "Invalid webhook secret" });
+            }
+        }
+
         console.log("Greeter webhook received:", req.body);
 
         const {
@@ -250,6 +279,11 @@ const logCall = async (req, res, next) => {
 const getCallLogs = async (req, res, next) => {
     try {
         const { leadId } = req.params;
+        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true } });
+        if (!lead) return res.status(404).json({ message: "Lead not found" });
+        if (!(await canAccessCallLead(req.user, lead.assignedToId))) {
+            return res.status(403).json({ message: "Access denied" });
+        }
         const logs = await prisma.callLog.findMany({
             where: { leadId },
             orderBy: { createdAt: "desc" }
@@ -265,9 +299,15 @@ const transcribeCall = async (req, res, next) => {
     try {
         const { callLogId } = req.params;
 
-        const callLog = await prisma.callLog.findUnique({ where: { id: callLogId } });
+        const callLog = await prisma.callLog.findUnique({
+            where: { id: callLogId },
+            include: { lead: { select: { assignedToId: true } } },
+        });
         if (!callLog) {
             return res.status(404).json({ message: "Call log not found" });
+        }
+        if (!(await canAccessCallLead(req.user, callLog.lead?.assignedToId))) {
+            return res.status(403).json({ message: "Access denied" });
         }
 
         if (!callLog.recordingUrl) {
@@ -281,7 +321,10 @@ const transcribeCall = async (req, res, next) => {
             });
         }
 
-        const { transcribeFromUrl, transcribeFromFile } = require("../services/transcriptionService");
+        const { transcribeFromUrl, transcribeFromFile, isTranscriptionConfigured } = require("../services/transcriptionService");
+        if (!isTranscriptionConfigured()) {
+            return res.status(503).json({ message: "Call transcription is not configured on this server." });
+        }
         const path = require("path");
 
         console.log(`Starting transcription for call ${callLogId}...`);
@@ -351,10 +394,13 @@ const getCallLogDetails = async (req, res, next) => {
         const { callLogId } = req.params;
         const callLog = await prisma.callLog.findUnique({
             where: { id: callLogId },
-            include: { lead: { select: { name: true, phone: true } } }
+            include: { lead: { select: { name: true, phone: true, assignedToId: true } } }
         });
         if (!callLog) {
             return res.status(404).json({ message: "Call log not found" });
+        }
+        if (!(await canAccessCallLead(req.user, callLog.lead?.assignedToId))) {
+            return res.status(403).json({ message: "Access denied" });
         }
         res.json(callLog);
     } catch (error) {
@@ -431,9 +477,17 @@ const uploadAndTranscribe = async (req, res, next) => {
             return res.status(400).json({ message: "No audio file uploaded" });
         }
 
+        const { transcribeFromFile, isTranscriptionConfigured } = require("../services/transcriptionService");
+        if (!isTranscriptionConfigured()) {
+            return res.status(503).json({ message: "Call transcription is not configured on this server." });
+        }
+
         const lead = await prisma.lead.findUnique({ where: { id: leadId } });
         if (!lead) {
             return res.status(404).json({ message: "Lead not found" });
+        }
+        if (!(await canAccessCallLead(req.user, lead.assignedToId))) {
+            return res.status(403).json({ message: "Access denied" });
         }
 
         const recordingUrl = `/uploads/recordings/${req.file.filename}`;
@@ -454,7 +508,6 @@ const uploadAndTranscribe = async (req, res, next) => {
 
         console.log(`Starting transcription for uploaded file: ${req.file.originalname}`);
 
-        const { transcribeFromFile } = require("../services/transcriptionService");
         const result = await transcribeFromFile(filePath);
 
         const updated = await prisma.callLog.update({

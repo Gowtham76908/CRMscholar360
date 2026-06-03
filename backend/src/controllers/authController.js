@@ -10,6 +10,11 @@ const { ERROR_CODES } = require("../utils/apiError");
 const RESET_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const MIN_RESPONSE_MS   = 400;             // constant-time floor for forgot-password
 
+// Pre-computed bcrypt hash of a never-used password. Used as a decoy so the
+// "no such user" branch still pays the bcrypt CPU cost — preventing email
+// enumeration via response-time analysis.
+const DECOY_HASH = "$2b$12$CwTycUXWue0Thq9StjUM0uJ8O.fKfPpY3HoYx6QU3R0R2k1l8c8.6";
+
 const hashToken = (raw) => crypto.createHash("sha256").update(raw).digest("hex");
 
 const login = async (req, res, next) => {
@@ -18,6 +23,9 @@ const login = async (req, res, next) => {
 
         const user = await prisma.user.findUnique({ where: { email } });
 
+        // Always run bcrypt so existing-vs-nonexistent users take the same wall-clock time
+        const isMatch = await bcrypt.compare(password || "", user?.password ?? DECOY_HASH);
+
         if (!user) {
             return res.status(401).json({ error: { code: ERROR_CODES.AUTH_INVALID_CREDENTIALS, message: "Invalid credentials" } });
         }
@@ -25,8 +33,6 @@ const login = async (req, res, next) => {
         if (!user.isActive) {
             return res.status(403).json({ error: { code: ERROR_CODES.AUTH_ACCOUNT_INACTIVE, message: "Account is inactive. Contact your administrator." } });
         }
-
-        const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
             return res.status(401).json({ error: { code: ERROR_CODES.AUTH_INVALID_CREDENTIALS, message: "Invalid credentials" } });

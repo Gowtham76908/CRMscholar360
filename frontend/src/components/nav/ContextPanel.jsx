@@ -229,13 +229,14 @@ function AutomatePanel() {
 
 function AdminPanel() {
     const { user } = useAuth();
-    const isManager = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
+    const isSuperAdmin = user?.role === "SUPER_ADMIN";
+    const isManager = isSuperAdmin || user?.role === "MANAGER";
 
     return (
         <>
             <PanelSection title="People">
                 <PanelLink to="/team"        icon={UserCog}    label="Team" />
-                <PanelLink to="/departments" icon={Building}   label="Departments" />
+                {isSuperAdmin && <PanelLink to="/departments" icon={Building} label="Departments" />}
                 <PanelLink to="/attendance"  icon={Clock}      label="Attendance" />
                 <PanelLink to="/leave"       icon={Calendar}   label="Leave" />
             </PanelSection>
@@ -259,8 +260,8 @@ function AdminPanel() {
             )}
 
             <PanelSection title="System">
-                <PanelLink to="/integrations" icon={Puzzle}   label="Integrations" />
-                <PanelLink to="/settings"     icon={Settings} label="Settings" />
+                {isSuperAdmin && <PanelLink to="/integrations" icon={Puzzle} label="Integrations" />}
+                <PanelLink to="/settings" icon={Settings} label="Settings" />
             </PanelSection>
         </>
     );

@@ -8,6 +8,14 @@ const MAX_RETRIES = 2;
 class OpenAIProvider extends LLMProvider {
     constructor() {
         super();
+        // Without a key the OpenAI SDK throws a raw "Missing credentials" error that
+        // would surface as an untagged 500. Tag it as PROVIDER_DOWN so the controller
+        // returns a clean 503 ("AI assistant is not configured") instead.
+        if (!process.env.OPENAI_API_KEY) {
+            const err = new Error("AI assistant is not configured on this server.");
+            err.assistantError = "PROVIDER_DOWN";
+            throw err;
+        }
         this._client = new OpenAI({
             apiKey:     process.env.OPENAI_API_KEY,
             maxRetries: 0, // we handle retries ourselves for structured logging
