@@ -108,6 +108,16 @@ async function clearAll() {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+    // Idempotency guard: only populate an EMPTY database. This lets the seed run
+    // safely on every deploy (e.g. from the Render build command) — on a fresh DB
+    // it creates the demo data + admin login, and on a DB that already has users
+    // it skips entirely so real/production data is never wiped.
+    const existingUsers = await prisma.user.count();
+    if (existingUsers > 0) {
+        console.log(`Seed skipped — database already has ${existingUsers} user(s); leaving data untouched.`);
+        return;
+    }
+
     await clearAll();
 
     const password = await bcrypt.hash("Demo@1234", 10);
