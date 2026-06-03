@@ -8,7 +8,7 @@ import {
     MessageSquare, Send, Zap as ZapIcon, Bot, CheckSquare,
     BarChart, Trophy, UserCog, Building, Receipt,
     PhoneCall, SearchCheck, Linkedin, Puzzle, Settings,
-    Clock, Calendar, ChevronRight, TrendingUp, IndianRupee, AlertCircle,
+    Clock, Calendar, ChevronRight, TrendingUp, IndianRupee, AlertCircle, Sparkles,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -256,6 +256,7 @@ function AdminPanel() {
                     <PanelLink to="/revenue-report"    icon={IndianRupee}  label="Revenue Report" />
                     <PanelLink to="/leaderboard"       icon={Trophy}       label="Leaderboard" />
                     <PanelLink to="/reports"           icon={BarChart}     label="Reports" />
+                    <PanelLink to="/ai-usage"          icon={Sparkles}     label="AI Usage" />
                 </PanelSection>
             )}
 
