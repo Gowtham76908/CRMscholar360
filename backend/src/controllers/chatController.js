@@ -1,6 +1,7 @@
 const { StreamChat } = require("stream-chat");
 const prisma = require("../utils/prisma");
 const { ApiError } = require("../utils/apiError");
+const logger = require("../utils/logger");
 
 // Initialize Stream Client lazily or ensure env vars are loaded
 const getStreamClient = () => {
@@ -17,11 +18,8 @@ const getStreamClient = () => {
 // Create Token & Sync User
 const createToken = async (req, res, next) => {
     try {
-        console.log("Chat Token Request Initiated");
-        // console.log("User in Request:", req.user); // Debug: Check if user exists
-
         if (!req.user || !req.user.userId) {
-            console.error("User ID missing from request token payload");
+            logger.warn("Chat token request with missing user id in token payload");
             return res.status(401).json({ message: "User authentication failed" });
         }
 
@@ -55,7 +53,7 @@ const createToken = async (req, res, next) => {
         try {
             await streamClient.upsertUser(upsertData);
         } catch (upsertError) {
-            console.error("Stream Integration Warning: Failed to upsert user", upsertError.message);
+            logger.warn("Stream upsert failed during token creation: " + upsertError.message);
         }
 
         // Create token
@@ -72,37 +70,59 @@ const createToken = async (req, res, next) => {
             }
         });
     } catch (error) {
-        console.error("CRITICAL ERROR creating stream token:", error);
-        if (error.response) {
-            console.error("Stream API Response Error:", error.response.data);
-        }
+        logger.error({ err: error, streamResponse: error.response?.data }, "Failed to create Stream token");
         return next(error);
     }
 };
 
-// Create Channel (Optional - mostly handled frontend side for DMs, but good for Admin groups)
+// Create a group channel server-side. Doing this on the server (rather than
+// client-side from the browser) lets us guarantee every member exists in Stream
+// BEFORE creating the channel — otherwise Stream rejects the create with
+// "the following users ... don't exist", which is what broke group creation.
 const createGroupChannel = async (req, res, next) => {
     try {
         const { name, members, image } = req.body; // members = array of userIds
         const creatorId = req.user.userId;
 
+        if (!name || !name.trim()) {
+            return res.status(400).json({ message: "Group name is required" });
+        }
         if (!members || members.length === 0) {
             return res.status(400).json({ message: "Members are required" });
         }
 
+        // Unique member set including the creator
+        const memberIds = [...new Set([creatorId, ...members])];
+
+        // Load every member from the DB and upsert them into Stream first, so
+        // none are missing when we create the channel.
+        const users = await prisma.user.findMany({ where: { id: { in: memberIds } } });
+        if (users.length === 0) {
+            return res.status(404).json({ message: "No valid members found" });
+        }
+        await Promise.all(users.map((u) => upsertUserToStream(u).catch((e) =>
+            logger.error(`[CreateGroup] upsert failed for ${u.id}: ${e.message}`)
+        )));
+
+        const validIds = users.map((u) => u.id);
+
         const streamClient = getStreamClient();
-        const channel = streamClient.channel("team", name.toLowerCase().replace(/\s+/g, "-"), {
-            name,
+        const channelId = `group-${Date.now()}`;
+        const channel = streamClient.channel("team", channelId, {
+            name: name.trim(),
             image,
             created_by_id: creatorId,
-            members: [...members, creatorId],
+            members: validIds,
         });
 
         await channel.create();
 
-        res.json({ message: "Channel created successfully", channelId: channel.id });
+        res.json({
+            message: "Channel created successfully",
+            channelId: channel.id,
+            cid: channel.cid,
+        });
     } catch (error) {
-
         return next(error);
     }
 };
@@ -111,7 +131,7 @@ const createGroupChannel = async (req, res, next) => {
 const getUsersForChat = async (req, res, next) => {
     try {
         if (!req.user || !req.user.userId) {
-            console.error("User ID missing from request in getUsersForChat");
+            logger.warn("getUsersForChat called with missing user id");
             return res.status(401).json({ message: "User authentication failed" });
         }
 
@@ -170,7 +190,7 @@ const startDirectChat = async (req, res, next) => {
     try {
         const { targetUserId } = req.body;
         const currentUserId = req.user?.userId;
-        console.log(`[CHAT_START] Request from ${currentUserId} to ${targetUserId}`);
+        logger.debug({ currentUserId, targetUserId }, "[CHAT_START] direct chat requested");
 
         if (!targetUserId) {
             return res.status(400).json({ message: "Target user ID is required" });
@@ -186,7 +206,7 @@ const startDirectChat = async (req, res, next) => {
         ]);
 
         if (!currentUser || !targetUser) {
-            console.error(`[CHAT_START] User missing: currentUser=${!!currentUser}, targetUser=${!!targetUser}`);
+            logger.warn({ hasCurrent: !!currentUser, hasTarget: !!targetUser }, "[CHAT_START] user not found in DB");
             return res.status(404).json({ message: "One or more users not found in database" });
         }
 
@@ -259,22 +279,21 @@ const syncAllUsers = async (req, res, next) => {
             where: { isActive: true }
         });
 
-        console.log(`Syncing ${users.length} users to Stream...`);
+        logger.info(`Syncing ${users.length} users to Stream...`);
 
         const results = [];
         for (const user of users) {
             try {
                 await upsertUserToStream(user);
                 results.push({ id: user.id, name: user.name, status: 'success' });
-                console.log(`Synced user: ${user.name}`);
             } catch (error) {
-                console.error(`Failed to sync user ${user.id}:`, error.message);
+                logger.error(`Failed to sync user ${user.id}: ${error.message}`);
                 results.push({ id: user.id, name: user.name, status: 'failed', error: error.message });
             }
         }
 
         const successCount = results.filter(r => r.status === 'success').length;
-        console.log(`Sync complete: ${successCount}/${users.length} users synced successfully`);
+        logger.info(`Stream sync complete: ${successCount}/${users.length} users synced`);
 
         res.status(200).json({
             message: `Synced ${successCount}/${users.length} users to Stream`,

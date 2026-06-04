@@ -1,4 +1,5 @@
 const prisma = require("../utils/prisma");
+const logger = require("../utils/logger");
 
 /**
  * Auto-checkout job: Runs at 10:00 PM daily
@@ -10,7 +11,7 @@ const prisma = require("../utils/prisma");
  */
 const autoCheckout = async () => {
     try {
-        console.log("[AUTO-CHECKOUT] Job started at", new Date().toISOString());
+        logger.debug("[AUTO-CHECKOUT] Job started");
 
         // Get today's date in UTC
         const today = new Date();
@@ -30,11 +31,9 @@ const autoCheckout = async () => {
         });
 
         if (attendanceRecords.length === 0) {
-            console.log("[AUTO-CHECKOUT] No records to process");
+            logger.debug("[AUTO-CHECKOUT] No records to process");
             return;
         }
-
-        console.log(`[AUTO-CHECKOUT] Processing ${attendanceRecords.length} records`);
 
         // Update each record with auto-checkout time
         const updatePromises = attendanceRecords.map(record =>
@@ -46,9 +45,9 @@ const autoCheckout = async () => {
 
         await Promise.all(updatePromises);
 
-        console.log(`[AUTO-CHECKOUT] Successfully checked out ${attendanceRecords.length} employees at 8:00 PM`);
+        logger.info(`[AUTO-CHECKOUT] Checked out ${attendanceRecords.length} employees at 8:00 PM`);
     } catch (error) {
-        console.error("[AUTO-CHECKOUT] Error:", error);
+        logger.error({ err: error }, "[AUTO-CHECKOUT] Error");
     }
 };
 

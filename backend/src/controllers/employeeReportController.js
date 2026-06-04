@@ -208,7 +208,7 @@ const getTaskAnalytics = async (req, res, next) => {
         const dr = dateRange(period, from, to);
 
         const [total, completed, pending] = await prisma.$transaction([
-            prisma.task.count({ where: { assignedToId: employeeId, createdAt:  dr } }),
+            prisma.task.count({ where: { assignedToId: employeeId, updatedAt: dr } }),
             prisma.task.count({ where: { assignedToId: employeeId, status: "COMPLETED", updatedAt: dr } }),
             prisma.task.count({ where: { assignedToId: employeeId, status: "PENDING" } }),
         ]);
@@ -394,7 +394,7 @@ const getProductivity = async (req, res, next) => {
         const dayCount = Math.max(Math.ceil((Date.now() - new Date(dr.gte)) / 86_400_000), 1);
         const completedTasks = await prisma.task.findMany({
             where: { assignedToId: employeeId, updatedAt: dr },
-            select: { status: true, updatedAt: true, dueDate: true, createdAt: true },
+            select: { status: true, updatedAt: true, dueDate: true },
         });
 
         const dayMap = {};

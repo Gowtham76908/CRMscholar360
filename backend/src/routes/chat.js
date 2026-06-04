@@ -9,8 +9,8 @@ router.use(authMiddleware);
 // Get Token (Auth)
 router.post("/token", chatController.createToken);
 
-// Create Group (Admin Only)
-router.post("/group", roleMiddleware(["SUPER_ADMIN"]), chatController.createGroupChannel);
+// Create Group (any authenticated user — members are synced to Stream server-side)
+router.post("/group", chatController.createGroupChannel);
 
 // Start Direct Chat (Syncs users)
 router.post("/start", chatController.startDirectChat);

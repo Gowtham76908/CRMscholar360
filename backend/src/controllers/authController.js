@@ -6,6 +6,7 @@ const { notifyIfLeaderboardWinner } = require("../services/notificationService")
 const { toSafeUser } = require("../utils/safeUser");
 const { sendEmail } = require("../services/emailService");
 const { ERROR_CODES } = require("../utils/apiError");
+const logger = require("../utils/logger");
 
 const RESET_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const MIN_RESPONSE_MS   = 400;             // constant-time floor for forgot-password
@@ -60,7 +61,7 @@ const login = async (req, res, next) => {
 
         // Fire-and-forget: on the 1st of every month, notify the winner of last month's leaderboard
         notifyIfLeaderboardWinner(user.id).catch(err =>
-            console.error("[Login] Leaderboard winner check failed:", err)
+            logger.error({ err }, "[Login] Leaderboard winner check failed")
         );
 
     } catch (error) {
@@ -112,11 +113,11 @@ const forgotPassword = async (req, res, next) => {
                         <p style="color:#9ca3af;font-size:12px">If you didn't request a password reset, you can safely ignore this email — your password won't change.</p>
                     </div>`,
                 text: `Reset your D-CRM password\n\nHi ${user.name},\n\nClick the link below to reset your password (expires in 15 minutes):\n${resetUrl}\n\nIf you didn't request this, ignore this email.`,
-            }).catch(err => console.error("[ForgotPassword] Email send failed:", err));
+            }).catch(err => logger.error({ err }, "[ForgotPassword] Email send failed"));
             // void above ensures the promise rejection is handled — no unhandled-rejection warning
         }
     } catch (error) {
-        console.error("[ForgotPassword] Error:", error);
+        logger.error({ err: error }, "[ForgotPassword] Error");
         // Fall through — still return the safe response so errors don't reveal anything
     }
 
@@ -177,7 +178,7 @@ const resetPassword = async (req, res, next) => {
                     <p style="color:#9ca3af;font-size:12px">This is an automated security alert from D-CRM.</p>
                 </div>`,
             text: `Hi ${user.name},\n\nYour D-CRM password was changed on ${resetTime} IST.\n\nIf you did not do this, contact your administrator immediately.\n\nD-CRM Security`,
-        }).catch(err => console.error("[ResetPassword] Alert email failed:", err));
+        }).catch(err => logger.error({ err }, "[ResetPassword] Alert email failed"));
     } catch (error) {
 
         return next(error);

@@ -87,9 +87,9 @@ const calculateCompOffBalanceBulk = async (userIds) => {
         SELECT "userId",
                SUM(
                    GREATEST(0,
-                       EXTRACT(DAY FROM (
-                           LEAST("toDate", ${now}::date) - GREATEST("fromDate", ${since}::date)
-                       ))::int + 1
+                       -- fromDate/toDate are @db.Date, so (date - date) is already an
+                       -- integer day count; no EXTRACT needed (and EXTRACT errors on int).
+                       (LEAST("toDate", ${now}::date) - GREATEST("fromDate", ${since}::date))::int + 1
                    )
                )::int AS used
         FROM "Leave"

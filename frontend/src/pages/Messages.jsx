@@ -448,17 +448,19 @@ const CreateGroupView = ({ onClose, client, users, currentUser, setActiveChannel
         if (!name.trim()) { toast.warning("Enter a group name"); return; }
         if (!selected.length) { toast.warning("Select at least one member"); return; }
         try {
-            for (const uid of selected) {
-                await api.post("/chat/sync-user", { userId: uid }).catch(() => {});
-            }
-            const ch = client.channel("team", `group-${Date.now()}`, {
-                name, members: [currentUser.id, ...selected], created_by_id: currentUser.id,
+            // Create the group server-side: the backend upserts every member into
+            // Stream BEFORE creating the channel, so the create can't fail with
+            // "users don't exist". We then watch the returned channel locally.
+            const { data } = await api.post("/chat/group", {
+                name: name.trim(),
+                members: selected,
             });
-            await ch.create();
+            const ch = client.channel("team", data.cid.split(":")[1]);
+            await ch.watch();
             setActiveChannel(ch);
             onClose();
         } catch (e) {
-            toast.error(`Failed to create group: ${e.message}`);
+            toast.error(`Failed to create group: ${e.response?.data?.message || e.message}`);
         }
     };
 

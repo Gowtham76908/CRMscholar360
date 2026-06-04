@@ -1,6 +1,7 @@
 const cron = require("node-cron");
 const prisma = require("../utils/prisma");
 const { calculatePerformanceScore } = require("./leadDistributionEngine");
+const logger = require("../utils/logger");
 
 /**
  * Recalculates per-employee metrics every hour (repair / drift-correction).
@@ -148,21 +149,21 @@ async function leadLoadRecalculationJob() {
         });
     }
 
-    console.log(`[Scheduler] Lead load recalculated for ${employees.length} employees`);
+    logger.info(`[Scheduler] Lead load recalculated for ${employees.length} employees`);
 }
 
 function startScheduler() {
     leadLoadRecalculationJob().catch(err =>
-        console.error("[Scheduler] Initial recalculation failed:", err.message)
+        logger.error("[Scheduler] Initial recalculation failed: " + err.message)
     );
 
     cron.schedule("0 * * * *", () => {
         leadLoadRecalculationJob().catch(err =>
-            console.error("[Scheduler] Hourly recalculation failed:", err.message)
+            logger.error("[Scheduler] Hourly recalculation failed: " + err.message)
         );
     });
 
-    console.log("[Scheduler] Lead load scheduler started (runs every hour)");
+    logger.info("[Scheduler] Lead load scheduler started (runs every hour)");
 }
 
 module.exports = { startScheduler, leadLoadRecalculationJob };

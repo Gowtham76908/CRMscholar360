@@ -1,4 +1,5 @@
 const prisma = require("../utils/prisma");
+const logger = require("../utils/logger");
 
 /**
  * Creates a single in-app notification for a user.
@@ -105,7 +106,7 @@ const notifyIfLeaderboardWinner = async (userId) => {
         link:    "/leaderboard"
     });
 
-    console.log(`[Notifications] Winner notification delivered to ${winner.name} on login (${monthLabel}, ${winner.totalScore} pts).`);
+    logger.info(`[Notifications] Winner notification delivered to ${winner.name} on login (${monthLabel}, ${winner.totalScore} pts).`);
 };
 
 /**
@@ -119,11 +120,11 @@ const notifyLeaderboardWinner = async () => {
     const startDate = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), 1));
     const monthLabel = startDate.toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
 
-    console.log(`[Notifications] Cron: calculating leaderboard winner for ${monthLabel}...`);
+    logger.info(`[Notifications] Cron: calculating leaderboard winner for ${monthLabel}...`);
 
     const winner = await getPrevMonthWinner();
     if (!winner) {
-        console.log("[Notifications] No winner found. Skipping.");
+        logger.info("[Notifications] No winner found. Skipping.");
         return;
     }
 
@@ -133,7 +134,7 @@ const notifyLeaderboardWinner = async () => {
         where: { userId: winner.id, type: "LEADERBOARD_WINNER", createdAt: { gte: thisMonthStart } }
     });
     if (alreadySent) {
-        console.log(`[Notifications] ${winner.name} already notified this month. Skipping.`);
+        logger.info(`[Notifications] ${winner.name} already notified this month. Skipping.`);
         return;
     }
 
@@ -145,7 +146,7 @@ const notifyLeaderboardWinner = async () => {
         link:    "/leaderboard"
     });
 
-    console.log(`[Notifications] Cron: winner notification sent to ${winner.name} (${winner.totalScore} pts).`);
+    logger.info(`[Notifications] Cron: winner notification sent to ${winner.name} (${winner.totalScore} pts).`);
 };
 
 /**
@@ -191,7 +192,7 @@ const notifyTasksDueSoon = async () => {
         });
     }
 
-    if (tasks.length > 0) console.log(`[Notifications] Due-soon alerts sent for ${tasks.length} task(s).`);
+    if (tasks.length > 0) logger.info(`[Notifications] Due-soon alerts sent for ${tasks.length} task(s).`);
 };
 
 /**
@@ -236,7 +237,7 @@ const notifyOverdueTasks = async () => {
         });
     }
 
-    if (tasks.length > 0) console.log(`[Notifications] Overdue alerts sent for ${tasks.length} task(s).`);
+    if (tasks.length > 0) logger.info(`[Notifications] Overdue alerts sent for ${tasks.length} task(s).`);
 };
 
 module.exports = { createNotification, notifyIfLeaderboardWinner, notifyLeaderboardWinner, notifyTasksDueSoon, notifyOverdueTasks };

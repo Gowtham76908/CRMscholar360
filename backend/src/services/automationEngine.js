@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const prisma = require("../utils/prisma");
 const logActivity = require("../utils/activityLogger");
 const { sendTemplateMessage } = require("./whatsappService");
@@ -118,16 +119,16 @@ async function executeAction(action, lead, childContext = {}, tx = prisma) {
         }
 
         case "SEND_NOTIFICATION": {
-            if (lead.assignedToId) {
-                await tx.notification.create({
-                    data: {
-                        userId: lead.assignedToId,
-                        title: cfg.title ?? "Automation Alert",
-                        message: cfg.message ?? `Action required on lead: ${lead.name}`,
-                        link: `/leads/${lead.id}`,
-                    }
-                });
-            }
+            if (!lead.assignedToId) return { action: "SEND_NOTIFICATION", skipped: true, reason: "no_assignee" };
+            await tx.notification.create({
+                data: {
+                    userId: lead.assignedToId,
+                    title: cfg.title ?? "Automation Alert",
+                    message: cfg.message ?? `Action required on lead: ${lead.name}`,
+                    type: cfg.type ?? "AUTOMATION",
+                    link: `/leads/${lead.id}`,
+                }
+            });
             return { action: "SEND_NOTIFICATION", userId: lead.assignedToId };
         }
 

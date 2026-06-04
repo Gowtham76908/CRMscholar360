@@ -3,17 +3,9 @@ const prisma = require("../utils/prisma");
 const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
 
-const { decrypt } = require("../utils/encrypt");
 const { ApiError } = require("../utils/apiError");
+const { getSerperKey } = require("../utils/serperKey");
 const SERPER_BASE_URL = "https://google.serper.dev";
-
-const getSerperKey = async () => {
-    try {
-        const intg = await prisma.integration.findUnique({ where: { platform: "linkedin_serper" } });
-        if (intg?.config?.apiKey) return decrypt(intg.config.apiKey);
-    } catch (_) {}
-    return process.env.SERPER_API_KEY || null;
-};
 
 // ─── Extraction helpers ───────────────────────────────────────────────────────
 

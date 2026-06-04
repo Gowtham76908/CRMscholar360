@@ -2,8 +2,9 @@ const axios = require("axios");
 const prisma = require("../utils/prisma");
 const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
+const { ApiError } = require("../utils/apiError");
+const { getSerperKey } = require("../utils/serperKey");
 
-const SERPER_API_KEY = process.env.SERPER_API_KEY;
 const SERPER_BASE_URL = "https://google.serper.dev";
 
 // Extract emails from text using regex
@@ -22,13 +23,18 @@ const searchBusinessLeads = async (req, res, next) => {
             return res.status(400).json({ message: "Search query is required" });
         }
 
+        const apiKey = await getSerperKey();
+        if (!apiKey) {
+            throw new ApiError(503, "SERVICE_UNAVAILABLE", "Serper API key not configured. Add SERPER_API_KEY to .env or configure LinkedIn Lead Search in Settings → Integrations.");
+        }
+
         // 1. Places search — gives phone, address, website
         const placesResponse = await axios.post(
             `${SERPER_BASE_URL}/places`,
             { q: query.trim(), gl: "in", hl: "en" },
             {
                 headers: {
-                    "X-API-KEY": SERPER_API_KEY,
+                    "X-API-KEY": apiKey,
                     "Content-Type": "application/json"
                 }
             }
@@ -40,7 +46,7 @@ const searchBusinessLeads = async (req, res, next) => {
             { q: `${query.trim()} email contact`, gl: "in", hl: "en", num: 20 },
             {
                 headers: {
-                    "X-API-KEY": SERPER_API_KEY,
+                    "X-API-KEY": apiKey,
                     "Content-Type": "application/json"
                 }
             }
@@ -103,7 +109,11 @@ const searchBusinessLeads = async (req, res, next) => {
 
         res.json({ leads, total: leads.length, query: query.trim() });
     } catch (error) {
-
+        if (error.response) {
+            // Serper API returned an error (bad key, rate limit, etc.) — surface it
+            const msg = error.response.data?.message || error.response.data?.error || `Serper API error (${error.response.status})`;
+            return next(new ApiError(502, "SERPER_ERROR", `Search API error: ${msg}`));
+        }
         return next(error);
     }
 };
