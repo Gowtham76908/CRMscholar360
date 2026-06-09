@@ -2,18 +2,15 @@ import { useState, useEffect } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import api from "../../api/axios";
 import { toast } from "sonner";
+import { getScoreStyle } from "../../utils/leadScore";
 import {
     Phone, Mail, Building2, Briefcase, Linkedin,
     Bell, Plus, Loader2, MessageCircle, CheckCircle, XCircle,
     ChevronDown, Sparkles, Calendar,
 } from "lucide-react";
 
-const SCORE_CONFIG = (score) => {
-    if (score >= 81) return { label: "Premium", bar: "bg-purple-500", text: "text-purple-700", bg: "bg-purple-50" };
-    if (score >= 61) return { label: "Hot",     bar: "bg-orange-500", text: "text-orange-700", bg: "bg-orange-50" };
-    if (score >= 31) return { label: "Warm",    bar: "bg-yellow-500", text: "text-yellow-700", bg: "bg-yellow-50" };
-    return             { label: "Cold",    bar: "bg-gray-400",   text: "text-gray-600",   bg: "bg-gray-50"   };
-};
+// Canonical temperature styling, shared with every other lead screen.
+const SCORE_CONFIG = getScoreStyle;
 
 const SOURCE_LABELS = {
     FACEBOOK: "Facebook", INSTAGRAM: "Instagram", GMAIL: "Gmail",

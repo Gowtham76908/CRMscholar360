@@ -1,5 +1,6 @@
 const prisma = require("../utils/prisma");
 const logger = require("../utils/logger");
+const { toIST, istDateKey } = require("../utils/istTime");
 
 /**
  * Creates a single in-app notification for a user.
@@ -42,18 +43,16 @@ const getPrevMonthWinner = async () => {
             if (att.status === "PRESENT") {
                 attendancePoints += 10;
                 if (att.checkIn) {
-                    const ci = new Date(att.checkIn);
-                    if (ci.getHours() * 60 + ci.getMinutes() <= 10 * 60) punctualityBonus += 5;
+                    const ci = toIST(att.checkIn);
+                    if (ci.getUTCHours() * 60 + ci.getUTCMinutes() <= 10 * 60) punctualityBonus += 5;
                 }
             }
         });
 
         empTasks.forEach(task => {
             taskPoints += 20;
-            if (task.completedAt && task.dueDate) {
-                const comp = new Date(task.completedAt).toISOString().split("T")[0];
-                const due  = new Date(task.dueDate).toISOString().split("T")[0];
-                if (comp <= due) timingBonus += 10;
+            if (task.completedAt && task.dueDate && istDateKey(task.completedAt) <= istDateKey(task.dueDate)) {
+                timingBonus += 10;
             }
         });
 

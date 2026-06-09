@@ -8,6 +8,7 @@ import {
 import { toast } from "sonner";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
+import { getScoreStyle } from "../utils/leadScore";
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
 
@@ -366,7 +367,7 @@ export default function UnassignedLeads() {
                                         </span>
                                     </td>
                                     <td className="px-4 py-3">
-                                        <span className={`text-xs font-semibold ${lead.score >= 70 ? "text-green-600" : lead.score >= 40 ? "text-orange-500" : "text-gray-500"}`}>
+                                        <span className={`text-xs font-semibold ${getScoreStyle(lead.score).text}`}>
                                             {lead.score}
                                         </span>
                                     </td>

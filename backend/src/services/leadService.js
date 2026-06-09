@@ -1,6 +1,7 @@
 const prisma = require("../utils/prisma");
 const { getTeamMemberIds } = require("./organizationService");
 const paginate = require("../utils/paginate");
+const { signUploadUrl } = require("../utils/signedUpload");
 
 /**
  * Get leads with pagination, filtering, searching, and sorting
@@ -153,6 +154,15 @@ const getLeads = async ({
             }
         })
     ]);
+
+    // Recordings are in a gated dir; sign the URL so the list's quick-play <audio> works.
+    for (const lead of leads) {
+        if (lead.callLogs) {
+            lead.callLogs = lead.callLogs.map(c =>
+                c.recordingUrl ? { ...c, recordingUrl: signUploadUrl(c.recordingUrl) } : c
+            );
+        }
+    }
 
     return paginate(leads, total, page, limit);
 };

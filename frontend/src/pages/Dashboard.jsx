@@ -388,6 +388,7 @@ function DealPipelineSection({ pipeline }) {
                 <div className="flex items-center gap-2">
                     <KanbanSquare className="h-4 w-4 text-indigo-500" />
                     <h2 className="text-sm font-semibold text-gray-900">Deal Pipeline</h2>
+                    <span className="text-[11px] font-medium text-gray-400">All-time</span>
                     {kpi.totalDeals > 0 && (
                         <span className="text-[11px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
                             {kpi.totalDeals} deals
@@ -618,15 +619,15 @@ const Dashboard = () => {
                     <SectionHeader icon={IndianRupee} title="Organisation — Revenue Overview" to="/team-performance" accent="emerald" />
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                             <KPICard label="Pipeline Value"   value={fmtINR(revKPIs.pipelineValue)}   sub="Active deals"         icon={BarChart2}    accent="indigo" />
-                            <KPICard label="Won Revenue"      value={fmtINR(revKPIs.wonRevenue)}      sub="Closed deals"         icon={Trophy}       accent="emerald" />
+                            <KPICard label="Won Revenue"      value={fmtINR(revKPIs.wonRevenue)}      sub="Closed · last 30d"         icon={Trophy}       accent="emerald" />
                             <KPICard label="Collected"        value={fmtINR(revKPIs.collectedRevenue)} sub="Payments received"   icon={Wallet}       accent="sky" />
                             <KPICard label="Outstanding"      value={fmtINR(revKPIs.outstandingRevenue)} sub="Yet to collect"   icon={TrendingDown} accent="red" />
                         </div>
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
                             <KPICard label="Realized Revenue" value={fmtINR(revKPIs.realizedRevenue)} sub="Credit payments"      icon={IndianRupee}  accent="emerald" />
                             <KPICard label="Pending Revenue"  value={fmtINR(revKPIs.pendingRevenue)}  sub="Invoiced, unpaid"     icon={Receipt}      accent="amber" />
-                            <KPICard label="Avg Deal Size"    value={fmtINR(revKPIs.avgDealSize)}     sub="Won deals"            icon={Banknote}     accent="violet" />
-                            <KPICard label="Win Rate"         value={`${revKPIs.winRate ?? 0}%`}      sub={`${revKPIs.wonCount ?? 0} of ${revKPIs.totalDeals ?? 0} deals`} icon={Target} accent="indigo" />
+                            <KPICard label="Avg Deal Size"    value={fmtINR(revKPIs.avgDealSize)}     sub="Won · last 30d"            icon={Banknote}     accent="violet" />
+                            <KPICard label="Win Rate"         value={`${revKPIs.winRate ?? 0}%`}      sub={`${revKPIs.wonCount ?? 0} of ${revKPIs.totalDeals ?? 0} deals · 30d`} icon={Target} accent="indigo" />
                         </div>
                     </section>
 
@@ -688,15 +689,15 @@ const Dashboard = () => {
                     <SectionHeader icon={IndianRupee} title="Team Revenue Overview" to="/team-performance" accent="emerald" />
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                         <KPICard label="Pipeline Value"   value={fmtINR(revKPIs.pipelineValue)}      sub="Active deals"                                                    icon={BarChart2}    accent="indigo" />
-                        <KPICard label="Won Revenue"      value={fmtINR(revKPIs.wonRevenue)}         sub="Closed deals"                                                    icon={Trophy}       accent="emerald" />
+                        <KPICard label="Won Revenue"      value={fmtINR(revKPIs.wonRevenue)}         sub="Closed · last 30d"                                                    icon={Trophy}       accent="emerald" />
                         <KPICard label="Collected"        value={fmtINR(revKPIs.collectedRevenue)}   sub="Payments received"                                               icon={Wallet}       accent="sky" />
                         <KPICard label="Outstanding"      value={fmtINR(revKPIs.outstandingRevenue)} sub="Yet to collect"                                                  icon={TrendingDown} accent="red" />
                     </div>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
                         <KPICard label="Realized Revenue" value={fmtINR(revKPIs.realizedRevenue)}   sub="Credit payments"                                                 icon={IndianRupee}  accent="emerald" />
                         <KPICard label="Pending Revenue"  value={fmtINR(revKPIs.pendingRevenue)}    sub="Invoiced, unpaid"                                                icon={Receipt}      accent="amber" />
-                        <KPICard label="Avg Deal Size"    value={fmtINR(revKPIs.avgDealSize)}       sub="Won deals"                                                       icon={Banknote}     accent="violet" />
-                        <KPICard label="Win Rate"         value={`${revKPIs.winRate ?? 0}%`}        sub={`${revKPIs.wonCount ?? 0} of ${revKPIs.totalDeals ?? 0} deals`} icon={Target}       accent="indigo" />
+                        <KPICard label="Avg Deal Size"    value={fmtINR(revKPIs.avgDealSize)}       sub="Won · last 30d"                                                  icon={Banknote}     accent="violet" />
+                        <KPICard label="Win Rate"         value={`${revKPIs.winRate ?? 0}%`}        sub={`${revKPIs.wonCount ?? 0} of ${revKPIs.totalDeals ?? 0} deals · 30d`} icon={Target}       accent="indigo" />
                     </div>
                 </section>
 

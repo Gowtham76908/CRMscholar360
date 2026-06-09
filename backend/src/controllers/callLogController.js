@@ -3,9 +3,15 @@ const logActivity = require("../utils/activityLogger");
 const normalizePhone = require("../utils/normalizePhone");
 const FormData = require("form-data");
 const axios = require("axios");
-const { updateLeadScoreFromCall } = require("../services/leadScoringService");
+const { updateLeadScoreFromCall, recomputeLeadScore } = require("../services/leadScoringService");
 const { runRulesForLead } = require("../services/automationEngine");
 const { canAccessLead } = require("../services/permissionService");
+const { signUploadUrl } = require("../utils/signedUpload");
+
+// Recordings live in a gated upload dir; <audio> loads them cross-origin without
+// cookies, so stamp a short-lived signed token onto recordingUrl at read time.
+const signRecording = (cl) =>
+    cl && cl.recordingUrl ? { ...cl, recordingUrl: signUploadUrl(cl.recordingUrl) } : cl;
 
 // Shared access check for a call log's underlying lead. Call recordings and
 // transcripts are sensitive customer data, so reads are scoped the same way
@@ -163,7 +169,7 @@ const greeterWebhook = async (req, res, next) => {
             await prisma.callLog.update({
                 where: { id: callLog.id },
                 data: {
-                    duration: parseInt(callDuration) || 0,
+                    duration: parseInt(callDuration, 10) || 0,
                     callStatus: callStatus || "COMPLETED",
                     recordingUrl: callRecording || null,
                     callDate: callDate ? new Date(callDate) : new Date(),
@@ -177,7 +183,7 @@ const greeterWebhook = async (req, res, next) => {
                 userId: callLog.userId,
                 action: "CALL_COMPLETED",
                 metadata: {
-                    duration: parseInt(callDuration) || 0,
+                    duration: parseInt(callDuration, 10) || 0,
                     callStatus,
                     hasRecording: !!callRecording
                 }
@@ -189,6 +195,8 @@ const greeterWebhook = async (req, res, next) => {
                 const lead = await prisma.lead.findUnique({ where: { id: callLog.leadId } });
                 if (lead) runRulesForLead("MISSED_CALL", lead).catch(console.error);
             }
+
+            recomputeLeadScore(callLog.leadId).catch(() => {});
         } else {
             // Create a new call log if no matching one found
             // Try to find lead by customer number
@@ -219,7 +227,7 @@ const greeterWebhook = async (req, res, next) => {
                     data: {
                         leadId,
                         userId,
-                        duration: parseInt(callDuration) || 0,
+                        duration: parseInt(callDuration, 10) || 0,
                         callType: callType || "OUTBOUND",
                         callStatus: callStatus || "COMPLETED",
                         recordingUrl: callRecording || null,
@@ -227,6 +235,8 @@ const greeterWebhook = async (req, res, next) => {
                         callDate: callDate ? new Date(callDate) : new Date()
                     }
                 });
+
+                recomputeLeadScore(leadId).catch(() => {});
             }
         }
 
@@ -247,7 +257,7 @@ const logCall = async (req, res, next) => {
             data: {
                 userId,
                 leadId,
-                duration: parseInt(duration) || 0,
+                duration: parseInt(duration, 10) || 0,
                 callType: callType || "OUTBOUND",
                 callStatus: "COMPLETED"
             }
@@ -269,6 +279,10 @@ const logCall = async (req, res, next) => {
             metadata: { duration, callType }
         });
 
+        // A logged call is engagement — refresh the lead's temperature before
+        // responding so a follow-up fetch reflects the new score immediately.
+        await recomputeLeadScore(leadId).catch(() => {});
+
         res.status(201).json(callLog);
     } catch (error) {
         return next(error);
@@ -288,7 +302,7 @@ const getCallLogs = async (req, res, next) => {
             where: { leadId },
             orderBy: { createdAt: "desc" }
         });
-        res.json(logs);
+        res.json(logs.map(signRecording));
     } catch (error) {
         return next(error);
     }
@@ -402,7 +416,7 @@ const getCallLogDetails = async (req, res, next) => {
         if (!(await canAccessCallLead(req.user, callLog.lead?.assignedToId))) {
             return res.status(403).json({ message: "Access denied" });
         }
-        res.json(callLog);
+        res.json(signRecording(callLog));
     } catch (error) {
         return next(error);
     }
@@ -453,9 +467,11 @@ const uploadRecording = async (req, res, next) => {
             metadata: { callLogId: callLog.id, fileName: req.file.originalname }
         });
 
+        await recomputeLeadScore(leadId).catch(() => {});
+
         res.status(201).json({
             message: "Recording uploaded successfully",
-            callLog
+            callLog: signRecording(callLog)
         });
     } catch (error) {
 
@@ -548,7 +564,7 @@ const uploadAndTranscribe = async (req, res, next) => {
 
         res.status(201).json({
             message: "Upload and transcription complete",
-            callLog: updated,
+            callLog: signRecording(updated),
         });
     } catch (error) {
 

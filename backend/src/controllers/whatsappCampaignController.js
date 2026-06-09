@@ -2,7 +2,7 @@ const prisma = require("../utils/prisma");
 const { runCampaign } = require("../services/whatsappCampaignService");
 const { ApiError } = require("../utils/apiError");
 
-async function createCampaign(req, res) {
+async function createCampaign(req, res, next) {
     try {
         const { name, templateName, parameters, leadIds } = req.body;
         if (!name || !templateName || !Array.isArray(leadIds) || leadIds.length === 0) {
@@ -49,7 +49,7 @@ async function createCampaign(req, res) {
     }
 }
 
-async function startCampaign(req, res) {
+async function startCampaign(req, res, next) {
     try {
         const { id } = req.params;
 
@@ -74,7 +74,7 @@ async function startCampaign(req, res) {
     }
 }
 
-async function pauseCampaign(req, res) {
+async function pauseCampaign(req, res, next) {
     try {
         const { id } = req.params;
         const updated = await prisma.whatsAppCampaign.updateMany({
@@ -88,7 +88,7 @@ async function pauseCampaign(req, res) {
     }
 }
 
-async function resumeCampaign(req, res) {
+async function resumeCampaign(req, res, next) {
     try {
         const { id } = req.params;
         const updated = await prisma.whatsAppCampaign.updateMany({
@@ -103,10 +103,10 @@ async function resumeCampaign(req, res) {
     }
 }
 
-async function listCampaigns(req, res) {
+async function listCampaigns(req, res, next) {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 20;
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = parseInt(req.query.limit, 10) || 20;
         const skip = (page - 1) * limit;
 
         const [campaigns, total] = await prisma.$transaction([
@@ -125,7 +125,7 @@ async function listCampaigns(req, res) {
     }
 }
 
-async function getCampaign(req, res) {
+async function getCampaign(req, res, next) {
     try {
         const { id } = req.params;
         const campaign = await prisma.whatsAppCampaign.findUnique({
@@ -135,6 +135,7 @@ async function getCampaign(req, res) {
                 recipients: {
                     include: { lead: { select: { id: true, name: true, phone: true } } },
                     orderBy: [{ status: "asc" }, { sentAt: "desc" }],
+                    take: 1000, // cap inline recipients so a large campaign can't return a huge payload
                 },
             },
         });
@@ -147,11 +148,12 @@ async function getCampaign(req, res) {
 
 // Auto-reply CRUD
 
-async function listAutoReplies(req, res) {
+async function listAutoReplies(req, res, next) {
     try {
         const rules = await prisma.whatsAppAutoReply.findMany({
             orderBy: { createdAt: "desc" },
             include: { createdBy: { select: { id: true, name: true } } },
+            take: 200, // bound the payload — auto-reply rule sets are small by nature
         });
         res.json(rules);
     } catch (e) {
@@ -159,7 +161,7 @@ async function listAutoReplies(req, res) {
     }
 }
 
-async function createAutoReply(req, res) {
+async function createAutoReply(req, res, next) {
     try {
         const { name, triggerType, keyword, timeoutHours, replyTemplate, replyParams } = req.body;
         if (!name || !triggerType || !replyTemplate) {
@@ -177,7 +179,7 @@ async function createAutoReply(req, res) {
                 name,
                 triggerType,
                 keyword: keyword ?? null,
-                timeoutHours: timeoutHours ? parseInt(timeoutHours) : null,
+                timeoutHours: timeoutHours ? parseInt(timeoutHours, 10) : null,
                 replyTemplate,
                 replyParams: replyParams ?? [],
                 createdById: req.user.id,
@@ -189,7 +191,7 @@ async function createAutoReply(req, res) {
     }
 }
 
-async function updateAutoReply(req, res) {
+async function updateAutoReply(req, res, next) {
     try {
         const { id } = req.params;
         const { name, active, keyword, timeoutHours, replyTemplate, replyParams } = req.body;
@@ -199,7 +201,7 @@ async function updateAutoReply(req, res) {
                 ...(name !== undefined && { name }),
                 ...(active !== undefined && { active }),
                 ...(keyword !== undefined && { keyword }),
-                ...(timeoutHours !== undefined && { timeoutHours: parseInt(timeoutHours) }),
+                ...(timeoutHours !== undefined && { timeoutHours: parseInt(timeoutHours, 10) }),
                 ...(replyTemplate !== undefined && { replyTemplate }),
                 ...(replyParams !== undefined && { replyParams }),
             },
@@ -211,7 +213,7 @@ async function updateAutoReply(req, res) {
     }
 }
 
-async function deleteAutoReply(req, res) {
+async function deleteAutoReply(req, res, next) {
     try {
         const { id } = req.params;
         await prisma.whatsAppAutoReply.delete({ where: { id } });

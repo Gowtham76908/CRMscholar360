@@ -4,6 +4,7 @@ const logActivity = require("../utils/activityLogger");
 const { sendTemplateMessage } = require("./whatsappService");
 const { sendEmail } = require("./emailService");
 const normalizePhone = require("../utils/normalizePhone");
+const { nowIST } = require("../utils/istTime");
 
 // ─── Condition Evaluator ──────────────────────────────────────────────────────
 
@@ -219,18 +220,17 @@ async function checkConstraints(rule, lead, executionCtx = {}) {
             }
 
             case "BUSINESS_HOURS_ONLY": {
-                // Default 9–18 local server time; customise with startHour/endHour
-                const now = new Date();
-                const hour = now.getHours();
+                // Default 9–18 IST (server runs UTC); customise with startHour/endHour
+                const hour = nowIST().getUTCHours();
                 const start = c.startHour ?? 9;
                 const end   = c.endHour   ?? 18;
                 if (hour < start || hour >= end)
-                    return { allowed: false, reason: `BUSINESS_HOURS_ONLY: current hour ${hour} outside ${start}–${end}` };
+                    return { allowed: false, reason: `BUSINESS_HOURS_ONLY: current hour ${hour} (IST) outside ${start}–${end}` };
                 break;
             }
 
             case "SKIP_WEEKENDS": {
-                const day = new Date().getDay(); // 0 = Sunday, 6 = Saturday
+                const day = nowIST().getUTCDay(); // 0 = Sunday, 6 = Saturday (IST)
                 if (day === 0 || day === 6)
                     return { allowed: false, reason: `SKIP_WEEKENDS: today is ${day === 0 ? "Sunday" : "Saturday"}` };
                 break;

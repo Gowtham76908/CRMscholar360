@@ -7,6 +7,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { scoreChipClass } from "../../utils/leadScore";
 import {
     Loader2, Phone, MessageSquare, ExternalLink,
     UserCheck, Clock, Star, Layers, Search, X, ChevronLeft, ChevronRight,
@@ -24,11 +25,8 @@ const COLUMNS = [
 
 const PAGE_SIZE = 20;
 
-const scoreColor = (score) => {
-    if (score >= 70) return "text-green-600 bg-green-50";
-    if (score >= 40) return "text-amber-600 bg-amber-50";
-    return "text-red-500 bg-red-50";
-};
+// Canonical temperature colors (shared with Leads, LeadDetail, etc.)
+const scoreColor = scoreChipClass;
 
 const fmtDays = (d) => {
     if (d === 0) return "today";

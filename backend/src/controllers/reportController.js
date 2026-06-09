@@ -73,7 +73,7 @@ const getConversionRate = async (req, res, next) => {
             where: { ...dateFilter, status: "CONVERTED" }
         });
 
-        const rate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(2) : 0;
+        const rate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : 0;
 
         res.json({ totalLeads, convertedLeads, conversionRate: `${rate}%` });
     } catch (error) {

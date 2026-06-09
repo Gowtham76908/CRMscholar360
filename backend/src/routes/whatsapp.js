@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
+const validate = require("../middleware/validate");
+const { createCampaignSchema, createAutoReplySchema } = require("../middleware/schemas");
 const { listTemplates, sendMessage, getMessages, getInboundMessages, metaWebhook, verifyWebhookSubscription } = require("../controllers/whatsappController");
 const {
     createCampaign,
@@ -33,7 +35,7 @@ router.get("/:leadId/messages", getMessages);
 
 // Campaigns — write operations restricted to ADMIN+
 router.get("/campaigns", listCampaigns);
-router.post("/campaigns", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), createCampaign);
+router.post("/campaigns", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), validate(createCampaignSchema), createCampaign);
 router.get("/campaigns/:id", getCampaign);
 router.post("/campaigns/:id/start", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), startCampaign);
 router.post("/campaigns/:id/pause", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), pauseCampaign);
@@ -41,7 +43,7 @@ router.post("/campaigns/:id/resume", roleMiddleware(["SUPER_ADMIN", "MANAGER"]),
 
 // Auto-replies — write operations restricted to ADMIN+
 router.get("/auto-replies", listAutoReplies);
-router.post("/auto-replies", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), createAutoReply);
+router.post("/auto-replies", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), validate(createAutoReplySchema), createAutoReply);
 router.patch("/auto-replies/:id", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), updateAutoReply);
 router.delete("/auto-replies/:id", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), deleteAutoReply);
 

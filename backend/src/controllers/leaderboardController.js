@@ -1,11 +1,16 @@
 const prisma = require("../utils/prisma");
+const { toIST, istDateKey } = require("../utils/istTime");
+
+// A task is "on time" if completed on or before its due date (IST calendar day).
+const isTaskOnTime = (task) =>
+    task.completedAt && task.dueDate && istDateKey(task.completedAt) <= istDateKey(task.dueDate);
 
 const getLeaderboard = async (req, res, next) => {
     try {
         const { month, year } = req.query;
         const now = new Date();
-        const targetMonth = parseInt(month) || (now.getMonth() + 1);
-        const targetYear = parseInt(year) || now.getFullYear();
+        const targetMonth = parseInt(month, 10) || (now.getMonth() + 1);
+        const targetYear = parseInt(year, 10) || now.getFullYear();
 
         const startDate = new Date(Date.UTC(targetYear, targetMonth - 1, 1));
         const endDate = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999));
@@ -46,10 +51,10 @@ const getLeaderboard = async (req, res, next) => {
                 if (att.status === 'PRESENT') {
                     attendancePoints += 10;
                     
-                    // Punctuality Bonus: Check-in before 10:00 AM
+                    // Punctuality Bonus: Check-in before 10:00 AM IST (server runs UTC)
                     if (att.checkIn) {
-                        const ci = new Date(att.checkIn);
-                        const ciMinutes = ci.getHours() * 60 + ci.getMinutes();
+                        const ci = toIST(att.checkIn);
+                        const ciMinutes = ci.getUTCHours() * 60 + ci.getUTCMinutes();
                         if (ciMinutes <= 10 * 60) {
                             punctualityBonus += 5;
                         }
@@ -62,12 +67,8 @@ const getLeaderboard = async (req, res, next) => {
                 taskPoints += 20;
 
                 // Timing Bonus: Completed on or before due date
-                if (task.completedAt && task.dueDate) {
-                    const compDate = new Date(task.completedAt).toISOString().split('T')[0];
-                    const dueDateStr = new Date(task.dueDate).toISOString().split('T')[0];
-                    if (compDate <= dueDateStr) {
-                        timingBonus += 10;
-                    }
+                if (isTaskOnTime(task)) {
+                    timingBonus += 10;
                 }
             });
 
@@ -78,7 +79,7 @@ const getLeaderboard = async (req, res, next) => {
                 stats: {
                     presentDays: empAtt.filter(a => a.status === 'PRESENT').length,
                     tasksCompleted: empTasks.length,
-                    onTimeTasks: empTasks.filter(t => t.completedAt && t.dueDate && new Date(t.completedAt) <= new Date(t.dueDate)).length
+                    onTimeTasks: empTasks.filter(isTaskOnTime).length
                 },
                 points: {
                     attendance: attendancePoints,

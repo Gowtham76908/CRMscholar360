@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const callLogController = require("../controllers/callLogController");
 const authMiddleware = require("../middleware/authMiddleware");
 
@@ -16,7 +17,9 @@ if (!fs.existsSync(recordingsDir)) {
 const recordingStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, recordingsDir),
     filename: (req, file, cb) => {
-        const uniqueName = `${Date.now()}-${file.originalname}`;
+        // Unguessable name — the file is also access-gated, but a random name
+        // removes any enumeration vector entirely.
+        const uniqueName = `${crypto.randomBytes(16).toString("hex")}${path.extname(file.originalname)}`;
         cb(null, uniqueName);
     }
 });

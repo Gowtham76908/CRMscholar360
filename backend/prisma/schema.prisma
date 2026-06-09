@@ -338,6 +338,8 @@ model Activity {
 
   @@index([leadId])
   @@index([userId])
+  @@index([createdAt])
+  @@index([leadId, createdAt])
 }
 
 model Reminder {
@@ -346,9 +348,10 @@ model Reminder {
   taskId    String?
   userId    String
   remindAt  DateTime
-  message   String
-  isSent    Boolean  @default(false)
-  dismissed Boolean  @default(false)
+  message     String
+  isSent      Boolean  @default(false)
+  dismissed   Boolean  @default(false)
+  gcalEventId String?  // Google Calendar event id, when this reminder is mirrored to the user's calendar
 
   @@index([remindAt, isSent])
   @@index([userId])
@@ -741,6 +744,10 @@ model CompanySettings {
   assistantEnabled         Boolean @default(true)
   assistantRateLimitPerMin Int     @default(30)
   assistantMaxHistoryTurns Int     @default(6)
+  // Attendance check-in window (IST). Enforced only when enabled; times are "HH:MM".
+  attendanceDeadlineEnabled Boolean @default(true)
+  attendanceDeadlineWeekday String  @default("11:50")
+  attendanceDeadlineSunday  String  @default("12:30")
   updatedAt       DateTime @updatedAt
 }
 
@@ -902,6 +909,10 @@ model SalestrailCall {
   createdAt     DateTime  @default(now())
   leadId        String?
   lead          Lead?     @relation(fields: [leadId], references: [id])
+
+  @@index([startedAt])
+  @@index([agentEmail])
+  @@index([leadId])
 }
 
 model ImportJob {

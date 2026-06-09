@@ -3,7 +3,7 @@ const nodemailer = require("nodemailer");
 // Build a transporter from DB company settings; falls back to env vars if not configured
 const createTransporter = (settings) => {
     const host   = settings?.smtpHost || process.env.SMTP_HOST;
-    const port   = settings?.smtpPort || parseInt(process.env.SMTP_PORT || "587");
+    const port   = settings?.smtpPort || parseInt(process.env.SMTP_PORT || "587", 10);
     const user   = settings?.smtpUser || process.env.SMTP_USER;
     const pass   = settings?.smtpPass || process.env.SMTP_PASS;
     const secure = settings?.smtpSecure ?? (process.env.SMTP_SECURE === "true");

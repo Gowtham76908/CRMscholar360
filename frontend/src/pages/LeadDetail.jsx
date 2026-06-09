@@ -13,6 +13,7 @@ import {
     TrendingUp, IndianRupee,
 } from "lucide-react";
 import { Modal } from "../components/Modal";
+import { getScoreLabel } from "../utils/leadScore";
 import AddTaskForm from "../components/AddTaskForm";
 import LeadSidebar from "../components/lead/LeadSidebar";
 import SmartSuggestions from "../components/lead/SmartSuggestions";
@@ -1152,7 +1153,7 @@ export default function LeadDetail() {
                                         </div>
                                         <div className="w-1 h-8 rounded-full bg-purple-200" />
                                         <p className="text-xs font-bold text-purple-700">
-                                            {lead.score >= 81 ? "Premium" : lead.score >= 61 ? "Hot" : lead.score >= 31 ? "Warm" : "Cold"}
+                                            {getScoreLabel(lead.score)}
                                         </p>
                                     </div>
                                 )}

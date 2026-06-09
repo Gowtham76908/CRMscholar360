@@ -1,5 +1,6 @@
 const prisma = require("../utils/prisma");
 const { ApiError } = require("../utils/apiError");
+const { recomputeLeadScore } = require("../services/leadScoringService");
 
 // 1x1 transparent GIF pixel
 const PIXEL = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
@@ -17,10 +18,15 @@ const trackOpen = async (req, res, next) => {
     res.end(PIXEL);
 
     try {
-        await prisma.emailLog.updateMany({
+        // openedAt:null guard => only the first open counts, so we recompute once.
+        const r = await prisma.emailLog.updateMany({
             where: { id: req.params.id, openedAt: null },
             data:  { openedAt: new Date() },
         });
+        if (r.count > 0) {
+            const log = await prisma.emailLog.findUnique({ where: { id: req.params.id }, select: { leadId: true } });
+            if (log) recomputeLeadScore(log.leadId).catch(() => {});
+        }
     } catch (e) {
         console.error("[TRACK OPEN]", e.message);
     }
@@ -44,10 +50,12 @@ const trackClick = async (req, res, next) => {
     res.redirect(302, decoded);
 
     try {
-        await prisma.emailLog.update({
+        const log = await prisma.emailLog.update({
             where: { id },
             data:  { clickCount: { increment: 1 }, lastClickedAt: new Date() },
+            select: { leadId: true },
         });
+        recomputeLeadScore(log.leadId).catch(() => {});
     } catch (e) {
         console.error("[TRACK CLICK]", e.message);
     }

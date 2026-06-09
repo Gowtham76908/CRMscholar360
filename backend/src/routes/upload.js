@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const authMiddleware = require("../middleware/authMiddleware");
 const prisma = require("../utils/prisma");
 const { toSafeUser } = require("../utils/safeUser");
@@ -34,7 +35,8 @@ const taskStorage = multer.diskStorage({
         cb(null, taskUploadDir);
     },
     filename: (_req, file, cb) => {
-        const uniqueName = `task-${Date.now()}-${Math.round(Math.random() * 1E9)}${path.extname(file.originalname)}`;
+        // Unguessable name — task files are access-gated; random name kills enumeration.
+        const uniqueName = `task-${crypto.randomBytes(16).toString("hex")}${path.extname(file.originalname)}`;
         cb(null, uniqueName);
     }
 });
@@ -109,7 +111,7 @@ router.post("/task-files", uploadTask.array("files", 5), async (req, res) => {
 
         const filesData = req.files.map(file => ({
             fileName: file.originalname,
-            fileUrl: `/uploads/tasks/${file.filename}`,
+            fileUrl: `/uploads/tasks/${file.filename}`, // stored bare; signed at read time
             fileSize: file.size,
             mimeType: file.mimetype
         }));

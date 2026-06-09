@@ -14,8 +14,8 @@ const { ApiError } = require("../utils/apiError");
 const getUnassignedLeads = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
-        const page   = Math.max(1, parseInt(req.query.page  || "1"));
-        const limit  = Math.min(100, parseInt(req.query.limit || "25"));
+        const page   = Math.max(1, parseInt(req.query.page  || "1", 10));
+        const limit  = Math.min(100, parseInt(req.query.limit || "25", 10));
         const skip   = (page - 1) * limit;
         const search = req.query.search?.trim();
         const source = req.query.source;
@@ -304,7 +304,7 @@ const updateProfile = async (req, res, next) => {
 
         // Only admins can change capacity
         if (isAdmin && maxDailyLeads !== undefined) {
-            allowed.maxDailyLeads = Math.max(1, parseInt(maxDailyLeads));
+            allowed.maxDailyLeads = Math.max(1, parseInt(maxDailyLeads, 10));
         }
 
         const profile = await prisma.employeeProfile.upsert({

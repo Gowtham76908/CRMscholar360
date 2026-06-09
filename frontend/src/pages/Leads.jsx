@@ -13,6 +13,7 @@ import CallDetailModal from "../components/CallDetailModal";
 import ImportLeadsModal from "../components/ImportLeadsModal";
 import { useAuth } from "../context/AuthContext";
 import { LeadsSkeleton } from "../components/ui/Skeleton";
+import { getCategoryFromScore } from "../utils/leadScore";
 
 function getSLAStatus(lead, warningDays = 3, breachDays = 7) {
     if (!["NEW", "CONTACTED", "FOLLOW_UP"].includes(lead.status)) return null;
@@ -24,12 +25,6 @@ function getSLAStatus(lead, warningDays = 3, breachDays = 7) {
     return null;
 }
 
-const getCategoryFromScore = (score) => {
-    if (score >= 81) return "PREMIUM";
-    if (score >= 61) return "HOT";
-    if (score >= 31) return "WARM";
-    return "COLD";
-};
 
 const getPages = (current, total) => {
     const delta = 2;

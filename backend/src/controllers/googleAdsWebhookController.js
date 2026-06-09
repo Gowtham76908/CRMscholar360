@@ -1,6 +1,8 @@
 const prisma = require("../utils/prisma");
 const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
+const { assignLeadOrAlert: autoAssignLead } = require("../services/leadDistributionEngine");
+const { runRulesForLead } = require("../services/automationEngine");
 
 // Google Ads stores a "Key" (webhook key) that it sends as ?google_key=... on every request.
 // We verify it matches what's saved in the Integration row.
@@ -39,7 +41,10 @@ const verifyGoogleAdsWebhook = async (req, res) => {
     const { google_key } = req.query;
     const expectedKey = await getWebhookKey();
 
-    if (expectedKey && google_key !== expectedKey) {
+    // Fail closed in production: an unconfigured key must not leave the endpoint open.
+    if (!expectedKey) {
+        if (process.env.NODE_ENV === "production") return res.status(403).json({ error: "Webhook key not configured" });
+    } else if (google_key !== expectedKey) {
         return res.status(403).json({ error: "Invalid google_key" });
     }
 
@@ -53,7 +58,10 @@ const receiveGoogleAdsLead = async (req, res, next) => {
         const { google_key } = req.query;
         const expectedKey = await getWebhookKey();
 
-        if (expectedKey && google_key !== expectedKey) {
+        // Fail closed in production: an unconfigured key must not leave the endpoint open.
+        if (!expectedKey) {
+            if (process.env.NODE_ENV === "production") return res.status(403).json({ error: "Webhook key not configured" });
+        } else if (google_key !== expectedKey) {
             return res.status(403).json({ error: "Invalid google_key" });
         }
 
@@ -99,6 +107,11 @@ const receiveGoogleAdsLead = async (req, res, next) => {
             action: "LEAD_CREATED_VIA_WEBHOOK",
             metadata: { source: "GOOGLE_ADS", campaignName, adGroupName, gclidId, rawData }
         });
+
+        // Fire automation rules + auto-assign async so Google Ads leads get routed
+        runRulesForLead("LEAD_CREATED", newLead).catch(console.error);
+        autoAssignLead(newLead.id, { reason: "AUTO_ASSIGNMENT" })
+            .catch(err => console.error(`[AutoAssign] google-ads ${newLead.id}:`, err.message || err));
 
         res.status(200).json({ message: "Lead received", leadId: newLead.id });
     } catch (error) {

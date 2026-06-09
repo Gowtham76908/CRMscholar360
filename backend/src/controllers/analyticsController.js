@@ -4,7 +4,7 @@ const prisma = require("../utils/prisma");
 const getTeamPerformance = async (req, res, next) => {
     try {
         const users = await prisma.user.findMany({
-            where: { role: "EMPLOYEE" },
+            where: { role: { in: ["EMPLOYEE", "MANAGER"] } },
             include: {
                 leads: { select: { status: true, firstResponseAt: true, createdAt: true } },
                 tasks: { select: { status: true, dueDate: true } }

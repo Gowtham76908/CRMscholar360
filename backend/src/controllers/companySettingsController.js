@@ -52,6 +52,7 @@ const ALLOWED_UPDATE_FIELDS = [
     "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpSecure", "smtpFrom",
     "slaWarningDays", "slaBreachDays",
     "assistantEnabled", "assistantRateLimitPerMin", "assistantMaxHistoryTurns",
+    "attendanceDeadlineEnabled", "attendanceDeadlineWeekday", "attendanceDeadlineSunday",
 ];
 
 const updateSettings = async (req, res, next) => {
@@ -95,9 +96,16 @@ const updateSettings = async (req, res, next) => {
 
 const testSmtp = async (req, res, next) => {
     try {
-        const { smtpHost, smtpPort, smtpUser, smtpPass, smtpSecure, smtpFrom, testTo } = req.body;
+        const { testTo } = req.body;
+        // Fall back to env SMTP so the test works when creds are configured via env
+        // rather than per-tenant settings (mirrors how sendEmail resolves config).
+        const smtpHost   = req.body.smtpHost   || process.env.SMTP_HOST;
+        const smtpPort   = req.body.smtpPort   || process.env.SMTP_PORT;
+        const smtpUser   = req.body.smtpUser   || process.env.SMTP_USER;
+        const smtpPass   = req.body.smtpPass   || process.env.SMTP_PASS;
+        const smtpSecure = req.body.smtpSecure ?? (process.env.SMTP_SECURE === "true");
         if (!smtpHost || !smtpUser || !smtpPass) {
-            return res.status(400).json({ message: "smtpHost, smtpUser, and smtpPass are required" });
+            return res.status(400).json({ message: "SMTP is not configured. Add SMTP host, user, and password in Settings (or environment)." });
         }
         const transporter = createTransporter({ smtpHost, smtpPort, smtpUser, smtpPass, smtpSecure });
         await transporter.verify();

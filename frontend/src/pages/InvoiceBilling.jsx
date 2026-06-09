@@ -137,8 +137,14 @@ const CreateInvoiceModal = ({ onClose, editData = null, company, clientPrefill =
         (acc, i) => { const r = calcRow(i); return { subtotal: acc.subtotal + r.taxable, totalTax: acc.totalTax + r.tax }; },
         { subtotal: 0, totalTax: 0 }
     );
-    const cgst  = parseFloat((totalTax / 2).toFixed(2));
-    const sgst  = parseFloat((totalTax / 2).toFixed(2));
+    // Mirror the backend: same GSTIN state code → CGST+SGST, different → IGST.
+    // A client without a GSTIN (B2C) defaults to intrastate.
+    const companyState = (company?.gstin || "").trim().slice(0, 2);
+    const clientState  = (form.clientGstin || "").trim().slice(0, 2);
+    const isInterstate = Boolean(clientState) && Boolean(companyState) && clientState !== companyState;
+    const cgst  = isInterstate ? 0 : parseFloat((totalTax / 2).toFixed(2));
+    const sgst  = isInterstate ? 0 : parseFloat((totalTax - cgst).toFixed(2));
+    const igst  = isInterstate ? parseFloat(totalTax.toFixed(2)) : 0;
     const total = parseFloat((subtotal + totalTax).toFixed(2));
 
     const submit = () => {
@@ -286,14 +292,23 @@ const CreateInvoiceModal = ({ onClose, editData = null, company, clientPrefill =
                                         <span>Subtotal</span>
                                         <span className="font-semibold text-gray-700">₹{fmt(subtotal)}</span>
                                     </div>
-                                    <div className="flex justify-between text-xs text-gray-500">
-                                        <span>CGST</span>
-                                        <span className="font-semibold text-gray-700">₹{fmt(cgst)}</span>
-                                    </div>
-                                    <div className="flex justify-between text-xs text-gray-500">
-                                        <span>SGST</span>
-                                        <span className="font-semibold text-gray-700">₹{fmt(sgst)}</span>
-                                    </div>
+                                    {isInterstate ? (
+                                        <div className="flex justify-between text-xs text-gray-500">
+                                            <span>IGST</span>
+                                            <span className="font-semibold text-gray-700">₹{fmt(igst)}</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="flex justify-between text-xs text-gray-500">
+                                                <span>CGST</span>
+                                                <span className="font-semibold text-gray-700">₹{fmt(cgst)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs text-gray-500">
+                                                <span>SGST</span>
+                                                <span className="font-semibold text-gray-700">₹{fmt(sgst)}</span>
+                                            </div>
+                                        </>
+                                    )}
                                     <div className="h-px bg-gray-100 my-1" />
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm font-bold text-gray-800">Total</span>

@@ -4,6 +4,7 @@ const logActivity = require("../utils/activityLogger");
 const normalizePhone = require("../utils/normalizePhone");
 const { getTemplates, sendTemplateMessage, _getConfig: getWhatsAppConfig } = require("../services/whatsappService");
 const { processInboundReply } = require("../services/whatsappAutoReplyService");
+const { recomputeLeadScore } = require("../services/leadScoringService");
 const { ApiError } = require("../utils/apiError");
 
 // GET /api/whatsapp/templates
@@ -12,6 +13,12 @@ const listTemplates = async (req, res, next) => {
         const templates = await getTemplates();
         res.json(templates);
     } catch (err) {
+        // "Not configured yet" is an expected precondition, not a server fault —
+        // surface a clear, actionable message (409) instead of a generic 500.
+        if (/not connected|not configured|missing accessToken|wabaId/i.test(err.message || "")) {
+            return next(new ApiError(409, "WHATSAPP_NOT_CONNECTED",
+                "WhatsApp is not connected. Configure it in Settings → Integrations."));
+        }
         return next(err);
     }
 };
@@ -79,7 +86,7 @@ const getInboundMessages = async (req, res, next) => {
         const messages = await prisma.whatsAppMessage.findMany({
             where,
             orderBy: { createdAt: "desc" },
-            take: Math.min(parseInt(limit) || 20, 100),
+            take: Math.min(parseInt(limit, 10) || 20, 100),
             include: {
                 lead: { select: { id: true, name: true } },
             },
@@ -207,6 +214,9 @@ async function handleInboundMessage(msgObj) {
         action: "WHATSAPP_REPLY",
         metadata: { replyText, phone },
     });
+
+    // Inbound reply is the strongest engagement signal — warm the lead.
+    recomputeLeadScore(original.leadId).catch(() => {});
 
     processInboundReply(original.leadId, phone, replyText).catch(err =>
         console.error("[AutoReply] processInboundReply error:", err.message)
