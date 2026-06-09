@@ -197,6 +197,42 @@ const addPaymentSchema = z.object({
     paymentDate: z.string().optional(),
 });
 
+// ── WhatsApp ──────────────────────────────────────────────────────────────────
+const createCampaignSchema = z.object({
+    name: z.string().min(1, "Campaign name is required").max(200),
+    templateName: z.string().min(1, "Template name is required").max(200),
+    parameters: z.array(z.any()).max(50).optional(),
+    leadIds: z.array(z.string().min(1)).min(1, "At least one lead is required").max(5000),
+});
+
+const createAutoReplySchema = z.object({
+    name: z.string().min(1, "Name is required").max(200),
+    triggerType: z.string().min(1, "triggerType is required").max(50),
+    keyword: z.string().max(200).optional().nullable(),
+    timeoutHours: z.union([z.number(), z.string()]).optional().nullable(),
+    replyTemplate: z.string().min(1, "replyTemplate is required").max(5000),
+    replyParams: z.array(z.any()).max(50).optional(),
+});
+
+// ── Lead distribution ─────────────────────────────────────────────────────────
+const updateDistributionProfileSchema = z.object({
+    isAcceptingLeads: z.boolean().optional(),
+    availabilityStatus: z.enum(["ONLINE", "OFFLINE", "ON_LEAVE"]).optional(),
+    maxDailyLeads: z.number().int().positive().max(10000).optional(),
+}).refine(d => Object.keys(d).length > 0, { message: "At least one field is required" });
+
+const manualAssignSchema = z.object({
+    leadId: z.string().min(1, "leadId is required"),
+    employeeId: z.string().min(1, "employeeId is required"),
+});
+
+const bulkAssignDistSchema = z.object({
+    leadIds: z.array(z.string().min(1)).max(5000).optional(),
+    all: z.boolean().optional(),
+}).refine(d => d.all || (d.leadIds && d.leadIds.length > 0), {
+    message: "Provide leadIds[] or all:true",
+});
+
 module.exports = {
     loginSchema,
     registerUserSchema,
@@ -222,4 +258,9 @@ module.exports = {
     addTasksToSprintSchema,
     createInvoiceSchema,
     addPaymentSchema,
+    createCampaignSchema,
+    createAutoReplySchema,
+    updateDistributionProfileSchema,
+    manualAssignSchema,
+    bulkAssignDistSchema,
 };

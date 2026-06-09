@@ -1,4 +1,5 @@
 const prisma = require("../utils/prisma");
+const { istDateKey } = require("../utils/istTime");
 
 // ── Auth helper ────────────────────────────────────────────────────────────
 const verifyBasicAuth = (req) => {
@@ -38,7 +39,7 @@ const parseCall = (raw) => {
         salestrailId: (raw.id || raw.call_id || raw.uuid || null)?.toString() || null,
         direction,
         status:       (raw.status || raw.state || raw.call_status || "answered").toLowerCase(),
-        duration:     parseInt(raw.duration || 0),
+        duration:     parseInt(raw.duration || 0, 10),
         fromNumber,
         toNumber,
         agentName,
@@ -158,15 +159,15 @@ const getCalls = async (req, res, next) => {
             prisma.salestrailCall.findMany({
                 where,
                 orderBy: { startedAt: "desc" },
-                skip:  (parseInt(page) - 1) * parseInt(limit),
-                take:  parseInt(limit),
+                skip:  (parseInt(page, 10) - 1) * parseInt(limit, 10),
+                take:  parseInt(limit, 10),
                 include: { lead: { select: { id: true, name: true, phone: true } } },
             }),
             prisma.salestrailCall.count({ where }),
         ]);
 
-        const p = parseInt(page);
-        const l = parseInt(limit);
+        const p = parseInt(page, 10);
+        const l = parseInt(limit, 10);
         res.json({ data: calls, total, page: p, limit: l, totalPages: Math.max(1, Math.ceil(total / l)) });
     } catch (err) {
         return next(err);
@@ -179,7 +180,7 @@ const getCalls = async (req, res, next) => {
 const getStats = async (req, res, next) => {
     try {
         const { days = 30, agentEmails } = req.query;
-        const daysInt   = parseInt(days);
+        const daysInt   = parseInt(days, 10);
         const since     = new Date();
         since.setDate(since.getDate() - daysInt);
         const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
@@ -208,7 +209,7 @@ const getStats = async (req, res, next) => {
                 `,
                 prisma.$queryRaw`
                     SELECT
-                        DATE("startedAt")::text                                                    AS date,
+                        DATE("startedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::text     AS date,
                         COUNT(*)::int                                                              AS total,
                         COUNT(*) FILTER (WHERE status = 'answered')::int                          AS answered,
                         COUNT(*) FILTER (WHERE status IN ('missed','no_answer','busy'))::int       AS missed,
@@ -218,8 +219,8 @@ const getStats = async (req, res, next) => {
                     FROM "SalestrailCall"
                     WHERE "startedAt" >= ${since}
                       AND "agentEmail" = ANY(${emailScope})
-                    GROUP BY DATE("startedAt")
-                    ORDER BY DATE("startedAt")
+                    GROUP BY DATE("startedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')
+                    ORDER BY DATE("startedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')
                 `,
             ]);
         } else {
@@ -238,7 +239,7 @@ const getStats = async (req, res, next) => {
                 `,
                 prisma.$queryRaw`
                     SELECT
-                        DATE("startedAt")::text                                                    AS date,
+                        DATE("startedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::text     AS date,
                         COUNT(*)::int                                                              AS total,
                         COUNT(*) FILTER (WHERE status = 'answered')::int                          AS answered,
                         COUNT(*) FILTER (WHERE status IN ('missed','no_answer','busy'))::int       AS missed,
@@ -247,8 +248,8 @@ const getStats = async (req, res, next) => {
                         COALESCE(SUM(duration),0)::int                                            AS duration
                     FROM "SalestrailCall"
                     WHERE "startedAt" >= ${since}
-                    GROUP BY DATE("startedAt")
-                    ORDER BY DATE("startedAt")
+                    GROUP BY DATE("startedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')
+                    ORDER BY DATE("startedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')
                 `,
             ]);
         }
@@ -263,7 +264,7 @@ const getStats = async (req, res, next) => {
         const perDay = [];
         for (let i = daysInt - 1; i >= 0; i--) {
             const d = new Date(); d.setDate(d.getDate() - i);
-            const key = d.toISOString().split("T")[0];
+            const key = istDateKey(d);
             const r = dayIndex.get(key);
             perDay.push({
                 date:     key,

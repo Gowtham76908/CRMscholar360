@@ -1,5 +1,7 @@
 const prisma = require("../utils/prisma");
 const { ApiError } = require("../utils/apiError");
+const { istDateKey } = require("../utils/istTime");
+const { signUploadUrl } = require("../utils/signedUpload");
 
 // ── Access guard ──────────────────────────────────────────────────────────────
 
@@ -132,7 +134,7 @@ async function buildJourneyEvents(leadId) {
                 summary: c.summary,
                 tone: c.tone,
                 outcome: c.callCategory,
-                recordingUrl: c.recordingUrl,
+                recordingUrl: signUploadUrl(c.recordingUrl),
             },
             createdAt: c.createdAt,
         });
@@ -156,7 +158,7 @@ async function buildJourneyEvents(leadId) {
                 duration: c.duration,
                 status: c.status,
                 agentName: c.agentName,
-                recordingUrl: c.recordingUrl,
+                recordingUrl: signUploadUrl(c.recordingUrl),
             },
             createdAt: c.createdAt,
         });
@@ -434,7 +436,7 @@ const getJourney = async (req, res, next) => {
     const { id } = req.params;
     const { userId, role } = req.user;
     const { filter, search, page: rawPage } = req.query;
-    const page = Math.max(1, parseInt(rawPage) || 1);
+    const page = Math.max(1, parseInt(rawPage, 10) || 1);
     const PAGE_SIZE = 30;
 
     try {
@@ -519,13 +521,13 @@ function buildInteractionTrend(events) {
     for (let i = 13; i >= 0; i--) {
         const d = new Date(now);
         d.setDate(d.getDate() - i);
-        const label = d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-        const dateStr = d.toDateString();
+        const key = istDateKey(d);
+        const label = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
         const count = events.filter(e =>
             ["call","email","whatsapp"].includes(e.channel) &&
-            new Date(e.createdAt).toDateString() === dateStr
+            istDateKey(e.createdAt) === key
         ).length;
-        days.push({ label, date: d.toISOString().split("T")[0], count });
+        days.push({ label, date: key, count });
     }
     return days;
 }

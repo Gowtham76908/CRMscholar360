@@ -1,6 +1,7 @@
 const prisma = require("../utils/prisma");
 const { getTeamMemberIds } = require("../services/organizationService");
 const { ApiError } = require("../utils/apiError");
+const { istDateKey } = require("../utils/istTime");
 
 // ── Date range helper ─────────────────────────────────────────────────────────
 function dateRange(period, from, to) {
@@ -56,7 +57,7 @@ const getKPIs = async (req, res, next) => {
 
         const dr = dateRange(period, from, to);
 
-        const [assigned, converted, pendingFollowUps, callRows, responded, totalAssigned] =
+        const [assigned, converted, pendingFollowUps, callRows, responded] =
             await prisma.$transaction([
                 prisma.lead.count({ where: { assignedToId: { in: teamIds }, assignedAt: dr } }),
                 prisma.lead.count({ where: { assignedToId: { in: teamIds }, status: "CONVERTED", updatedAt: dr } }),
@@ -68,7 +69,6 @@ const getKPIs = async (req, res, next) => {
                 prisma.lead.count({
                     where: { assignedToId: { in: teamIds }, firstResponseAt: { not: null }, assignedAt: dr },
                 }),
-                prisma.lead.count({ where: { assignedToId: { in: teamIds }, assignedAt: dr } }),
             ]);
 
         // Scope calls to team members (match by email)
@@ -86,7 +86,7 @@ const getKPIs = async (req, res, next) => {
             callsMade:       teamCalls.length,
             pendingFollowUps,
             talkTime,
-            responseRate: totalAssigned > 0 ? Math.round((responded / totalAssigned) * 100) : 0,
+            responseRate: assigned > 0 ? Math.round((responded / assigned) * 100) : 0,
         });
     } catch (err) {
         return next(err);
@@ -113,12 +113,12 @@ const getLeadChart = async (req, res, next) => {
         for (let i = dayCount; i >= 0; i--) {
             const d = new Date();
             d.setDate(d.getDate() - i);
-            const key = d.toISOString().split("T")[0];
+            const key = istDateKey(d);
             dayMap[key] = { date: key, assigned: 0, contacted: 0, converted: 0, lost: 0 };
         }
 
         for (const l of leads) {
-            const key = l.assignedAt ? new Date(l.assignedAt).toISOString().split("T")[0] : null;
+            const key = l.assignedAt ? istDateKey(l.assignedAt) : null;
             if (!key || !dayMap[key]) continue;
             dayMap[key].assigned++;
             if (l.status === "CONTACTED") dayMap[key].contacted++;
@@ -487,7 +487,7 @@ const getWorkflowColumnLeads = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { status }       = req.params;
-        const page             = Math.max(1, parseInt(req.query.page) || 1);
+        const page             = Math.max(1, parseInt(req.query.page, 10) || 1);
         const search           = (req.query.search || "").trim();
 
         if (!VALID_STATUSES.has(status)) return res.status(400).json({ message: "Invalid status" });
@@ -661,15 +661,15 @@ const getRevenueTrend = async (req, res, next) => {
         const dayMap   = {};
         for (let i = dayCount; i >= 0; i--) {
             const d = new Date(); d.setDate(d.getDate() - i);
-            const key = d.toISOString().split("T")[0];
+            const key = istDateKey(d);
             dayMap[key] = { date: key, collected: 0, invoiced: 0 };
         }
         for (const p of payments) {
-            const key = new Date(p.paymentDate).toISOString().split("T")[0];
+            const key = istDateKey(p.paymentDate);
             if (dayMap[key]) dayMap[key].collected += p.amount;
         }
         for (const inv of invoices) {
-            const key = new Date(inv.createdAt).toISOString().split("T")[0];
+            const key = istDateKey(inv.createdAt);
             if (dayMap[key]) dayMap[key].invoiced += inv.total;
         }
 
@@ -816,11 +816,11 @@ const getInvoiceCollectionTrend = async (req, res, next) => {
         const dayMap   = {};
         for (let i = dayCount; i >= 0; i--) {
             const d = new Date(); d.setDate(d.getDate() - i);
-            const key = d.toISOString().split("T")[0];
+            const key = istDateKey(d);
             dayMap[key] = { date: key, paid: 0, partial: 0, outstanding: 0 };
         }
         for (const inv of invoices) {
-            const key = new Date(inv.createdAt).toISOString().split("T")[0];
+            const key = istDateKey(inv.createdAt);
             if (!dayMap[key]) continue;
             const collected = inv.payments.filter(p => p.type === "CREDIT").reduce((s, p) => s + p.amount, 0);
             const remaining = inv.total - collected;

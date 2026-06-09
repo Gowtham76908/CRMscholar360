@@ -1,6 +1,22 @@
 const { Server } = require("socket.io");
+const jwt = require("jsonwebtoken");
+const prisma = require("./utils/prisma");
+const logger = require("./utils/logger");
 
 let io;
+
+// Minimal cookie-header parser — avoids pulling cookie-parser into the socket path.
+function parseCookie(header, name) {
+    if (!header) return null;
+    for (const part of header.split(";")) {
+        const eq = part.indexOf("=");
+        if (eq === -1) continue;
+        if (part.slice(0, eq).trim() === name) {
+            return decodeURIComponent(part.slice(eq + 1).trim());
+        }
+    }
+    return null;
+}
 
 function initSocket(server) {
     const allowedOrigins = [
@@ -18,9 +34,9 @@ function initSocket(server) {
         cors: {
             origin: (origin, callback) => {
                 if (!origin) return callback(null, true);
-                const isAllowed = allowedOrigins.includes(origin) || 
-                                  origin.endsWith(".vercel.app") || 
-                                  origin.includes("localhost");
+                const isLocalhost = /^https?:\/\/localhost(:\d+)?$/.test(origin);
+                const isAllowed = allowedOrigins.includes(origin) ||
+                                  (process.env.NODE_ENV !== "production" && isLocalhost);
                 if (isAllowed) {
                     callback(null, true);
                 } else {
@@ -30,6 +46,36 @@ function initSocket(server) {
             credentials: true,
         },
         transports: ["websocket", "polling"],
+    });
+
+    // ── Authentication gate ───────────────────────────────────────────────────
+    // Reject any handshake without a valid JWT. Browser clients send the httpOnly
+    // `token` cookie (socket.io forwards it with withCredentials: true); non-browser
+    // clients may pass it via handshake.auth.token. Identity (userId, userName) is
+    // resolved here from the verified token + DB — never trusted from event payloads.
+    io.use(async (socket, next) => {
+        try {
+            const token =
+                socket.handshake.auth?.token ||
+                parseCookie(socket.handshake.headers?.cookie, "token");
+
+            if (!token) return next(new Error("UNAUTHENTICATED"));
+
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const user = await prisma.user.findUnique({
+                where:  { id: decoded.userId },
+                select: { id: true, name: true, isActive: true },
+            });
+
+            if (!user || !user.isActive) return next(new Error("UNAUTHENTICATED"));
+
+            socket.data.userId   = user.id;
+            socket.data.userName = user.name;
+            next();
+        } catch (err) {
+            logger.warn({ err: err.message }, "[Socket] Rejected unauthenticated connection");
+            next(new Error("UNAUTHENTICATED"));
+        }
     });
 
     // leadId → Map<socketId, { userId, userName, avatarColor }>
@@ -43,10 +89,12 @@ function initSocket(server) {
     }
 
     io.on("connection", (socket) => {
-        socket.on("join-lead", ({ leadId, userId, userName, avatarColor }) => {
+        socket.on("join-lead", ({ leadId, avatarColor }) => {
+            // Identity comes from the authenticated handshake, not the payload.
+            const { userId, userName } = socket.data;
             if (!leadId || !userId) return;
             socket.join(`lead:${leadId}`);
-            socket.data = { leadId, userId };
+            socket.data.leadId = leadId;
 
             if (!leadViewers.has(leadId)) leadViewers.set(leadId, new Map());
             leadViewers.get(leadId).set(socket.id, { userId, userName, avatarColor });

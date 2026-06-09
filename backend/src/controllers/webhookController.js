@@ -2,6 +2,8 @@ const prisma = require("../utils/prisma");
 const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
 const emailService = require("../services/emailService");
+const { assignLeadOrAlert: autoAssignLead } = require("../services/leadDistributionEngine");
+const { runRulesForLead } = require("../services/automationEngine");
 
 // Handle Incoming Webhook for Lead Creation
 const handleLeadWebhook = async (req, res, next) => {
@@ -66,6 +68,11 @@ const handleLeadWebhook = async (req, res, next) => {
             await emailService.sendWelcomeEmail(newLead);
             console.log(`[Webhook] Auto-reply triggered for ${newLead.email}`);
         }
+
+        // Fire automation rules + auto-assign async so inbound webhook leads get routed
+        runRulesForLead("LEAD_CREATED", newLead).catch(console.error);
+        autoAssignLead(newLead.id, { reason: "AUTO_ASSIGNMENT" })
+            .catch(err => console.error(`[AutoAssign] webhook ${newLead.id}:`, err.message || err));
 
         res.status(201).json({ message: "Lead processed successfully", leadId: newLead.id });
     } catch (error) {

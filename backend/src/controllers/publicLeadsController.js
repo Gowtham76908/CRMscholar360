@@ -4,6 +4,7 @@ const logActivity = require("../utils/activityLogger");
 const { ApiError } = require("../utils/apiError");
 const { decrypt } = require("../utils/encrypt");
 const { assignLeadOrAlert: autoAssignLead } = require("../services/leadDistributionEngine");
+const { runRulesForLead } = require("../services/automationEngine");
 
 // Look up the workspace integration by API key
 const findWorkspaceByKey = async (apiKey) => {
@@ -105,7 +106,8 @@ const capturePublicLead = async (req, res, next) => {
             metadata: { source: "WEBSITE_FORM", origin: req.headers.origin || "unknown" }
         });
 
-        // Fire auto-assign async — don't block the public response
+        // Fire automation rules + auto-assign async — don't block the public response
+        runRulesForLead("LEAD_CREATED", newLead).catch(console.error);
         autoAssignLead(newLead.id, { reason: "AUTO_ASSIGNMENT" })
             .catch(err => console.error(`[AutoAssign] webhook ${newLead.id}:`, err.message || err));
 

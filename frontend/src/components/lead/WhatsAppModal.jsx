@@ -109,7 +109,7 @@ export default function WhatsAppModal({ leadId, lead, onClose }) {
                             </div>
                         ) : tplError ? (
                             <div className="flex items-center gap-1.5 text-xs text-red-500">
-                                <AlertCircle className="h-3.5 w-3.5" /> Failed to load templates. Check WhatsApp Cloud API credentials.
+                                <AlertCircle className="h-3.5 w-3.5" /> {tplError?.response?.data?.error?.message || "Failed to load templates. Check WhatsApp Cloud API credentials."}
                             </div>
                         ) : templates.length === 0 ? (
                             <p className="text-xs text-gray-400">No approved templates found.</p>

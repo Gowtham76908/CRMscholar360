@@ -3,6 +3,23 @@ const { calculateCompOffBalance, calculateCompOffBalanceBulk } = require("../uti
 const { nowIST, todayIST } = require("../utils/istTime");
 const { getTeamMemberIds } = require("../services/organizationService");
 
+// "HH:MM" -> minutes since midnight, falling back if malformed/empty.
+function parseHHMM(s, fallback) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec((s || "").trim());
+    if (!m) return fallback;
+    const h = +m[1], min = +m[2];
+    if (h > 23 || min > 59) return fallback;
+    return h * 60 + min;
+}
+
+// minutes since midnight -> "h:MM AM/PM"
+function fmtHHMM(mins) {
+    const h = Math.floor(mins / 60), m = mins % 60;
+    const ap = h >= 12 ? "PM" : "AM";
+    const h12 = ((h + 11) % 12) + 1;
+    return `${h12}:${String(m).padStart(2, "0")} ${ap}`;
+}
+
 // User ids a requester may view/manage attendance for. SUPER_ADMIN → null (all);
 // MANAGER → their own team plus themselves. Keeps one manager's HR data private
 // from another manager's team.
@@ -18,21 +35,27 @@ const checkIn = async (req, res, next) => {
         const userId = req.user.userId;
         const { latitude, longitude } = req.body;
 
-        // Deadline check in IST — server runs UTC, business is IST (UTC+5:30)
-        const ist = nowIST();
-        const isSunday = ist.getUTCDay() === 0;
-        const currentTimeInMinutes = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+        // Deadline check in IST — server runs UTC, business is IST (UTC+5:30).
+        // The window is configurable per tenant in Company Settings; can be disabled.
+        const settings = await prisma.companySettings.findFirst({
+            select: { attendanceDeadlineEnabled: true, attendanceDeadlineWeekday: true, attendanceDeadlineSunday: true },
+        });
+        if (settings?.attendanceDeadlineEnabled !== false) {
+            const ist = nowIST();
+            const isSunday = ist.getUTCDay() === 0;
+            const currentTimeInMinutes = ist.getUTCHours() * 60 + ist.getUTCMinutes();
 
-        const DEADLINE_WEEKDAY = 11 * 60 + 50; // 11:50 AM IST
-        const DEADLINE_SUNDAY  = 12 * 60 + 30; // 12:30 PM IST
-        const currentDeadline  = isSunday ? DEADLINE_SUNDAY : DEADLINE_WEEKDAY;
+            const deadlineMins = isSunday
+                ? parseHHMM(settings?.attendanceDeadlineSunday,  12 * 60 + 30)
+                : parseHHMM(settings?.attendanceDeadlineWeekday, 11 * 60 + 50);
 
-        if (currentTimeInMinutes > currentDeadline) {
-            return res.status(400).json({
-                message: `Check-in deadline has passed. You must check in before ${isSunday ? "12:30 PM" : "11:50 AM"} IST`,
-                code: "LATE_CHECK_IN",
-                deadline: isSunday ? "12:30 PM" : "11:50 AM"
-            });
+            if (currentTimeInMinutes > deadlineMins) {
+                return res.status(400).json({
+                    message: `Check-in deadline has passed. You must check in before ${fmtHHMM(deadlineMins)} IST`,
+                    code: "LATE_CHECK_IN",
+                    deadline: fmtHHMM(deadlineMins),
+                });
+            }
         }
 
         // IST calendar date — avoids wrong-day storage after midnight IST (still previous UTC day)
@@ -135,8 +158,8 @@ const getMyAttendance = async (req, res, next) => {
         let where = { userId };
 
         if (month && year) {
-            const startDate = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, 1));
-            const endDate = new Date(Date.UTC(parseInt(year), parseInt(month), 0));
+            const startDate = new Date(Date.UTC(parseInt(year, 10), parseInt(month, 10) - 1, 1));
+            const endDate = new Date(Date.UTC(parseInt(year, 10), parseInt(month, 10), 0));
             where.date = { gte: startDate, lte: endDate };
         }
 
@@ -199,8 +222,8 @@ const getAttendanceStats = async (req, res, next) => {
         const { month, year } = req.query;
 
         const currentDate = new Date();
-        const targetMonth = parseInt(month) || (currentDate.getMonth() + 1);
-        const targetYear = parseInt(year) || currentDate.getFullYear();
+        const targetMonth = parseInt(month, 10) || (currentDate.getMonth() + 1);
+        const targetYear = parseInt(year, 10) || currentDate.getFullYear();
 
         const startDate = new Date(Date.UTC(targetYear, targetMonth - 1, 1));
         const endDate = new Date(Date.UTC(targetYear, targetMonth, 0));
@@ -230,8 +253,8 @@ const getAttendanceStats = async (req, res, next) => {
 const getAdminMonthlyReport = async (req, res, next) => {
     try {
         const { month, year } = req.query;
-        const targetMonth = parseInt(month) || (new Date().getMonth() + 1);
-        const targetYear = parseInt(year) || new Date().getFullYear();
+        const targetMonth = parseInt(month, 10) || (new Date().getMonth() + 1);
+        const targetYear = parseInt(year, 10) || new Date().getFullYear();
 
         const startDate = new Date(Date.UTC(targetYear, targetMonth - 1, 1));
         const endDate = new Date(Date.UTC(targetYear, targetMonth, 0));
@@ -332,8 +355,8 @@ const getEmployeeMonthlyAttendance = async (req, res, next) => {
             return res.status(403).json({ message: "Access denied: outside your team" });
         }
 
-        const targetMonth = parseInt(month) || (new Date().getMonth() + 1);
-        const targetYear = parseInt(year) || new Date().getFullYear();
+        const targetMonth = parseInt(month, 10) || (new Date().getMonth() + 1);
+        const targetYear = parseInt(year, 10) || new Date().getFullYear();
 
         const startDate = new Date(Date.UTC(targetYear, targetMonth - 1, 1));
         const endDate = new Date(Date.UTC(targetYear, targetMonth, 0));

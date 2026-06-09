@@ -19,6 +19,8 @@
 require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcrypt");
+const { categoryFromScore } = require("../src/utils/leadScorer");
+const { recomputeLeadScore } = require("../src/services/leadScoringService");
 const prisma = new PrismaClient();
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -229,6 +231,7 @@ async function main() {
         const name     = LEAD_NAMES[i] || `Lead ${i + 1}`;
         const emailKey = name.toLowerCase().replace(/[^a-z0-9]/g, ".").replace(/\.+/g, ".").slice(0, 20);
         const createdDaysAgo = rand(5, 120);
+        const score = rand(20, 95);
 
         const lead = await prisma.lead.create({
             data: {
@@ -238,7 +241,8 @@ async function main() {
                 source:      pick(SOURCES),
                 enquiryType: pick(ENQUIRIES),
                 status,
-                score:       rand(20, 95),
+                score,
+                category:    categoryFromScore(score),
                 assignedTo:  { connect: { id: employee.id } },
                 assignedAt:  daysAgo(createdDaysAgo - 1),
                 createdAt:   daysAgo(createdDaysAgo),
@@ -532,6 +536,15 @@ async function main() {
     }
     console.log(`  ✓ ${attCount} attendance records created`);
 
+    // ── 11. Engagement-based temperature ───────────────────────────────────────
+    // Recompute every lead's score from its seeded interactions (calls, emails,
+    // status) so demo temperatures reflect engagement rather than a random number.
+    console.log("\nScoring leads from engagement...");
+    for (const { lead } of leads) {
+        await recomputeLeadScore(lead.id);
+    }
+    console.log(`  ✓ ${leads.length} leads scored from interaction history`);
+
     // ── Done ──────────────────────────────────────────────────────────────────
     console.log("\n════════════════════════════════════════");
     console.log("  Seed complete!");
@@ -550,4 +563,10 @@ async function main() {
 
 main()
     .catch((e) => { console.error(e); process.exit(1); })
-    .finally(async () => { await prisma.$disconnect(); });
+    .finally(async () => {
+        await prisma.$disconnect();
+        // recomputeLeadScore uses the shared prisma singleton — disconnect it too,
+        // otherwise its open connection keeps the seed process alive (stalling the
+        // deploy build, which runs this script).
+        try { await require("../src/utils/prisma").$disconnect(); } catch { /* noop */ }
+    });

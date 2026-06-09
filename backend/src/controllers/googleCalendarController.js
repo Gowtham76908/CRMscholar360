@@ -1,7 +1,21 @@
 const { google } = require("googleapis");
+const jwt = require("jsonwebtoken");
 const prisma = require("../utils/prisma");
 const { encrypt, decrypt } = require("../utils/encrypt");
 const { ApiError } = require("../utils/apiError");
+
+// OAuth `state` carries the initiating user's id, but the callback is public —
+// so it must be tamper-proof. We sign it as a short-lived JWT and verify it on
+// return, preventing an attacker from forging `state=<victimId>` (account-linking CSRF).
+const STATE_TTL = "10m";
+const signOAuthState = (userId) => jwt.sign({ uid: userId }, process.env.JWT_SECRET, { expiresIn: STATE_TTL });
+const verifyOAuthState = (state) => {
+    try {
+        return jwt.verify(state, process.env.JWT_SECRET).uid || null;
+    } catch {
+        return null;
+    }
+};
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar.events"];
 
@@ -48,7 +62,7 @@ const initiateAuth = (req, res) => {
         access_type: "offline",
         prompt: "consent",
         scope: SCOPES,
-        state: req.user.userId,
+        state: signOAuthState(req.user.userId),
     });
     res.json({ url });
 };
@@ -56,11 +70,12 @@ const initiateAuth = (req, res) => {
 // GET /api/google/callback  (public — no authMiddleware, state carries userId)
 const handleCallback = async (req, res, next) => {
     try {
-        const { code, state: userId, error } = req.query;
+        const { code, state, error } = req.query;
 
         if (error) {
             return res.redirect(`${process.env.FRONTEND_URL}/settings?gcal=denied`);
         }
+        const userId = verifyOAuthState(state);
         if (!code || !userId) {
             return res.redirect(`${process.env.FRONTEND_URL}/settings?gcal=error`);
         }
@@ -157,15 +172,12 @@ const createEvent = async (req, res, next) => {
 
         const { data } = await calendar.events.insert({ calendarId: "primary", requestBody: event });
 
-        // If linked to a reminder, save the event ID for later deletion
+        // If linked to a reminder, persist the event ID for later deletion.
         if (reminderId) {
-            const existing = await prisma.reminder.findUnique({ where: { id: reminderId } });
-            if (existing) {
-                // Store gcalEventId in reminder message as metadata prefix (no schema change)
-                // We prefix message with [gcal:EVENT_ID] so we can extract it later
-                const updatedMsg = `[gcal:${data.id}] ${existing.message || ""}`.trim();
-                await prisma.reminder.update({ where: { id: reminderId }, data: { message: updatedMsg } });
-            }
+            await prisma.reminder.updateMany({
+                where: { id: reminderId },
+                data:  { gcalEventId: data.id },
+            });
         }
 
         res.status(201).json({
@@ -203,13 +215,14 @@ const deleteEvent = async (req, res, next) => {
 const listEvents = async (req, res, next) => {
     try {
         const { userId } = req.user;
-        const { days = 7 } = req.query;
+        // Clamp to 1–90 days so a huge `days` can't request an unbounded window.
+        const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 90);
 
         const auth = await getAuthorizedClient(userId);
         const calendar = google.calendar({ version: "v3", auth });
 
         const timeMin = new Date().toISOString();
-        const timeMax = new Date(Date.now() + Number(days) * 24 * 60 * 60 * 1000).toISOString();
+        const timeMax = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
         const { data } = await calendar.events.list({
             calendarId: "primary",

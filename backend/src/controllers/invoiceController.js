@@ -31,7 +31,12 @@ async function getLeadIdFromInvoice(invoice) {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const computeInvoiceTotals = (items) => {
+// First two digits of a GSTIN are the state code. Same state → intrastate
+// (CGST+SGST); different state → interstate (IGST). A client without a GSTIN
+// (unregistered/B2C) is treated as intrastate, the common default.
+const stateCode = (gstin) => (gstin || "").trim().slice(0, 2);
+
+const computeInvoiceTotals = (items, { companyGstin, clientGstin } = {}) => {
     let subtotal = 0;
     let totalTax = 0;
     const processedItems = items.map((item) => {
@@ -47,11 +52,22 @@ const computeInvoiceTotals = (items) => {
     });
     subtotal = parseFloat(subtotal.toFixed(2));
     totalTax = parseFloat(totalTax.toFixed(2));
-    // Intrastate: split total tax equally as CGST + SGST
-    const cgst = parseFloat((totalTax / 2).toFixed(2));
-    const sgst = parseFloat((totalTax / 2).toFixed(2));
+
+    const companyState = stateCode(companyGstin);
+    const clientState  = stateCode(clientGstin);
+    const isInterstate = Boolean(clientState) && Boolean(companyState) && clientState !== companyState;
+
+    let cgst = 0, sgst = 0, igst = 0;
+    if (isInterstate) {
+        igst = totalTax;
+    } else {
+        // Split as CGST + SGST; derive SGST as the remainder so cgst+sgst always
+        // equals totalTax exactly (no ₹0.01 drift on odd amounts).
+        cgst = parseFloat((totalTax / 2).toFixed(2));
+        sgst = parseFloat((totalTax - cgst).toFixed(2));
+    }
     const total = parseFloat((subtotal + totalTax).toFixed(2));
-    return { processedItems, subtotal, cgst, sgst, igst: 0, total };
+    return { processedItems, subtotal, cgst, sgst, igst, total };
 };
 
 const generateInvoiceNumber = async (type, tx) => {
@@ -102,7 +118,8 @@ const createInvoice = async (req, res, next) => {
         if (!clientName) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Client name is required");
         if (!items.length) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "At least one item is required");
 
-        const { processedItems, subtotal, cgst, sgst, igst, total } = computeInvoiceTotals(items);
+        const company = await prisma.companySettings.findFirst({ select: { gstin: true } });
+        const { processedItems, subtotal, cgst, sgst, igst, total } = computeInvoiceTotals(items, { companyGstin: company?.gstin, clientGstin });
 
         const invoice = await prisma.$transaction(async (tx) => {
             const invoiceNumber = await generateInvoiceNumber(invoiceType, tx);
@@ -239,7 +256,11 @@ const updateInvoice = async (req, res, next) => {
         if (invoiceType) updateData.invoiceType = invoiceType;
 
         if (items && items.length > 0) {
-            const { processedItems, subtotal, cgst, sgst, igst, total } = computeInvoiceTotals(items);
+            const company = await prisma.companySettings.findFirst({ select: { gstin: true } });
+            const { processedItems, subtotal, cgst, sgst, igst, total } = computeInvoiceTotals(items, {
+                companyGstin: company?.gstin,
+                clientGstin: clientGstin ?? existing.clientGstin,
+            });
             updateData.subtotal = subtotal;
             updateData.cgst = cgst;
             updateData.sgst = sgst;
@@ -324,31 +345,40 @@ const addPayment = async (req, res, next) => {
         const { amount, type = "CREDIT", description, paymentDate } = req.body;
 
         if (!amount || parseFloat(amount) <= 0) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Valid amount is required");
+        const amt = parseFloat(amount);
 
-        const invoice = await prisma.invoice.findUnique({
-            where: { id },
-            include: { payments: true },
+        // Atomic read-modify-write so concurrent payments can't miscompute status
+        // or push total paid past the invoice total.
+        const { invoice, payment, totalPaid, newStatus } = await prisma.$transaction(async (tx) => {
+            const invoice = await tx.invoice.findUnique({ where: { id }, include: { payments: true } });
+            if (!invoice) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Invoice not found");
+
+            if (type === "CREDIT") {
+                const { totalPaid: already } = getPaymentSummary(invoice.payments);
+                const remaining = parseFloat((invoice.total - already).toFixed(2));
+                if (amt > remaining + 0.01) {
+                    throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, `Payment exceeds the outstanding balance of ₹${remaining.toFixed(2)}`);
+                }
+            }
+
+            const payment = await tx.paymentEntry.create({
+                data: {
+                    invoiceId: id,
+                    amount: amt,
+                    type,
+                    description,
+                    paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
+                },
+            });
+
+            const { totalPaid } = getPaymentSummary([...invoice.payments, payment]);
+            let newStatus = invoice.status;
+            if (totalPaid >= invoice.total) newStatus = "PAID";
+            else if (totalPaid > 0) newStatus = "PARTIALLY_PAID";
+
+            await tx.invoice.update({ where: { id }, data: { status: newStatus } });
+            return { invoice, payment, totalPaid, newStatus };
         });
-        if (!invoice) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Invoice not found");
-
-        const payment = await prisma.paymentEntry.create({
-            data: {
-                invoiceId: id,
-                amount: parseFloat(amount),
-                type,
-                description,
-                paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
-            },
-        });
-
-        // Recalculate invoice status
-        const allPayments = [...invoice.payments, payment];
-        const { totalPaid } = getPaymentSummary(allPayments);
-        let newStatus = invoice.status;
-        if (totalPaid >= invoice.total) newStatus = "PAID";
-        else if (totalPaid > 0) newStatus = "PARTIALLY_PAID";
-
-        await prisma.invoice.update({ where: { id }, data: { status: newStatus } });
 
         if (type === "CREDIT" && invoice.dealId) {
             const leadId = await getLeadIdFromInvoice(invoice);
@@ -377,6 +407,12 @@ const addPayment = async (req, res, next) => {
 const deletePayment = async (req, res, next) => {
     try {
         const { id, paymentId } = req.params;
+
+        // Ensure the payment actually belongs to the invoice in the URL before deleting
+        const existingPayment = await prisma.paymentEntry.findUnique({ where: { id: paymentId } });
+        if (!existingPayment || existingPayment.invoiceId !== id) {
+            throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Payment not found for this invoice");
+        }
         await prisma.paymentEntry.delete({ where: { id: paymentId } });
 
         // Recalculate invoice status after deletion
@@ -396,8 +432,8 @@ const deletePayment = async (req, res, next) => {
 
 const getBalanceSheet = async (req, res, next) => {
     try {
-        const page  = Math.max(1, parseInt(req.query.page  ?? 1));
-        const limit = Math.min(200, Math.max(1, parseInt(req.query.limit ?? 50)));
+        const page  = Math.max(1, parseInt(req.query.page  ?? 1, 10));
+        const limit = Math.min(200, Math.max(1, parseInt(req.query.limit ?? 50, 10)));
         const skip  = (page - 1) * limit;
         const scope = await invoiceScope(req.user);
         const where = { status: { not: "CANCELLED" }, deletedAt: null, ...scope };

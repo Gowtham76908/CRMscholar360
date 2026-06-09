@@ -1,6 +1,7 @@
 const prisma = require("../utils/prisma");
 const paginate = require("../utils/paginate");
 const calculateLeadScore = require("../utils/leadScorer");
+const { recomputeLeadScore } = require("../services/leadScoringService");
 const logActivity = require("../utils/activityLogger");
 const { createCommission } = require("../services/commissionService");
 const leadService = require("../services/leadService");
@@ -154,10 +155,6 @@ const updateLead = async (req, res, next) => {
             }
         }
 
-        // Merge existing with updates for scoring
-        const leadForScoring = { ...currentLead, ...req.body };
-        const { score, category } = calculateLeadScore(leadForScoring);
-
         // Build clean update object, explicitly ignoring undefined to support partial PATCH
         // Auto-set nextFollowUpAt to 3 days out when transitioning to FOLLOW_UP and no date given
         let resolvedFollowUpAt = nextFollowUpAt !== undefined
@@ -181,14 +178,18 @@ const updateLead = async (req, res, next) => {
             ...(enquiryType !== undefined && { enquiryType }),
             ...(assignedToId !== undefined && { assignedToId }),
             ...(resolvedFollowUpAt !== undefined && { nextFollowUpAt: resolvedFollowUpAt }),
-            score,
-            category
         };
 
         const updatedLead = await prisma.lead.update({
             where: { id },
             data: updateData
         });
+
+        // Recompute the temperature from interaction history (folds in the new
+        // status/contact info). Keeps engagement points intact instead of resetting
+        // the score to the intake value on every edit.
+        const rescored = await recomputeLeadScore(id);
+        if (rescored) { updatedLead.score = rescored.score; updatedLead.category = rescored.category; }
 
         // Log Activity
         await logActivity({
@@ -949,7 +950,7 @@ const getDashboardStats = async (req, res, next) => {
             followUp,
             pendingTasks,
             overdueFollowUps,
-            conversionRate: total > 0 ? Math.round((converted / total) * 100) : 0
+            conversionRate: total > 0 ? Math.round((converted / total) * 1000) / 10 : 0
         });
     } catch (error) {
         return next(error);

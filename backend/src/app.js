@@ -28,6 +28,10 @@ const sessionRoutes = require("./routes/session");
 
 const app = express();
 
+// Behind Render/Vercel proxies the client IP is in X-Forwarded-For. Trust the
+// first proxy hop so req.ip (and rate-limit keys) reflect the real client.
+app.set("trust proxy", 1);
+
 const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:5000",
@@ -44,7 +48,8 @@ app.use(cors({
     origin: (origin, callback) => {
         if (!origin) return callback(null, true);
         const isAllowed = allowedOrigins.includes(origin) ||
-                          /^https?:\/\/localhost(:\d+)?$/.test(origin);
+                          (process.env.NODE_ENV !== "production" &&
+                           /^https?:\/\/localhost(:\d+)?$/.test(origin));
         if (isAllowed) {
             callback(null, true);
         } else {
@@ -61,8 +66,14 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Serve static files from uploads directory
-app.use("/uploads", express.static("uploads"));
+// Serve static files from uploads directory.
+// Profile photos are avatars (low-sensitivity, embedded as <img> everywhere) → public.
+// Call recordings and task files are confidential → gated by a signed token or session.
+const uploadAccess = require("./middleware/uploadAccess");
+app.use("/uploads/profiles",   express.static("uploads/profiles"));
+app.use("/uploads/recordings", uploadAccess, express.static("uploads/recordings"));
+app.use("/uploads/tasks",      uploadAccess, express.static("uploads/tasks"));
+app.use("/uploads",            uploadAccess, express.static("uploads")); // catch-all: gate anything new by default
 
 // Auth rate limit — 20 attempts per 15 minutes (login, etc.)
 const authLimiter = rateLimit({
@@ -106,6 +117,31 @@ const forgotPasswordEmailLimiter = rateLimit({
 
 app.use("/api/auth/forgot-password", forgotPasswordLimiter, forgotPasswordEmailLimiter);
 
+// Global API rate limit — blanket protection against scraping/abuse/DoS for any
+// authenticated or public endpoint. Generous ceiling so normal 100-concurrent-user
+// usage is never throttled; the stricter auth limiters above still apply on top.
+// External ingestion paths (provider webhooks, public embed form, tracking pixel)
+// are exempt — those legitimately burst from a single provider IP.
+const RATE_EXEMPT = [
+    "/api/webhooks",
+    "/api/public",
+    "/api/email-track",
+    "/api/google-ads",
+    "/api/google/callback",
+];
+const globalLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 600, // per IP per minute
+    message: { error: { code: "RATE_LIMITED", message: "Too many requests. Please slow down." } },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+        const path = req.originalUrl.split("?")[0];
+        return RATE_EXEMPT.some((p) => path.startsWith(p));
+    },
+});
+app.use("/api", globalLimiter);
+
 app.get("/health", (req, res) => {
     res.json({ status: "ok", time: new Date().toISOString() });
 });
@@ -120,6 +156,15 @@ app.get("/", (req, res) => {
 app.use("/api/auth",        authRoutes);    // login, forgot-password, reset-password
 app.use("/api/webhooks",    webhookRoutes); // external lead ingestion (no user session)
 app.use("/api/demo-booking", require("./routes/demoBooking")); // public booking form
+
+// Public, unauthenticated callers. These MUST be mounted before the catch-all
+// note/task routers below (which apply authMiddleware at the bare "/api" mount and
+// would otherwise 401 these): email open/click pixels, the Google Ads + website
+// lead webhooks, and the Google OAuth callback.
+app.use("/api/email-track",  require("./routes/emailTrack"));        // email open/click pixels
+app.use("/api/google-ads",   require("./routes/googleAdsWebhook"));  // Google Ads lead webhook (key-verified)
+app.use("/api/public/leads", require("./routes/publicLeads"));       // website embed form (API-key auth)
+app.use("/api/google",       require("./routes/googleCalendar"));    // OAuth callback is public; other routes self-auth
 
 // ─── PROTECTED ROUTES ─────────────────────────────────────────────────────────
 // Every router listed here MUST call router.use(authMiddleware) at its top.
@@ -168,13 +213,8 @@ app.use("/api/employee-report",  require("./routes/employeeReport"));
 app.use("/api/deals",            require("./routes/deal"));
 app.use("/api/email-templates",  require("./routes/emailTemplates"));
 app.use("/api/leads/:id/journey", require("./routes/journey"));
-// Public — no auth middleware (email clients load pixel without session)
-app.use("/api/email-track",     require("./routes/emailTrack"));
-app.use("/api/google",          require("./routes/googleCalendar"));  // routes inside this router self-auth via authMiddleware
-// Public — Google Ads Lead Form Extensions webhook (no auth, key-verified)
-app.use("/api/google-ads",      require("./routes/googleAdsWebhook"));
-// Public — Website embed form (wide-open CORS, API-key auth)
-app.use("/api/public/leads",    require("./routes/publicLeads"));
+// NOTE: public routers (email-track, google, google-ads, public/leads) are mounted
+// in the PUBLIC section above — they must precede the catch-all note/task routers.
 
 // Global error handler — must be last middleware
 const { ApiError } = require("./utils/apiError");
