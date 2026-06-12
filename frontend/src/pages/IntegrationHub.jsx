@@ -62,7 +62,27 @@ const WebhookIcon = ({ s = 26 }) => (
     </svg>
 );
 
-const HubSpotIcon   = ({ s = 22 }) => <svg width={s} height={s} viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#FF7A59" /><circle cx="14" cy="9" r="2.5" fill="white" /><path d="M11 9h-2.5M14 6.5V4M16.5 10l1.5 1.5M11 12l-4 4" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg>;
+const GCalIcon = ({ s = 26 }) => (
+    <svg width={s} height={s} viewBox="0 0 24 24">
+        <rect width="24" height="24" rx="5" fill="white" stroke="#E2E8F0" strokeWidth="1" />
+        <rect x="3" y="6" width="18" height="15" rx="2" fill="white" stroke="#4285F4" strokeWidth="1.5" />
+        <rect x="3" y="6" width="18" height="5" rx="2" fill="#4285F4" />
+        <path d="M8 3v4M16 3v4" stroke="#4285F4" strokeWidth="1.8" strokeLinecap="round" />
+        <text x="12" y="18" textAnchor="middle" fontSize="6" fontWeight="bold" fill="#4285F4">31</text>
+    </svg>
+);
+
+const LiveKitIcon = ({ s = 26 }) => (
+    <svg width={s} height={s} viewBox="0 0 24 24">
+        <rect width="24" height="24" rx="6" fill="#111827" />
+        <circle cx="12" cy="12" r="3" fill="#4ADE80" />
+        <path d="M12 5a7 7 0 010 14" stroke="#4ADE80" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+        <path d="M12 8a4 4 0 010 8" stroke="#4ADE80" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.6" />
+        <path d="M19 12a7 7 0 01-7 7" stroke="#4ADE80" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.3" />
+    </svg>
+);
+
+const HubSpotIcon   = ({ s = 22 }) =><svg width={s} height={s} viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#FF7A59" /><circle cx="14" cy="9" r="2.5" fill="white" /><path d="M11 9h-2.5M14 6.5V4M16.5 10l1.5 1.5M11 12l-4 4" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg>;
 const SlackIcon     = ({ s = 22 }) => <svg width={s} height={s} viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#4A154B" /><path d="M9 8a1.5 1.5 0 01-3 0V6a1.5 1.5 0 013 0v2zm0 0h6M15 8a1.5 1.5 0 003 0V6a1.5 1.5 0 00-3 0v2zm0 0v6M15 14a1.5 1.5 0 013 0v2a1.5 1.5 0 01-3 0v-2zm0 0H9M9 14a1.5 1.5 0 01-3 0v-2a1.5 1.5 0 013 0v2zm0 0v-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg>;
 const ZapierIcon    = ({ s = 22 }) => <svg width={s} height={s} viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#FF4A00" /><path d="M12 4l-1.5 6H5l5 3.5-1.5 6.5L12 16l3.5 4L14 13.5 19 10h-5.5L12 4z" fill="white" /></svg>;
 const AnalyticsIcon = ({ s = 22 }) => <svg width={s} height={s} viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#E37400" /><path d="M5 17l4-5 4 3 5-7" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
@@ -187,6 +207,61 @@ const PROVIDERS = [
                 { label: "Save & test", detail: "Click Save & Activate. The CRM will send a test connection to verify credentials." },
             ],
             note: "Other providers: Outlook → smtp-mail.outlook.com:587 | SendGrid → smtp.sendgrid.net:587 (username: apikey, password: your SendGrid API key) | Mailgun → smtp.mailgun.org:587.",
+        },
+    },
+    {
+        key: "google_calendar",
+        name: "Google Calendar",
+        desc: "Connect your Google Calendar to sync reminders and get event notifications.",
+        Icon: GCalIcon,
+        grad: "from-blue-500 to-sky-600",
+        bg: "bg-blue-50", border: "border-blue-100", chip: "text-blue-700 bg-blue-50",
+        oauth: true,
+        noSync: true,
+        endpoints: {
+            status:     "/google/calendar/status",
+            oauthStart: "/google/auth?popup=1",
+            disconnect: "/google/calendar/disconnect",
+        },
+        tags: ["OAuth", "Reminders Sync", "Event Notifications", "Per-user"],
+        setupGuide: {
+            title: "How to connect Google Calendar",
+            steps: [
+                { label: "Click Connect", detail: "Click the Connect button below. A Google sign-in popup will appear." },
+                { label: "Sign in with Google", detail: "Choose the Google account whose calendar you want to sync. Grant calendar access when prompted." },
+                { label: "Done", detail: "The popup will close automatically. Your reminders will now sync to Google Calendar." },
+            ],
+            note: "This connection is per-user — each team member connects their own Google account independently.",
+        },
+    },
+    {
+        key: "livekit",
+        name: "LiveKit Video",
+        desc: "Open-source video calling for team channels. Free tier includes 10,000 minutes/month.",
+        Icon: LiveKitIcon,
+        grad: "from-gray-700 to-gray-900",
+        bg: "bg-gray-50", border: "border-gray-200", chip: "text-gray-700 bg-gray-100",
+        oauth: false,
+        noSync: true,
+        tags: ["Video Calls", "WebRTC", "Open Source", "Free Tier"],
+        configFields: [
+            { key: "apiKey",    label: "API Key",            placeholder: "APIxxxxxxxxxxxxxxx",          type: "password" },
+            { key: "apiSecret", label: "API Secret",         placeholder: "Your LiveKit API secret",     type: "password" },
+            { key: "url",       label: "WebSocket URL",      placeholder: "wss://your-project.livekit.cloud", type: "text" },
+        ],
+        metaKeys: [
+            { key: "url", label: "Server URL", icon: "🔗" },
+        ],
+        setupGuide: {
+            title: "How to get LiveKit credentials",
+            steps: [
+                { label: "Create a LiveKit Cloud account", detail: "Go to cloud.livekit.io and sign up for free. The free tier includes 10,000 participant-minutes per month — no credit card required." },
+                { label: "Create a project", detail: "Click \"New Project\" in the dashboard. Give it a name and pick the region closest to your users." },
+                { label: "Copy your API keys", detail: "In your project → Settings → Keys. Copy the API Key (starts with API…), the API Secret (long random string), and the WebSocket URL (starts with wss://)." },
+                { label: "Paste & Save", detail: "Enter all three values in the fields above and click Save & Activate. The video call button in your team chat will work immediately." },
+            ],
+            note: "Your credentials are encrypted before being stored. Video calls use LiveKit's free tier (10k mins/month). Self-hosting via Docker is also supported if needed.",
+            links: [{ label: "LiveKit Cloud Dashboard", url: "https://cloud.livekit.io" }],
         },
     },
     {
@@ -635,7 +710,15 @@ document.getElementById('crm-lead-form').onsubmit = async function(e) {
                         transition={{ duration: 0.18 }}
                         className="space-y-5">
 
-                        {provider?.embedWidget ? (
+                        {provider?.oauth && !(provider?.configFields || []).length ? (
+                            <div className="flex gap-3 p-4 rounded-2xl bg-blue-50 border border-blue-100">
+                                <HelpCircle size={15} className="text-blue-400 shrink-0 mt-0.5" />
+                                <p className="text-xs text-blue-700 leading-relaxed">
+                                    <span className="font-bold text-blue-800">OAuth connection — </span>
+                                    click <span className="font-semibold">Connect</span> on the card to sign in with Google. No credentials to enter here.
+                                </p>
+                            </div>
+                        ) : provider?.embedWidget ? ( /* eslint-disable-line */
                             <>
                                 {/* API Key row */}
                                 <div className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4 space-y-3">
@@ -862,7 +945,7 @@ document.getElementById('crm-lead-form').onsubmit = async function(e) {
             {tab === "configure" && (
                 <Sheet.Footer>
                     <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-700 transition-colors">Cancel</button>
-                    {(provider?.embedWidget ? !!apiKey : !provider?.alwaysConnected) && (
+                    {(provider?.oauth && !(provider?.configFields || []).length) ? null : (provider?.embedWidget ? !!apiKey : !provider?.alwaysConnected) && (
                         <button onClick={handleSave} disabled={saving}
                             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60 transition-all shadow-sm"
                             style={{ background: "linear-gradient(135deg,#F97316,#EA580C)" }}>
@@ -1000,7 +1083,7 @@ function Card({ p, integration, onConnect, onSync, onDisconnect, onConfigure, on
                                     <RefreshCw size={11} />Reconnect
                                 </button>
                             )}
-                            {connected && !p.alwaysConnected && (
+                            {connected && !p.alwaysConnected && !p.noSync && (
                                 <button onClick={() => act("sync", onSync)} disabled={busy === "sync"}
                                     className="flex items-center gap-1 py-2 px-3 rounded-lg text-xs font-semibold text-zinc-700 bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 transition-colors disabled:opacity-60">
                                     <RefreshCw size={11} className={busy === "sync" ? "animate-spin" : ""} />Sync
@@ -1217,12 +1300,26 @@ export default function IntegrationHub() {
         staleTime: 30000,
     });
 
+    const { data: gcal } = useQuery({
+        queryKey: ["gcal-status"],
+        queryFn: () => api.get("/google/calendar/status").then(r => r.data),
+        staleTime: 30000,
+        retry: false,
+    });
+
     const refresh = () => {
         queryClient.invalidateQueries({ queryKey: ["integration-hub"] });
         queryClient.invalidateQueries({ queryKey: ["integration-all-logs"] });
+        queryClient.invalidateQueries({ queryKey: ["gcal-status"] });
     };
 
     const byKey = Object.fromEntries(integrations.map(i => [i.platform, i]));
+    byKey.google_calendar = {
+        platform: "google_calendar",
+        status: gcal?.connected ? "CONNECTED" : "DISCONNECTED",
+        lastSynced: gcal?.connectedAt || null,
+        metadata: {},
+    };
 
     const { pending: oauthPending, open: openOAuth } = useOAuthPopup(() => {
         toast.success("Connected successfully");
@@ -1236,8 +1333,9 @@ export default function IntegrationHub() {
     const handleConnect = async (p) => {
         if (!p.oauth) { setConfigSheet(p.key); return; }
         try {
-            const res = await api.get(`/integration-hub/${p.key}/oauth/start`);
-            openOAuth(res.data.authUrl);
+            const startPath = p.endpoints?.oauthStart || `/integration-hub/${p.key}/oauth/start`;
+            const res = await api.get(startPath);
+            openOAuth(res.data.authUrl || res.data.url);
         } catch (err) {
             toast.error(err.response?.data?.message || "Failed to start OAuth");
         }
@@ -1253,7 +1351,12 @@ export default function IntegrationHub() {
 
     const handleDisconnect = async (key) => {
         try {
-            await api.delete(`/integration-hub/${key}/disconnect`);
+            const prov = PROVIDERS.find(p => p.key === key);
+            if (prov?.endpoints?.disconnect) {
+                await api.post(prov.endpoints.disconnect);
+            } else {
+                await api.delete(`/integration-hub/${key}/disconnect`);
+            }
             toast.success("Disconnected");
             refresh();
         } catch (err) { toast.error(err.response?.data?.message || "Failed"); }

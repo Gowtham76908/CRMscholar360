@@ -90,7 +90,11 @@ export default function AssistantUsage() {
         </div>
     );
 
-    if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-indigo-500" /></div>;
+    const SectionLoader = ({ className = "h-64" }) => (
+        <div className={cn("flex items-center justify-center", className)}>
+            <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
+        </div>
+    );
 
     const summary  = data?.summary  || { totalRequests: 0, totalTokens: 0, activeUsers: 0, errorRate: 0 };
     const perDay   = data?.perDay   || [];
@@ -132,6 +136,7 @@ export default function AssistantUsage() {
             </div>
 
             {/* KPI row + current-config card */}
+            {isLoading ? <SectionLoader className="h-28" /> : (
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <KPI label="Total Requests" value={formatNumber(summary.totalRequests)} icon={Activity} accent="indigo" sub="In selected window" />
                 <KPI label="Total Tokens"   value={formatNumber(summary.totalTokens)}   icon={Coins}    accent="amber"   sub="Prompt + completion" />
@@ -152,13 +157,14 @@ export default function AssistantUsage() {
                     </Link>
                 </div>
             </div>
+            )}
 
             {/* Charts row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
                     <h3 className="text-sm font-bold text-gray-900 mb-4">Requests per day</h3>
                     <div className="h-64">
-                        {perDay.length === 0 ? (
+                        {isLoading ? <SectionLoader className="h-full" /> : perDay.length === 0 ? (
                             <div className="h-full flex items-center justify-center text-sm text-gray-400">No activity in this window</div>
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
@@ -176,7 +182,7 @@ export default function AssistantUsage() {
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
                     <h3 className="text-sm font-bold text-gray-900 mb-4">Tokens per day</h3>
                     <div className="h-64">
-                        {perDay.length === 0 ? (
+                        {isLoading ? <SectionLoader className="h-full" /> : perDay.length === 0 ? (
                             <div className="h-full flex items-center justify-center text-sm text-gray-400">No activity in this window</div>
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
@@ -200,7 +206,7 @@ export default function AssistantUsage() {
                         <h3 className="text-sm font-bold text-gray-900">Top Tools</h3>
                         <p className="text-[11px] text-gray-400">Which CRM tools the assistant reaches for most</p>
                     </div>
-                    {topTools.length === 0 ? (
+                    {isLoading ? <SectionLoader className="h-40" /> : topTools.length === 0 ? (
                         <div className="px-5 py-8 text-center text-sm text-gray-400">No tool calls yet</div>
                     ) : (
                         <div className="divide-y divide-gray-100">
@@ -219,7 +225,7 @@ export default function AssistantUsage() {
                         <h3 className="text-sm font-bold text-gray-900">Top Users</h3>
                         <p className="text-[11px] text-gray-400">Who's using the assistant most</p>
                     </div>
-                    {topUsers.length === 0 ? (
+                    {isLoading ? <SectionLoader className="h-40" /> : topUsers.length === 0 ? (
                         <div className="px-5 py-8 text-center text-sm text-gray-400">No users yet</div>
                     ) : (
                         <table className="w-full text-sm">

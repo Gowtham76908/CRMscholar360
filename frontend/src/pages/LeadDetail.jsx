@@ -13,6 +13,7 @@ import {
     TrendingUp, IndianRupee,
 } from "lucide-react";
 import { Modal } from "../components/Modal";
+import SlidePanel from "../components/SlidePanel";
 import { getScoreLabel } from "../utils/leadScore";
 import AddTaskForm from "../components/AddTaskForm";
 import LeadSidebar from "../components/lead/LeadSidebar";
@@ -1479,35 +1480,34 @@ export default function LeadDetail() {
                     {/* ── Deals ───────────────────────────────────────────────── */}
                     <DealsPanel deals={leadDeals} loading={dealsLoading} onAdd={() => setShowDealModal(true)} />
 
-                    {/* ── Open Tasks ──────────────────────────────────────────── */}
-                    <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                        <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-                                Tasks {openTasks.length > 0 && <span className="text-indigo-600">({openTasks.length})</span>}
-                            </h3>
+                    {/* ── Tasks (compact count — full list is below) ───────── */}
+                    <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <CheckCircle className="h-3.5 w-3.5 text-gray-400" />
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Tasks</h3>
+                                {openTasks.length > 0 && (
+                                    <span className="text-xs font-bold text-white bg-indigo-500 rounded-full px-1.5 py-0.5 leading-none">{openTasks.length}</span>
+                                )}
+                            </div>
                             {isAdmin && (
                                 <button
                                     onClick={() => setShowTaskModal(true)}
-                                    className="text-indigo-600 hover:text-indigo-800 transition-colors"
+                                    className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
                                     title="Add task"
                                 >
-                                    <Plus className="h-3.5 w-3.5" />
+                                    <Plus className="h-3.5 w-3.5" /> Add
                                 </button>
                             )}
                         </div>
                         {tasksLoading ? (
                             <div className="flex justify-center py-2"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /></div>
                         ) : openTasks.length === 0 ? (
-                            <p className="text-xs text-gray-400 text-center py-2">No open tasks</p>
+                            <p className="text-xs text-gray-400 text-center py-1 mt-1">No open tasks</p>
                         ) : (
-                            <div className="divide-y divide-gray-100">
-                                {openTasks.slice(0, 5).map(task => (
-                                    <TaskRow key={task.id} task={task} leadId={id} compact />
-                                ))}
-                            </div>
-                        )}
-                        {openTasks.length > 5 && (
-                            <p className="text-[10px] text-gray-400 text-center mt-2">+{openTasks.length - 5} more tasks</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                                {openTasks.slice(0, 2).map(t => t.title).join(", ")}{openTasks.length > 2 ? ` +${openTasks.length - 2} more` : ""}
+                            </p>
                         )}
                     </div>
 
@@ -1570,8 +1570,68 @@ export default function LeadDetail() {
                 </div>
             </div>
 
-            {/* Create Task Modal */}
-            <Modal isOpen={showTaskModal} onClose={() => setShowTaskModal(false)} title="Create Task">
+            {/* ── Full-width Tasks Section ───────────────────────────────────── */}
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                    <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-lg bg-indigo-50 flex items-center justify-center">
+                            <CheckCircle className="h-4 w-4 text-indigo-500" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-bold text-gray-900">Tasks</h2>
+                            <p className="text-xs text-gray-400">
+                                {tasksLoading ? "Loading…" : tasks.length === 0 ? "No tasks yet" : `${openTasks.length} open · ${tasks.length - openTasks.length} done`}
+                            </p>
+                        </div>
+                    </div>
+                    {isAdmin && (
+                        <button
+                            onClick={() => setShowTaskModal(true)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all shadow-sm shadow-indigo-100"
+                        >
+                            <Plus className="h-3.5 w-3.5" /> New Task
+                        </button>
+                    )}
+                </div>
+
+                {/* Body */}
+                {tasksLoading ? (
+                    <div className="flex justify-center py-10">
+                        <Loader2 className="h-5 w-5 animate-spin text-indigo-400" />
+                    </div>
+                ) : tasks.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                        <div className="h-14 w-14 rounded-full bg-gray-50 flex items-center justify-center mb-3">
+                            <CheckCircle className="h-7 w-7 text-gray-200" />
+                        </div>
+                        <p className="text-sm font-semibold text-gray-500">No tasks yet</p>
+                        <p className="text-xs text-gray-400 mt-0.5 max-w-xs">Create a task to track follow-ups, calls, or action items for this lead.</p>
+                        {isAdmin && (
+                            <button
+                                onClick={() => setShowTaskModal(true)}
+                                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-indigo-600 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all"
+                            >
+                                <Plus className="h-3.5 w-3.5" /> Add First Task
+                            </button>
+                        )}
+                    </div>
+                ) : (
+                    <div className="divide-y divide-gray-50">
+                        {tasks.map(task => {
+                            const isOverdue = task.status !== "COMPLETED" && new Date(task.dueDate) < new Date();
+                            return (
+                                <div key={task.id} className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/70 transition-colors group">
+                                    <TaskRow task={task} leadId={id} />
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* Create Task SlidePanel */}
+            <SlidePanel isOpen={showTaskModal} onClose={() => setShowTaskModal(false)} title="Create Task">
                 <AddTaskForm
                     leadId={id}
                     onClose={() => {
@@ -1579,7 +1639,7 @@ export default function LeadDetail() {
                         queryClient.invalidateQueries({ queryKey: ["lead-tasks", id] });
                     }}
                 />
-            </Modal>
+            </SlidePanel>
 
             {showWaModal && (
                 <WhatsAppModal

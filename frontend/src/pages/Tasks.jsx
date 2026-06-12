@@ -4,6 +4,7 @@ import api from "../api/axios";
 import { toast } from "sonner";
 import { Loader2, CheckCircle, Circle, Plus, Calendar, User } from "lucide-react";
 import { Modal } from "../components/Modal";
+import SlidePanel from "../components/SlidePanel";
 import AddTaskForm from "../components/AddTaskForm";
 import { useAuth } from "../context/AuthContext";
 import { Link } from "react-router-dom";
@@ -258,9 +259,9 @@ const Tasks = () => {
                 </div>
             )}
 
-            <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Create New Task">
+            <SlidePanel isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Create New Task">
                 <AddTaskForm onClose={() => setIsAddModalOpen(false)} />
-            </Modal>
+            </SlidePanel>
         </div>
     );
 };

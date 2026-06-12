@@ -8,13 +8,22 @@ const { ApiError } = require("../utils/apiError");
 // so it must be tamper-proof. We sign it as a short-lived JWT and verify it on
 // return, preventing an attacker from forging `state=<victimId>` (account-linking CSRF).
 const STATE_TTL = "10m";
-const signOAuthState = (userId) => jwt.sign({ uid: userId }, process.env.JWT_SECRET, { expiresIn: STATE_TTL });
+const signOAuthState = (userId, popup = false) => jwt.sign({ uid: userId, popup }, process.env.JWT_SECRET, { expiresIn: STATE_TTL });
 const verifyOAuthState = (state) => {
     try {
-        return jwt.verify(state, process.env.JWT_SECRET).uid || null;
+        const decoded = jwt.verify(state, process.env.JWT_SECRET);
+        return { userId: decoded.uid || null, popup: !!decoded.popup };
     } catch {
-        return null;
+        return { userId: null, popup: false };
     }
+};
+
+const popupResultHtml = (ok, payload) => {
+    const msg = JSON.stringify(JSON.stringify({ type: "DCRM_OAUTH", ok, payload }));
+    return `<!doctype html><meta charset="utf-8"><body><script>
+        window.opener && window.opener.postMessage(${msg}, "*");
+        window.close();
+    </script>Connected. You can close this window.</body>`;
 };
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar.events"];
@@ -57,14 +66,15 @@ async function getAuthorizedClient(userId) {
 
 // GET /api/google/auth
 const initiateAuth = (req, res) => {
+    const popup = req.query.popup === "1" || req.query.popup === "true";
     const oauth2Client = createOAuth2Client();
     const url = oauth2Client.generateAuthUrl({
         access_type: "offline",
         prompt: "consent",
         scope: SCOPES,
-        state: signOAuthState(req.user.userId),
+        state: signOAuthState(req.user.userId, popup),
     });
-    res.json({ url });
+    res.json({ url, authUrl: url });
 };
 
 // GET /api/google/callback  (public — no authMiddleware, state carries userId)
@@ -72,20 +82,18 @@ const handleCallback = async (req, res, next) => {
     try {
         const { code, state, error } = req.query;
 
-        if (error) {
-            return res.redirect(`${process.env.FRONTEND_URL}/settings?gcal=denied`);
-        }
-        const userId = verifyOAuthState(state);
-        if (!code || !userId) {
-            return res.redirect(`${process.env.FRONTEND_URL}/settings?gcal=error`);
-        }
+        const { userId, popup } = verifyOAuthState(state);
+        const fail = (reason) => popup
+            ? res.send(popupResultHtml(false, { message: reason }))
+            : res.redirect(`${process.env.FRONTEND_URL}/settings?gcal=${reason}`);
+
+        if (error)             return fail("denied");
+        if (!code || !userId)  return fail("error");
 
         const oauth2Client = createOAuth2Client();
         const { tokens } = await oauth2Client.getToken(code);
 
-        if (!tokens.refresh_token) {
-            return res.redirect(`${process.env.FRONTEND_URL}/settings?gcal=no_refresh_token`);
-        }
+        if (!tokens.refresh_token) return fail("no_refresh_token");
 
         const user = await prisma.user.findUnique({ where: { id: userId }, select: { preferences: true } });
         const existing = user?.preferences || {};
@@ -105,6 +113,7 @@ const handleCallback = async (req, res, next) => {
             },
         });
 
+        if (popup) return res.send(popupResultHtml(true, { platform: "google_calendar" }));
         res.redirect(`${process.env.FRONTEND_URL}/settings?gcal=connected`);
     } catch (err) {
         return next(err);

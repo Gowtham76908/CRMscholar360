@@ -7,8 +7,7 @@ import * as z from "zod";
 import api from "../api/axios";
 import {
     Loader2, User, Bell, Lock, Download, Trash2, Save, Shield, Smartphone,
-    Eye, EyeOff, Camera, X, CheckCircle, Mail, Layers, Plus, GripVertical, Clock,
-    Calendar, ExternalLink, Unlink, Bot,
+    Eye, EyeOff, Camera, X, CheckCircle, Layers, Plus, GripVertical, Clock, Bot,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import AuditLogs from "../components/AuditLogs";
@@ -46,11 +45,9 @@ const TABS = [
     { id: "security",      icon: Lock,     label: "Security" },
     { id: "notifications", icon: Bell,     label: "Notifications" },
     { id: "data",          icon: Download, label: "Data Export" },
-    { id: "integrations",  icon: Calendar, label: "Integrations" },
 ];
 
 const ADMIN_TABS = [
-    { id: "email",        icon: Mail,       label: "Email (SMTP)" },
     { id: "lead-fields",  icon: Layers,     label: "Lead Fields" },
     { id: "lead-sla",     icon: Clock,      label: "Lead SLA" },
     { id: "ai-assistant", icon: Bot,        label: "AI Assistant" },
@@ -743,9 +740,6 @@ function GoogleCalendarSettings() {
 const Settings = () => {
     const { user, refreshUser } = useAuth();
     const [activeTab, setActiveTab] = useState(() => {
-        const params = new URLSearchParams(window.location.search);
-        const gcal = params.get("gcal");
-        if (gcal) return "integrations";
         return "profile";
     });
     const [isSaving, setIsSaving] = useState(false);
@@ -1040,9 +1034,6 @@ const Settings = () => {
                         </div>
                     )}
 
-                    {activeTab === "integrations" && <GoogleCalendarSettings />}
-
-                    {activeTab === "email"       && user?.role === "SUPER_ADMIN" && <SmtpSettings />}
                     {activeTab === "lead-fields" && user?.role === "SUPER_ADMIN" && <LeadFieldsSettings />}
                     {activeTab === "lead-sla"    && user?.role === "SUPER_ADMIN" && <SlaSettings />}
                     {activeTab === "ai-assistant" && user?.role === "SUPER_ADMIN" && <AssistantSettings />}

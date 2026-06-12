@@ -2,6 +2,7 @@ const { Server } = require("socket.io");
 const jwt = require("jsonwebtoken");
 const prisma = require("./utils/prisma");
 const logger = require("./utils/logger");
+const { registerChatHandlers } = require("./chatSocket");
 
 let io;
 
@@ -89,6 +90,8 @@ function initSocket(server) {
     }
 
     io.on("connection", (socket) => {
+        registerChatHandlers(socket, io);
+
         socket.on("join-lead", ({ leadId, avatarColor }) => {
             // Identity comes from the authenticated handshake, not the payload.
             const { userId, userName } = socket.data;

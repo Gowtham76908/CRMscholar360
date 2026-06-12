@@ -9,9 +9,10 @@ export default function MobileNav({ onModeClick, unreadCounts = {} }) {
     const navigate  = useNavigate();
     const { user }  = useAuth();
     const isSuperAdmin = user?.role === "SUPER_ADMIN";
+    const isManager    = isSuperAdmin || user?.role === "MANAGER";
     const activeMode   = getModeFromPath(location.pathname);
 
-    const visibleModes = MODES.filter(m => !m.adminOnly || isSuperAdmin);
+    const visibleModes = MODES.filter(m => !m.adminOnly || isManager);
 
     const handleTap = (mode) => {
         // Always delegate to AppLayout's handleModeClick which handles

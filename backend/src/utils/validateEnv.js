@@ -10,7 +10,7 @@ const REQUIRED = [
 // Vars that gate optional features. Missing them isn't fatal, but the feature
 // silently no-ops (e.g. password-reset emails never arrive), so we warn loudly.
 const RECOMMENDED = [
-    { keys: ["STREAM_API_KEY", "STREAM_SECRET_KEY"], feature: "Team chat (Stream)" },
+    { keys: ["LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "LIVEKIT_URL"], feature: "Video calls (LiveKit)" },
     { keys: ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"],  feature: "Outbound email (password reset, invoices, reminders)" },
     { keys: ["FRONTEND_URL"], feature: "Password-reset links & CORS origin" },
     // ENCRYPTION_KEY is what encrypts stored Google OAuth tokens. Without it the

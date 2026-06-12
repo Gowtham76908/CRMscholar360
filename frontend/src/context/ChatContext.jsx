@@ -3,113 +3,117 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "./AuthContext";
 import api from "../api/axios";
+import { getSocket } from "../utils/socket";
 
-// stream-chat (~250 KB) is imported dynamically so it lands in its own async
-// chunk instead of the main bundle — the app paints first, then the chat socket
-// connects in the background.
-
-// App-wide team-chat presence. Connects to Stream once after login (separate
-// from the Messages page UI) so unread counts and "new message" notifications
-// work everywhere — not only while the Messages page is open. The Messages page
-// reuses this same client instead of opening its own connection.
 const ChatContext = createContext(null);
-
 export const useChat = () => useContext(ChatContext) ?? {};
-
-// Events that carry an authoritative running unread total for the current user.
-const UNREAD_EVENTS = [
-    "notification.message_new",
-    "notification.mark_read",
-    "notification.mark_unread",
-    "message.new",
-    "message.read",
-];
 
 export const ChatProvider = ({ children }) => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
 
-    const [chatClient, setChatClient] = useState(null);
-    const [videoCreds, setVideoCreds] = useState(null);
+    const [connected, setConnected]     = useState(false);
+    const [channels, setChannels]       = useState([]);
+    const [unreadMap, setUnreadMap]     = useState({}); // { [channelId]: count }
     const [totalUnread, setTotalUnread] = useState(0);
 
-    // Keep the current path in a ref so the message-event handler can decide
-    // whether to toast without re-subscribing on every navigation.
-    const pathRef = useRef(location.pathname);
+    const pathRef       = useRef(location.pathname);
+    const activeChIdRef = useRef(null);
+
     useEffect(() => { pathRef.current = location.pathname; }, [location.pathname]);
 
+    // Fetch channel list from REST
+    const fetchChannels = useCallback(async () => {
+        if (!user?.id) return;
+        try {
+            const { data } = await api.get("/chat/channels");
+            setChannels(data);
+        } catch {
+            // Chat stays empty if server is unreachable
+        }
+    }, [user?.id]);
+
+    useEffect(() => {
+        if (user?.id) fetchChannels();
+    }, [fetchChannels]);
+
+    // Single shared socket (reused by useLeadPresence too)
     useEffect(() => {
         if (!user?.id) return;
-        let client;
-        let cancelled = false;
 
-        const connect = async () => {
-            try {
-                const [{ data }, { StreamChat }] = await Promise.all([
-                    api.post("/chat/token"),
-                    import("stream-chat"),
-                ]);
-                const { token, apiKey, user: su } = data;
-                if (cancelled) return;
+        const s = getSocket();
 
-                client = StreamChat.getInstance(apiKey);
-                if (client.userID !== su.id) await client.connectUser(su, token);
-                if (cancelled) return;
+        const onConnect    = () => setConnected(true);
+        const onDisconnect = () => setConnected(false);
 
-                setChatClient(client);
-                setVideoCreds({ apiKey, user: su, token });
-                setTotalUnread(client.user?.total_unread_count ?? 0);
+        s.on("connect",    onConnect);
+        s.on("disconnect", onDisconnect);
+        if (s.connected) setConnected(true);
 
-                const onUnread = (event) => {
-                    if (typeof event.total_unread_count === "number") {
-                        setTotalUnread(event.total_unread_count);
-                    }
-                };
-                UNREAD_EVENTS.forEach((t) => client.on(t, onUnread));
+        const onMessage = (msg) => {
+            // Update sidebar last-message
+            setChannels(prev => prev.map(ch =>
+                ch.id === msg.channelId ? { ...ch, lastMessage: msg } : ch
+            ));
 
-                const onNewMessage = (event) => {
-                    const msg = event.message;
-                    if (!msg || msg.user?.id === su.id) return;       // ignore my own messages
-                    if (pathRef.current.startsWith("/messages")) return; // already in chat
-                    const sender = msg.user?.name?.split(" ")[0] || "Someone";
-                    const body = msg.text ? (msg.text.length > 80 ? msg.text.slice(0, 80) + "…" : msg.text) : "Sent an attachment";
+            // Increment unread badge for channels the user isn't currently viewing
+            if (activeChIdRef.current !== msg.channelId && msg.author?.id !== user.id) {
+                setUnreadMap(prev => ({
+                    ...prev,
+                    [msg.channelId]: (prev[msg.channelId] || 0) + 1,
+                }));
+
+                // Toast when away from Messages page
+                if (!pathRef.current.startsWith("/messages")) {
+                    const sender = msg.author?.name?.split(" ")[0] || "Someone";
+                    const body   = msg.text?.length > 80 ? msg.text.slice(0, 80) + "…" : msg.text;
                     toast.message(`💬 ${sender}`, {
                         description: body,
                         action: { label: "Open", onClick: () => navigate("/messages") },
                     });
-                };
-                client.on("notification.message_new", onNewMessage);
-
-                client._dcrmHandlers = { onUnread, onNewMessage };
-            } catch {
-                // Stream not configured / unreachable — chat simply stays unavailable.
+                }
             }
         };
 
-        connect();
+        s.on("chat:message", onMessage);
 
-        // Cleanup runs when the user changes (e.g. logout) or the provider
-        // unmounts: detach listeners, disconnect, and reset shared state.
         return () => {
-            cancelled = true;
-            if (client?._dcrmHandlers) {
-                const { onUnread, onNewMessage } = client._dcrmHandlers;
-                UNREAD_EVENTS.forEach((t) => client.off(t, onUnread));
-                client.off("notification.message_new", onNewMessage);
-                delete client._dcrmHandlers;
-            }
-            client?.disconnectUser().catch(() => {});
-            setChatClient(null);
-            setVideoCreds(null);
-            setTotalUnread(0);
+            s.off("connect",      onConnect);
+            s.off("disconnect",   onDisconnect);
+            s.off("chat:message", onMessage);
         };
     }, [user?.id, navigate]);
 
-    const clearUnread = useCallback(() => setTotalUnread(0), []);
+    useEffect(() => {
+        setTotalUnread(Object.values(unreadMap).reduce((a, b) => a + b, 0));
+    }, [unreadMap]);
+
+    // Called by Messages page when user opens a channel
+    const setActiveChannel = useCallback((channelId) => {
+        activeChIdRef.current = channelId;
+        if (channelId) {
+            setUnreadMap(prev => {
+                const next = { ...prev };
+                delete next[channelId];
+                return next;
+            });
+        }
+    }, []);
+
+    const clearUnread = useCallback(() => setUnreadMap({}), []);
 
     return (
-        <ChatContext.Provider value={{ chatClient, videoCreds, totalUnread, clearUnread }}>
+        <ChatContext.Provider value={{
+            socket: getSocket(),
+            connected,
+            channels,
+            unreadMap,
+            totalUnread,
+            clearUnread,
+            setActiveChannel,
+            refetchChannels: fetchChannels,
+        }}>
             {children}
         </ChatContext.Provider>
     );

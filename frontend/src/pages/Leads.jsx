@@ -6,6 +6,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import api from "../api/axios";
 import { Loader2, Merge } from "lucide-react";
 import { Modal } from "../components/Modal";
+import SlidePanel from "../components/SlidePanel";
 import AddLeadForm from "../components/AddLeadForm";
 import MergeLeadModal from "../components/MergeLeadModal";
 import LeadActivityModal from "../components/LeadActivityModal";
@@ -873,13 +874,13 @@ const Leads = () => {
                 </button>
             </div>
 
-            <Modal
+            <SlidePanel
                 isOpen={isAddModalOpen}
                 onClose={() => setIsAddModalOpen(false)}
                 title="Add New Lead"
             >
                 <AddLeadForm onClose={() => setIsAddModalOpen(false)} />
-            </Modal>
+            </SlidePanel>
 
             {isMergeModalOpen && (
                 <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
@@ -910,7 +911,7 @@ const Leads = () => {
             )}
 
             {editingLead && (
-                <Modal
+                <SlidePanel
                     isOpen={!!editingLead}
                     onClose={() => setEditingLead(null)}
                     title="Edit Lead"
@@ -919,7 +920,7 @@ const Leads = () => {
                         lead={editingLead}
                         onClose={() => setEditingLead(null)}
                     />
-                </Modal>
+                </SlidePanel>
             )}
 
             {selectedLeadForActivity && (

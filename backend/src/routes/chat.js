@@ -1,30 +1,29 @@
 const express = require("express");
 const router = express.Router();
-const chatController = require("../controllers/chatController");
+const chat = require("../controllers/chatController");
+
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
 
 router.use(authMiddleware);
 
-// Get Token (Auth)
-router.post("/token", chatController.createToken);
+// LiveKit video token
+router.get("/token", chat.createToken);
 
-// Create Group (any authenticated user — members are synced to Stream server-side)
-router.post("/group", chatController.createGroupChannel);
+// Channel management
+router.get("/channels",         chat.getChannels);
+router.post("/group",           chat.createGroupChannel);
+router.post("/dm",              chat.startDirectChat);
+router.get("/channels/:id/messages", chat.getChannelMessages);
 
-// Start Direct Chat (Syncs users)
-router.post("/start", chatController.startDirectChat);
+// Member management
+router.post("/channels/:id/members",        chat.addMember);
+router.delete("/channels/:id/members/:uid", chat.removeMember);
 
-// Get Users for Chat Search
-router.get("/users", chatController.getUsersForChat);
+// User search
+router.get("/users", chat.getUsersForChat);
 
-// Sync User to Stream (before adding to channel)
-router.post("/sync-user", chatController.syncUserToStream);
-
-// Sync ALL users to Stream (run once after deployment)
-router.post("/sync-all-users", roleMiddleware(["SUPER_ADMIN"]), chatController.syncAllUsers);
-
-// Seed demo channels + messages
-router.post("/seed", roleMiddleware(["SUPER_ADMIN"]), chatController.seedDemoData);
+// Admin: seed demo data
+router.post("/seed", roleMiddleware(["SUPER_ADMIN"]), chat.seedDemoData);
 
 module.exports = router;

@@ -13,12 +13,13 @@ const DEFAULTS = [
     { platform: "linkedin_serper", label: "LinkedIn Lead Search" },
     { platform: "salestrail",      label: "Salestrail Calls" },
     { platform: "website_webhook", label: "Website Webhook" },
+    { platform: "livekit",         label: "LiveKit Video" },
 ];
 
 // Providers that auto-connect after configure (no OAuth needed)
 const API_KEY_PROVIDERS = new Set([
     "linkedin_serper", "salestrail", "website_webhook",
-    "meta_leads", "whatsapp_cloud", "google_ads",
+    "meta_leads", "whatsapp_cloud", "google_ads", "livekit",
 ]);
 
 let _defaultsSeeded = false;
@@ -161,6 +162,7 @@ const configure = async (req, res, next) => {
             if (safeConfig.refreshToken)  safeConfig.refreshToken  = encrypt(safeConfig.refreshToken);
             if (safeConfig.developerToken) safeConfig.developerToken = encrypt(safeConfig.developerToken);
             if (safeConfig.appSecret)     safeConfig.appSecret     = encrypt(safeConfig.appSecret);
+            if (safeConfig.apiSecret)     safeConfig.apiSecret     = encrypt(safeConfig.apiSecret);
             updateData.config = safeConfig;
         }
         if (metadata) {

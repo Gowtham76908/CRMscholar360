@@ -33,9 +33,13 @@ const Reports = () => {
         enabled: isAdmin,
     });
 
-    const isLoading = loadingSource || loadingGrowth || loadingConversion || loadingTeam;
-
     const COLORS = ["#6366F1", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4"];
+
+    const SectionLoader = ({ className = "h-64" }) => (
+        <div className={cn("flex items-center justify-center", className)}>
+            <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
+        </div>
+    );
 
     const handleExport = async (type) => {
         try {
@@ -62,8 +66,6 @@ const Reports = () => {
         </div>
     );
 
-    if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-indigo-500" /></div>;
-
     const topPerformer = teamPerformance?.slice().sort((a, b) => parseFloat(b.conversionRate) - parseFloat(a.conversionRate))[0];
 
     return (
@@ -89,6 +91,7 @@ const Reports = () => {
             </div>
 
             {/* Key metrics */}
+            {(loadingConversion || loadingTeam) ? <SectionLoader className="h-28" /> : (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
                     { label: "Total Leads",     value: conversionData?.totalLeads ?? 0,     icon: Users,      color: "bg-indigo-50 text-indigo-600",  sub: "All time" },
@@ -108,12 +111,14 @@ const Reports = () => {
                     </div>
                 ))}
             </div>
+            )}
 
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
                     <h3 className="text-sm font-bold text-gray-900 mb-4">Leads by Source</h3>
                     <div className="h-64">
+                        {loadingSource ? <SectionLoader className="h-full" /> : (
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie data={leadsBySource} cx="50%" cy="50%" outerRadius={80} dataKey="_count.id" nameKey="source"
@@ -124,11 +129,13 @@ const Reports = () => {
                                 <Legend />
                             </PieChart>
                         </ResponsiveContainer>
+                        )}
                     </div>
                 </div>
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
                     <h3 className="text-sm font-bold text-gray-900 mb-4">Monthly Growth</h3>
                     <div className="h-64">
+                        {loadingGrowth ? <SectionLoader className="h-full" /> : (
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={monthlyGrowth} barSize={28}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
@@ -138,6 +145,7 @@ const Reports = () => {
                                 <Bar dataKey="leads" fill="#6366F1" radius={[6, 6, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
+                        )}
                     </div>
                 </div>
             </div>
@@ -150,6 +158,7 @@ const Reports = () => {
                         <Download className="h-3.5 w-3.5" /> Export CSV
                     </button>
                 </div>
+                {loadingTeam ? <SectionLoader className="h-40" /> : (
                 <div className="divide-y divide-gray-100">
                     {teamPerformance?.map((m, i) => {
                         const rate = parseFloat(m.conversionRate) || 0;
@@ -188,6 +197,7 @@ const Reports = () => {
                         );
                     })}
                 </div>
+                )}
             </div>
         </div>
     );

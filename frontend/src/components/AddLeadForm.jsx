@@ -18,11 +18,11 @@ const ENUM_LABELS = {
 };
 
 function FieldInput({ def, value, onChange }) {
-    const cls = "w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none";
+    const cls = "w-full px-4 py-3 text-sm border border-gray-200 rounded-xl bg-gray-50/50 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all shadow-sm";
 
     if (def.type === "SELECT" && def.options?.length) {
         return (
-            <select className={cls} value={value ?? ""} onChange={e => onChange(e.target.value)}>
+            <select className={`${cls} appearance-none bg-white`} value={value ?? ""} onChange={e => onChange(e.target.value)}>
                 <option value="">— Select —</option>
                 {def.options.map(o => (
                     <option key={o} value={o}>{ENUM_LABELS[o] ?? o}</option>
@@ -51,7 +51,7 @@ function FieldInput({ def, value, onChange }) {
         return (
             <div className="flex items-center gap-2 h-9">
                 <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} className="accent-indigo-600 h-4 w-4" />
-                <span className="text-sm text-gray-500">{def.name}</span>
+                <span className="text-xs font-semibold text-gray-500">{def.name}</span>
             </div>
         );
     }
@@ -207,7 +207,7 @@ const AddLeadForm = ({ onClose, lead }) => {
                 <div key={pi} className={pair.length === 2 ? "grid grid-cols-2 gap-4" : ""}>
                     {pair.map(def => (
                         <div key={def.id}>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
                                 {def.name}
                                 {def.required && <span className="text-red-500 ml-0.5">*</span>}
                             </label>
@@ -217,7 +217,7 @@ const AddLeadForm = ({ onClose, lead }) => {
                                 onChange={val => setField(def.fieldKey, val)}
                             />
                             {errors[def.fieldKey] && (
-                                <p className="text-red-500 text-xs mt-0.5">{errors[def.fieldKey]}</p>
+                                <p className="text-red-500 text-xs mt-0.5 font-semibold">{errors[def.fieldKey]}</p>
                             )}
                         </div>
                     ))}
@@ -226,18 +226,18 @@ const AddLeadForm = ({ onClose, lead }) => {
 
             {isEdit && (
                 <div className="border-t border-gray-100 pt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
                         Follow-up Date
-                        <span className="ml-1 text-xs text-gray-400 font-normal">(optional)</span>
+                        <span className="ml-1 text-[10px] text-gray-400 font-normal normal-case">(optional)</span>
                     </label>
                     <input
                         type="date"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                        className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl bg-gray-50/50 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all shadow-sm"
                         value={followUpDate}
                         onChange={e => setFollowUpDate(e.target.value)}
                     />
                     {followUpDate && new Date(followUpDate) < new Date() && (
-                        <p className="text-xs text-red-500 mt-1">This date is in the past — lead will appear overdue.</p>
+                        <p className="text-xs text-red-500 mt-1 font-semibold">This date is in the past — lead will appear overdue.</p>
                     )}
                 </div>
             )}
@@ -272,18 +272,18 @@ const AddLeadForm = ({ onClose, lead }) => {
                 </p>
             )}
 
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex justify-end pt-6 gap-3">
                 <button
                     type="button"
                     onClick={onClose}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                    className="px-6 py-2.5 text-sm font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors border border-gray-100"
                 >
                     Cancel
                 </button>
                 <button
                     type="submit"
                     disabled={mutation.isPending}
-                    className="inline-flex justify-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 disabled:opacity-60"
+                    className="inline-flex justify-center items-center px-8 py-2.5 text-sm font-bold text-white bg-indigo-600 border border-transparent rounded-xl hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-lg shadow-indigo-100 disabled:opacity-50 transition-all"
                 >
                     {mutation.isPending ? <Loader2 className="animate-spin h-4 w-4" /> : isEdit ? "Save Changes" : "Save Lead"}
                 </button>

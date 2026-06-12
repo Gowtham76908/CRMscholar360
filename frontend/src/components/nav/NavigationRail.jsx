@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, MessageSquare, Zap, Settings2, Command } from "lucide-react";
+import { LayoutDashboard, Users, MessageSquare, Zap, BarChart, Settings2, Command } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import Avatar from "../Avatar";
 import DcodeLogo from "../DcodeLogo";
@@ -22,7 +22,7 @@ export const MODES = [
         icon: Users,
         label: "CRM",
         defaultPath: "/leads",
-        paths: ["/leads", "/kanban", "/search-leads", "/linkedin-leads"],
+        paths: ["/leads", "/kanban", "/search-leads", "/linkedin-leads", "/deals", "/duplicates"],
         shortcut: "2",
     },
     {
@@ -38,16 +38,25 @@ export const MODES = [
         icon: Zap,
         label: "Automate",
         defaultPath: "/automations",
-        paths: ["/automations", "/tasks", "/reports"],
+        paths: ["/automations", "/tasks", "/sprints"],
         shortcut: "4",
+    },
+    {
+        id: "analytics",
+        icon: BarChart,
+        label: "Analytics",
+        defaultPath: "/team-performance",
+        paths: ["/team-performance", "/revenue-report", "/leaderboard", "/reports", "/ai-usage", "/employee-report"],
+        shortcut: "5",
+        adminOnly: true,
     },
     {
         id: "admin",
         icon: Settings2,
         label: "Admin",
         defaultPath: "/team",
-        paths: ["/team", "/departments", "/invoices", "/salestrail", "/integrations", "/settings", "/attendance", "/leave"],
-        shortcut: "5",
+        paths: ["/team", "/team-management", "/departments", "/invoices", "/salestrail", "/integrations", "/settings", "/attendance", "/leave", "/unassigned-leads"],
+        shortcut: "6",
         adminOnly: true,
     },
 ];
@@ -67,8 +76,8 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
     const location = useLocation();
     const { user, onlineStatus } = useAuth();
     const isSuperAdmin = user?.role === "SUPER_ADMIN";
-    const isManager    = isSuperAdmin || user?.role === "MANAGER";
-    const activeMode   = getModeFromPath(location.pathname);
+    const isManager = isSuperAdmin || user?.role === "MANAGER";
+    const activeMode = getModeFromPath(location.pathname);
 
     // The Admin mode is shown to managers too; AdminPanel gates individual links
     // so managers only see what they're allowed to manage.

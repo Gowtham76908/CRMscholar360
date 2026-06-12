@@ -218,12 +218,19 @@ function AutomatePanel() {
                 {/* <PanelLink to="/sprints" icon={ZapIcon} label="Sprints" /> */}
                 <PanelLink to="/tasks" icon={CheckSquare} label="My Tasks" />
             </PanelSection>
-
-            <PanelSection title="Analytics">
-                <PanelLink to="/reports" icon={BarChart} label="Reports" />
-                {/* <PanelLink to="/leaderboard" icon={Trophy} label="Leaderboard" /> */}
-            </PanelSection>
         </>
+    );
+}
+
+function AnalyticsPanel() {
+    return (
+        <PanelSection title="Analytics">
+            <PanelLink to="/team-performance"  icon={TrendingUp}   label="Team Performance" />
+            <PanelLink to="/revenue-report"    icon={IndianRupee}  label="Revenue Report" />
+            <PanelLink to="/leaderboard"       icon={Trophy}       label="Leaderboard" />
+            <PanelLink to="/reports"           icon={BarChart}     label="Reports" />
+            <PanelLink to="/ai-usage"          icon={Sparkles}     label="AI Usage" />
+        </PanelSection>
     );
 }
 
@@ -250,16 +257,6 @@ function AdminPanel() {
                 {isManager && <PanelLink to="/unassigned-leads" icon={AlertCircle} label="Unassigned Leads" />}
             </PanelSection>
 
-            {isManager && (
-                <PanelSection title="Analytics">
-                    <PanelLink to="/team-performance"  icon={TrendingUp}   label="Team Performance" />
-                    <PanelLink to="/revenue-report"    icon={IndianRupee}  label="Revenue Report" />
-                    <PanelLink to="/leaderboard"       icon={Trophy}       label="Leaderboard" />
-                    <PanelLink to="/reports"           icon={BarChart}     label="Reports" />
-                    <PanelLink to="/ai-usage"          icon={Sparkles}     label="AI Usage" />
-                </PanelSection>
-            )}
-
             <PanelSection title="System">
                 {isSuperAdmin && <PanelLink to="/integrations" icon={Puzzle} label="Integrations" />}
                 <PanelLink to="/settings" icon={Settings} label="Settings" />
@@ -275,6 +272,7 @@ const PANEL_TITLES = {
     crm:         "CRM",
     communicate: "Communicate",
     automate:    "Automate",
+    analytics:   "Analytics",
     admin:       "Admin",
 };
 
@@ -283,6 +281,7 @@ const PANEL_COMPONENTS = {
     crm:         CRMPanel,
     communicate: CommunicatePanel,
     automate:    AutomatePanel,
+    analytics:   AnalyticsPanel,
     admin:       AdminPanel,
 };
 

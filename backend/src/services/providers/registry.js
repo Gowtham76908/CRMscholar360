@@ -5,6 +5,7 @@ const EmailProvider = require("./EmailProvider");
 const LinkedInProvider = require("./LinkedInProvider");
 const SalestrailProvider = require("./SalestrailProvider");
 const WebhookProvider = require("./WebhookProvider");
+const LiveKitProvider = require("./LiveKitProvider");
 
 const PROVIDERS = {
     meta_leads:      MetaProvider,
@@ -14,6 +15,7 @@ const PROVIDERS = {
     linkedin_serper: LinkedInProvider,
     salestrail:      SalestrailProvider,
     website_webhook: WebhookProvider,
+    livekit:         LiveKitProvider,
 };
 
 function getProvider(platform, integration) {
