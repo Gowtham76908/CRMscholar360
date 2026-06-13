@@ -532,12 +532,16 @@ const exportLeads = async (req, res, next) => {
 const normalizeHeader = (h) => h.toLowerCase().replace(/[\s_\-\.#()]+/g, "").replace(/no$/, "").replace(/number$/, "").replace(/id$/, "");
 
 const HEADER_ALIASES = {
-    name:         ["name", "leadname", "fullname", "contactname", "customername", "firstname", "contact", "customer", "lead"],
-    email:        ["email", "emailaddress", "emailid", "mail", "contactemail", "emailadd"],
-    phone:        ["phone", "phonenumber", "mobile", "mobilenumber", "contact", "contactnumber", "cell", "cellphone", "telephone", "tel", "mob", "mobileno", "phoneno", "contactno", "whatsapp"],
-    source:       ["source", "leadsource", "channel", "platform", "leadfrom", "from", "medium"],
-    enquiryType:  ["type", "enquirytype", "enquiry", "category", "producttype", "servicetype", "leadtype", "interest"],
-    assignedTo:   ["assignedto", "assignee", "employee", "agent", "salesrep", "owner", "assignedemployee", "rep", "salesperson"],
+    name:        ["name", "leadname", "fullname", "contactname", "customername", "firstname", "contact", "customer", "lead"],
+    email:       ["email", "emailaddress", "emailid", "mail", "contactemail", "emailadd"],
+    phone:       ["phone", "phonenumber", "mobile", "mobilenumber", "contact", "contactnumber", "cell", "cellphone", "telephone", "tel", "mob", "mobileno", "phoneno", "contactno", "whatsapp"],
+    company:     ["company", "companyname", "organisation", "organization", "firm", "business", "employer"],
+    source:      ["source", "leadsource", "channel", "platform", "leadfrom", "from", "medium"],
+    enquiryType: ["type", "enquirytype", "enquiry", "producttype", "servicetype", "leadtype", "interest", "service"],
+    biodata:     ["bio", "bionotes", "notes", "biodata", "description", "remarks", "comments", "about", "details", "summary"],
+    jobTitle:    ["jobtitle", "title", "designation", "position", "role", "jobrole", "professionaltitle"],
+    linkedinUrl: ["linkedin", "linkedinurl", "linkedinprofile", "linkedinlink", "profileurl"],
+    assignedTo:  ["assignedto", "assignee", "employee", "agent", "salesrep", "owner", "assignedemployee", "rep", "salesperson"],
 };
 
 const matchHeader = (normalizedHeader, headerAliases) => {
@@ -602,20 +606,44 @@ const previewImport = async (req, res, next) => {
         if (rows.length < 2) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "File is empty or has no data rows");
 
         const fieldMap = buildFieldMap(rows[0]);
-        const hasAssignmentColumn = Object.values(fieldMap).includes("assignedTo");
         const columnHeaders = rows[0].map(String);
 
-        const previewRows = rows.slice(1, 6).map(values => {
-            const obj = {};
-            Object.entries(fieldMap).forEach(([idx, field]) => { obj[field] = String(values[idx] ?? ""); });
-            return obj;
+        // Build per-column mapping metadata for the column-map UI
+        const fieldUsage = {};
+        Object.values(fieldMap).forEach(f => { fieldUsage[f] = (fieldUsage[f] || 0) + 1; });
+
+        const columnMappings = columnHeaders.map((header, index) => {
+            const norm  = normalizeHeader(String(header ?? ""));
+            const field = fieldMap[index] ?? null;
+            const aliases    = HEADER_ALIASES[field] || [];
+            const confidence = !field ? "none" : aliases.includes(norm) ? "exact" : "fuzzy";
+            const conflict   = field ? (fieldUsage[field] || 0) > 1 : false;
+            return { index, header: String(header), field, confidence, conflict };
         });
+
+        const hasConflicts        = columnMappings.some(m => m.conflict);
+        const hasUnmapped         = columnMappings.some(m => !m.field);
+        const hasAssignmentColumn = Object.values(fieldMap).includes("assignedTo");
+
+        const availableCustomFields = await prisma.customFieldDef.findMany({
+            where: { isSystem: false },
+            select: { id: true, name: true, fieldKey: true },
+            orderBy: { order: "asc" },
+        });
+
+        const previewRows = rows.slice(1, 6).map(values =>
+            Object.fromEntries(columnHeaders.map((h, i) => [h, String(values[i] ?? "")]))
+        );
 
         res.json({
             totalRows: rows.length - 1,
             hasAssignmentColumn,
             columnHeaders,
             previewRows,
+            columnMappings,
+            hasConflicts,
+            hasUnmapped,
+            availableCustomFields,
         });
     } catch (err) {
         return next(err);
@@ -629,7 +657,7 @@ const IMPORT_ERROR_CAP = 50; // max errors stored in ImportJob.errors JSON
 // ── Background import worker ──────────────────────────────────────────────────
 // Runs after the HTTP response is already sent. Updates the ImportJob record
 // at each stage so the frontend can poll for progress.
-async function runImportJob(jobId, { buffer, originalname, allocationMode, userId, role }) {
+async function runImportJob(jobId, { buffer, originalname, allocationMode, userId, role, confirmedColumnMap }) {
     // Helper: silently update job (never throws — a failed progress update
     // must not mask the real import error).
     const updateJob = (data) =>
@@ -640,7 +668,18 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
         await updateJob({ status: "processing", stage: "parsing", progress: 10 });
 
         const rows = parseFileBuffer(buffer, originalname);
-        const fieldMap = buildFieldMap(rows[0]);
+
+        // Use user-confirmed column map if provided, otherwise auto-detect from header aliases
+        let fieldMap;
+        if (confirmedColumnMap && Array.isArray(confirmedColumnMap) && confirmedColumnMap.length > 0) {
+            fieldMap = {};
+            confirmedColumnMap.forEach(({ index, field }) => {
+                if (field && field !== "new") fieldMap[index] = field;
+            });
+        } else {
+            fieldMap = buildFieldMap(rows[0]);
+        }
+
         const counts = { imported: 0, skipped: 0, duplicates: 0, duplicatesFromRace: 0, failed: 0 };
         const errors = [];
 
@@ -653,9 +692,13 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
 
             if (values.length < 2 || values.every(v => !String(v ?? "").trim())) { counts.skipped++; continue; }
 
-            const name  = row.name  || "";
-            const email = row.email || "";
-            let   phone = (row.phone || "").replace(/^p:\s*/i, "").trim();
+            const name        = row.name        || "";
+            const email       = row.email       || "";
+            const company     = row.company     || "";
+            const biodata     = row.biodata     || "";
+            const jobTitle    = row.jobTitle    || "";
+            const linkedinUrl = row.linkedinUrl || "";
+            let phone = (row.phone || "").replace(/^p:\s*/i, "").trim();
             let source      = (row.source      || "WEBSITE").toUpperCase().replace(/\s+/g, "_");
             let enquiryType = (row.enquiryType || "PRODUCT").toUpperCase().replace(/\s+/g, "_");
             if (!VALID_SOURCES.includes(source))       source      = "WEBSITE";
@@ -667,7 +710,13 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
                     errors.push(`Row ${i + 1}: Missing required fields (name="${name}", phone="${phone}")`);
                 continue;
             }
-            parsedRows.push({ rowNum: i + 1, name, email, phone, source, enquiryType, assignedToRaw: row.assignedTo || "" });
+            // Collect values for custom fields (fieldMap keys prefixed with "cf:")
+            const customFields = {};
+            Object.entries(row).forEach(([key, val]) => {
+                if (key.startsWith("cf:") && val) customFields[key.slice(3)] = val;
+            });
+
+            parsedRows.push({ rowNum: i + 1, name, email, phone, company, biodata, jobTitle, linkedinUrl, source, enquiryType, assignedToRaw: row.assignedTo || "", customFields });
         }
 
         // ── Stage: deduping ───────────────────────────────────────────────
@@ -761,10 +810,15 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
                             email: r.email || null,
                             phone: r.phone,
                             phoneNormalized: r.normalized,
+                            company: r.company || null,
+                            biodata: r.biodata || null,
+                            jobTitle: r.jobTitle || null,
+                            linkedinUrl: r.linkedinUrl || null,
                             source: r.source,
                             enquiryType: r.enquiryType,
                             score: r.score,
                             category: r.category,
+                            ...(r.customFields && Object.keys(r.customFields).length > 0 ? { customFields: r.customFields } : {}),
                             ...(assignedToId ? { assignedToId, assignedAt: new Date() } : {}),
                         };
                     }),
@@ -851,6 +905,12 @@ const importLeads = async (req, res, next) => {
 
         const allocationMode = req.body?.allocationMode ?? "unassigned";
 
+        // Parse user-confirmed column map sent as JSON string in the multipart body
+        let confirmedColumnMap = null;
+        if (req.body?.columnMap) {
+            try { confirmedColumnMap = JSON.parse(req.body.columnMap); } catch { /* fall back to auto-detect */ }
+        }
+
         // Hold buffer reference — multer may free req.file after the handler returns
         const buffer       = req.file.buffer;
         const originalname = req.file.originalname;
@@ -869,7 +929,7 @@ const importLeads = async (req, res, next) => {
 
         // Full parse + all DB work happens after the HTTP response is flushed,
         // so the CPU-bound CSV/XLSX parsing doesn't add latency to the 200 response.
-        setImmediate(() => runImportJob(job.id, { buffer, originalname, allocationMode, userId, role }));
+        setImmediate(() => runImportJob(job.id, { buffer, originalname, allocationMode, userId, role, confirmedColumnMap }));
     } catch (error) {
 
         return next(error);

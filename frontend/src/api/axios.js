@@ -7,9 +7,6 @@ let isLoggingOut = false;
 const api = axios.create({
     baseURL: import.meta.env.VITE_API_URL,
     withCredentials: true,
-    headers: {
-        "Content-Type": "application/json",
-    },
 });
 
 // Response Interceptor: Handle Auth Errors
