@@ -363,7 +363,7 @@ const mergeLeads = async (req, res, next) => {
                 data: { leadId: primaryLeadId }
             });
 
-            await prisma.salestrailCall.updateMany({
+            await prisma.fasterqCall.updateMany({
                 where: { leadId: secondaryLeadId },
                 data: { leadId: primaryLeadId }
             });

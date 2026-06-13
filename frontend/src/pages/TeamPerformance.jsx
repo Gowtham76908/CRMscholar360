@@ -12,9 +12,8 @@ import {
 } from "recharts";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
-import SalestrailSection, { fmtSecs } from "../components/salestrail/SalestrailSection";
+import FasterqSection, { fmtSecs } from "../components/fasterq/FasterqSection";
 import WorkforceSection from "../components/workforce/WorkforceSection";
-import WorkloadChart from "../components/workforce/WorkloadChart";
 import WorkflowBoard from "../components/workforce/WorkflowBoard";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -76,11 +75,9 @@ const PerfBadge = ({ score }) => {
     return <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-100 font-medium">{pct}%</span>;
 };
 
-const LoadBadge = ({ load, max }) => {
-    const pct = max > 0 ? load / max : 0;
-    if (pct >= 0.8) return <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-100 font-medium">{load}/{max}</span>;
-    return <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-50 text-[#71717A] border border-gray-100 font-medium">{load}/{max}</span>;
-};
+const LoadBadge = ({ load }) => (
+    <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-50 text-[#71717A] border border-gray-100 font-medium">{load} leads</span>
+);
 
 const StatusDot = ({ status }) => {
     const map = { ONLINE: "bg-green-500", OFFLINE: "bg-gray-400", ON_LEAVE: "bg-yellow-500" };
@@ -235,17 +232,14 @@ const TeamPerformance = () => {
             {/* Workforce Intelligence */}
             <WorkforceSection period={period} from={from} to={to} />
 
-            {/* Workload Distribution */}
-            <WorkloadChart />
-
             {/* Workflow Board */}
             <WorkflowBoard />
 
-            {/* Salestrail team analytics */}
+            {/* Fasterq team analytics */}
             <div className="bg-white rounded-2xl border border-[#E4E4E7] p-5 shadow-sm">
-                <SalestrailSection
+                <FasterqSection
                     agentEmails={teamEmails.length ? teamEmails : null}
-                    title="Salestrail Team Analytics"
+                    title="Fasterq Team Analytics"
                 />
             </div>
 
@@ -329,7 +323,7 @@ const TeamPerformance = () => {
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-2">
                                                 <PerfBadge score={emp.performanceScore} />
-                                                <LoadBadge load={emp.currentLeadLoad} max={emp.maxDailyLeads} />
+                                                <LoadBadge load={emp.currentLeadLoad} />
                                             </div>
                                         </td>
                                         <td className="px-4 py-3 text-xs text-[#71717A]">

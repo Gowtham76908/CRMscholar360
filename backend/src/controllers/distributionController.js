@@ -72,14 +72,16 @@ const getUnassignedLeads = async (req, res, next) => {
 const getAvailableEmployees = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
+        const all = req.query.all === "true";
 
-        let userWhere = {
-            isActive: true,
-            employeeProfile: {
+        let userWhere = { isActive: true, role: "EMPLOYEE" };
+
+        if (!all) {
+            userWhere.employeeProfile = {
                 availabilityStatus: "ONLINE",
                 isAcceptingLeads:   true,
-            },
-        };
+            };
+        }
 
         if (role === "ADMIN") {
             userWhere.managerId = userId;
@@ -107,9 +109,6 @@ const getAvailableEmployees = async (req, res, next) => {
             orderBy: { name: "asc" },
         });
 
-        // No load-cap filter: the engine no longer treats maxDailyLeads as a
-        // routing gate. currentLeadLoad is returned in the payload so admins
-        // can spot heavy queues visually.
         res.json(employees);
     } catch (err) {
         return next(err);

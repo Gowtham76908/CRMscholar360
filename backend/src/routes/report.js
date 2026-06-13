@@ -11,5 +11,6 @@ router.get("/leads-by-source", reportController.getLeadsBySource);
 router.get("/leads-by-employee", reportController.getLeadsByEmployee);
 router.get("/conversion-rate", reportController.getConversionRate);
 router.get("/monthly-growth", reportController.getMonthlyGrowth);
+router.get("/leads-by-status", reportController.getLeadsByStatus);
 
 module.exports = router;

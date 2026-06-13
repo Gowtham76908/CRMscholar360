@@ -197,7 +197,7 @@ app.use("/api/leave",           require("./routes/leave"));
 app.use("/api/upload",          require("./routes/upload"));
 app.use("/api/user-status",     require("./routes/userStatus"));
 app.use("/api/invoices",        require("./routes/invoice"));
-app.use("/api/salestrail",      require("./routes/salestrail"));
+app.use("/api/fasterq",         require("./routes/fasterq"));
 app.use("/api/company-settings", require("./routes/companySettings"));
 app.use("/api/notifications",   require("./routes/notification"));
 app.use("/api/automations",     require("./routes/automation"));

@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
-import SalestrailSection, { fmtSecs } from "../components/salestrail/SalestrailSection";
+import FasterqSection, { fmtSecs } from "../components/fasterq/FasterqSection";
 import ProductivitySection from "../components/workforce/ProductivitySection";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -269,7 +269,7 @@ const EmployeeReport = () => {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
                         {[
                             { label: "Attendance",    value: `${profile.attendanceDays ?? 0} days`, icon: Calendar, color: "text-amber-600", bg: "bg-amber-50" },
-                            { label: "Lead Load",     value: `${ep?.currentLeadLoad ?? 0}/${ep?.maxDailyLeads ?? 20}`, icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
+                            { label: "Active Leads",  value: `${ep?.currentLeadLoad ?? 0}`, icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
                             { label: "Perf. Score",  value: `${Math.round((ep?.performanceScore ?? 0.5) * 100)}%`, icon: Star, color: "text-[#F97316]", bg: "bg-[#FFF7ED]" },
                             { label: "Status",        value: (ep?.availabilityStatus || "OFFLINE").replace("_", " "), icon: Activity, color: "text-green-600", bg: "bg-green-50" },
                         ].map(m => (
@@ -371,12 +371,12 @@ const EmployeeReport = () => {
             </div>
             {/* ── end Revenue Performance ────────────────────────────────── */}
 
-            {/* Salestrail analytics (scoped to this employee) */}
+            {/* Fasterq analytics (scoped to this employee) */}
             <div className="bg-white rounded-2xl border border-[#E4E4E7] p-5 shadow-sm">
-                <SalestrailSection
+                <FasterqSection
                     agentEmails={profile.email ? [profile.email] : null}
                     hideTopAgents={true}
-                    title={`Salestrail Analytics — ${profile.name}`}
+                    title={`Fasterq Analytics — ${profile.name}`}
                 />
             </div>
 

@@ -3,7 +3,7 @@ const WhatsAppProvider = require("./WhatsAppProvider");
 const GoogleAdsProvider = require("./GoogleAdsProvider");
 const EmailProvider = require("./EmailProvider");
 const LinkedInProvider = require("./LinkedInProvider");
-const SalestrailProvider = require("./SalestrailProvider");
+const FasterqProvider = require("./FasterqProvider");
 const WebhookProvider = require("./WebhookProvider");
 const LiveKitProvider = require("./LiveKitProvider");
 
@@ -13,7 +13,7 @@ const PROVIDERS = {
     google_ads:      GoogleAdsProvider,
     email_smtp:      EmailProvider,
     linkedin_serper: LinkedInProvider,
-    salestrail:      SalestrailProvider,
+    fasterq:         FasterqProvider,
     website_webhook: WebhookProvider,
     livekit:         LiveKitProvider,
 };

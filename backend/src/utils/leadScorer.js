@@ -4,20 +4,20 @@
  * Score is always on a 0–100 scale across the whole app.
  */
 const categoryFromScore = (score) => {
-    if (score >= 81) return "PREMIUM";
-    if (score >= 61) return "HOT";
-    if (score >= 31) return "WARM";
+    if (score >= 80) return "PREMIUM";
+    if (score >= 56) return "HOT";
+    if (score >= 26) return "WARM";
     return "COLD";
 };
 
-// Source quality (max 30) — how warm the channel typically is.
+// Source quality (max 15) — channel signal only, not intent.
 const SOURCE_SCORE = {
-    WEBSITE: 30,
-    LINKEDIN: 27,
-    INSTAGRAM: 24,
-    FACEBOOK: 21,
-    PHONE_CALL: 18,
-    GMAIL: 15,
+    WEBSITE:    15,
+    PHONE_CALL: 15,
+    LINKEDIN:   12,
+    INSTAGRAM:  10,
+    FACEBOOK:    8,
+    GMAIL:       8,
 };
 
 /**
@@ -30,8 +30,8 @@ const SOURCE_SCORE = {
 const calculateLeadScore = (lead) => {
     let score = SOURCE_SCORE[lead.source] ?? 10;
 
-    if (lead.phone) score += 20;
-    if (lead.email) score += 15;
+    if (lead.phone) score += 3;
+    if (lead.email) score += 2;
 
     score = Math.max(0, Math.min(100, score));
 

@@ -15,19 +15,19 @@ const { categoryFromScore, SOURCE_SCORE } = require("../utils/leadScorer");
 
 const HALF_LIFE_DAYS = 30; // an engagement point is worth half as much 30 days later
 
-// Per-interaction point values.
+// Per-interaction point values — engagement drives score, not profile completeness.
 const PTS = {
-    CALL_ATTEMPT:    2,   // outbound call that wasn't answered
-    CALL_ANSWERED:   5,   // answered, neutral/unknown sentiment
-    CALL_POSITIVE:  10,   // answered + positive sentiment
-    CALL_NEGATIVE:  -5,   // answered + negative sentiment (cools the lead)
-    EMAIL_OPENED:    3,
-    EMAIL_CLICKED:   5,   // in addition to the open
-    WHATSAPP_REPLY:  8,   // inbound reply — the strongest buy-signal
+    CALL_ATTEMPT:    4,   // outbound call that wasn't answered
+    CALL_ANSWERED:  10,   // answered, neutral/unknown sentiment
+    CALL_POSITIVE:  18,   // answered + positive sentiment
+    CALL_NEGATIVE:  -8,   // answered + negative sentiment (cools the lead)
+    EMAIL_OPENED:    6,
+    EMAIL_CLICKED:  10,   // in addition to the open
+    WHATSAPP_REPLY: 14,   // inbound reply — the strongest buy-signal
 };
 
 // Current-status bonus (state, not an event — does not decay).
-const STATUS_BONUS = { NEW: 0, CONTACTED: 5, FOLLOW_UP: 10, CONVERTED: 25, LOST: -15 };
+const STATUS_BONUS = { NEW: 0, CONTACTED: 8, FOLLOW_UP: 15, CONVERTED: 35, LOST: -20 };
 
 const ANSWERED_STATUSES = new Set(["COMPLETED", "CONNECTED", "ANSWERED"]);
 
@@ -65,10 +65,10 @@ async function recomputeLeadScore(leadId) {
     const factors = [];
 
     // 1. Intake base (no decay) ───────────────────────────────────────────────
-    let base = SOURCE_SCORE[lead.source] ?? 10;
-    factors.push({ label: `${titleCase(lead.source)} lead`, delta: SOURCE_SCORE[lead.source] ?? 10, direction: "up" });
-    if (lead.phone) { base += 20; factors.push({ label: "Phone number on file", delta: 20, direction: "up" }); }
-    if (lead.email) { base += 15; factors.push({ label: "Email on file", delta: 15, direction: "up" }); }
+    let base = SOURCE_SCORE[lead.source] ?? 5;
+    factors.push({ label: `${titleCase(lead.source)} lead`, delta: SOURCE_SCORE[lead.source] ?? 5, direction: "up" });
+    if (lead.phone) { base += 3; factors.push({ label: "Phone number on file", delta: 3, direction: "up" }); }
+    if (lead.email) { base += 2; factors.push({ label: "Email on file", delta: 2, direction: "up" }); }
 
     // 2. Engagement (decayed) ──────────────────────────────────────────────────
     let engagement = 0, undecayed = 0, lastActivity = 0;

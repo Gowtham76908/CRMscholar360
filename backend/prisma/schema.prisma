@@ -127,7 +127,7 @@ model Lead {
   customFields    Json?
   activities      Activity[]
   callLogs        CallLog[]
-  salestrailCalls SalestrailCall[]
+  fasterqCalls    FasterqCall[]
   assignedAt      DateTime?
   assignedTo      User?       @relation(fields: [assignedToId], references: [id])
   workspace       Workspace?  @relation(fields: [workspaceId], references: [id])
@@ -890,30 +890,31 @@ model WhatsAppAutoReply {
   createdBy     User     @relation(fields: [createdById], references: [id])
 }
 
-model SalestrailCall {
-  id            String    @id @default(uuid())
-  salestrailId  String?   @unique
-  direction     String    @default("outgoing")
-  status        String?
-  duration      Int       @default(0)
-  fromNumber    String?
-  toNumber      String?
-  agentName     String?
-  agentEmail    String?
-  contactName   String?
-  contactPhone  String?
-  recordingUrl  String?
-  notes         String?
-  rawPayload    Json?
-  startedAt     DateTime?
-  endedAt       DateTime?
-  createdAt     DateTime  @default(now())
-  leadId        String?
-  lead          Lead?     @relation(fields: [leadId], references: [id])
+model FasterqCall {
+  id          String    @id @default(uuid())
+  fasterqId   String?   @unique @map("salestrailId")
+  direction   String    @default("outgoing")
+  status      String?
+  duration    Int       @default(0)
+  fromNumber  String?
+  toNumber    String?
+  agentName   String?
+  agentEmail  String?
+  contactName String?
+  contactPhone String?
+  recordingUrl String?
+  notes       String?
+  rawPayload  Json?
+  startedAt   DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime  @default(now())
+  leadId      String?
+  lead        Lead?     @relation(fields: [leadId], references: [id])
 
   @@index([startedAt])
   @@index([agentEmail])
   @@index([leadId])
+  @@map("SalestrailCall")
 }
 
 model ImportJob {

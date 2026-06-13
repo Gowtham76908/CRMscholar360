@@ -11,14 +11,14 @@ const DEFAULTS = [
     { platform: "google_ads",      label: "Google Ads" },
     { platform: "email_smtp",      label: "Email / SMTP" },
     { platform: "linkedin_serper", label: "LinkedIn Lead Search" },
-    { platform: "salestrail",      label: "Salestrail Calls" },
+    { platform: "fasterq",         label: "Fasterq Calls" },
     { platform: "website_webhook", label: "Website Webhook" },
     { platform: "livekit",         label: "LiveKit Video" },
 ];
 
 // Providers that auto-connect after configure (no OAuth needed)
 const API_KEY_PROVIDERS = new Set([
-    "linkedin_serper", "salestrail", "website_webhook",
+    "linkedin_serper", "fasterq", "website_webhook",
     "meta_leads", "whatsapp_cloud", "google_ads", "livekit",
 ]);
 

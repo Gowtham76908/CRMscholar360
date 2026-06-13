@@ -26,14 +26,22 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
 
 // ── Assign modal ──────────────────────────────────────────────────────────────
 
+const STATUS_DOT = { ONLINE: "bg-green-500", OFFLINE: "bg-gray-400", ON_LEAVE: "bg-yellow-500" };
+
 const AssignModal = ({ lead, employees, onAssign, onClose, isPending }) => {
     const [selected, setSelected] = useState("");
+    const [search, setSearch]     = useState("");
+
+    const filtered = employees.filter(e =>
+        !search || e.name.toLowerCase().includes(search.toLowerCase())
+    );
+    const chosen = employees.find(e => e.id === selected);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
-                <div className="flex items-center justify-between mb-4">
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
+                <div className="flex items-center justify-between mb-1">
                     <h3 className="font-semibold text-gray-900 text-base">Assign Lead</h3>
                     <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100">
                         <X className="h-4 w-4 text-gray-500" />
@@ -42,30 +50,65 @@ const AssignModal = ({ lead, employees, onAssign, onClose, isPending }) => {
                 <p className="text-sm text-gray-500 mb-4 truncate">
                     Assigning: <span className="font-medium text-gray-800">{lead?.name}</span>
                 </p>
-                <div className="relative mb-4">
-                    <select
-                        value={selected}
-                        onChange={(e) => setSelected(e.target.value)}
-                        className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm pr-8 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                        <option value="">Select employee…</option>
-                        {employees.map(emp => {
-                            const load = emp.employeeProfile?.currentLeadLoad ?? 0;
-                            const max  = emp.employeeProfile?.maxDailyLeads   ?? 20;
-                            return (
-                                <option key={emp.id} value={emp.id}>
-                                    {emp.name} — {load}/{max} leads
-                                </option>
-                            );
-                        })}
-                    </select>
-                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+
+                {/* Search employees */}
+                <div className="relative mb-2">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Search employees…"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
                 </div>
+
+                {/* Employee list */}
+                <div className="max-h-56 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100 mb-4">
+                    {filtered.length === 0 ? (
+                        <p className="text-xs text-gray-400 text-center py-6">No employees found</p>
+                    ) : filtered.map(emp => {
+                        const status = emp.employeeProfile?.availabilityStatus || "OFFLINE";
+                        const load   = emp.employeeProfile?.currentLeadLoad ?? 0;
+                        const isSelected = selected === emp.id;
+                        return (
+                            <button
+                                key={emp.id}
+                                onClick={() => setSelected(emp.id)}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${
+                                    isSelected ? "bg-indigo-50" : "hover:bg-gray-50"
+                                }`}
+                            >
+                                <div className="relative shrink-0">
+                                    <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-semibold text-xs">
+                                        {emp.name[0]?.toUpperCase()}
+                                    </div>
+                                    <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${STATUS_DOT[status] || "bg-gray-400"}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-medium truncate ${isSelected ? "text-indigo-700" : "text-gray-900"}`}>
+                                        {emp.name}
+                                    </p>
+                                    <p className="text-xs text-gray-400 truncate">{emp.email}</p>
+                                </div>
+                                <div className="text-right shrink-0">
+                                    <p className="text-xs font-medium text-gray-700">{load}</p>
+                                    <p className="text-[10px] text-gray-400">leads</p>
+                                </div>
+                                {isSelected && <CheckCircle2 className="h-4 w-4 text-indigo-600 shrink-0" />}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {chosen && (
+                    <p className="text-xs text-indigo-600 mb-3 font-medium">
+                        Assigning to: {chosen.name} ({chosen.employeeProfile?.availabilityStatus?.toLowerCase().replace("_", " ") || "offline"})
+                    </p>
+                )}
+
                 <div className="flex gap-2">
-                    <button
-                        onClick={onClose}
-                        className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
-                    >
+                    <button onClick={onClose} className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
                         Cancel
                     </button>
                     <button
@@ -133,8 +176,8 @@ export default function UnassignedLeads() {
     });
 
     const { data: employees = [] } = useQuery({
-        queryKey: ["dist-employees"],
-        queryFn:  () => api.get("/distribution/available-employees").then(r => r.data),
+        queryKey: ["dist-employees-all"],
+        queryFn:  () => api.get("/distribution/available-employees", { params: { all: true } }).then(r => r.data),
         enabled:  isAuthorized,
     });
 

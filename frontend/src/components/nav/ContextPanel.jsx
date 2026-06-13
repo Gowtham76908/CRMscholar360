@@ -253,7 +253,7 @@ function AdminPanel() {
             </PanelSection>
 
             <PanelSection title="Leads">
-                <PanelLink to="/salestrail" icon={PhoneCall} label="Salestrail Calls" />
+                <PanelLink to="/fasterq" icon={PhoneCall} label="Fasterq Calls" />
                 {isManager && <PanelLink to="/unassigned-leads" icon={AlertCircle} label="Unassigned Leads" />}
             </PanelSection>
 

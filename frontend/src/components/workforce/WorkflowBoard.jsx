@@ -83,7 +83,7 @@ const LeadCard = ({ lead, navigate }) => (
                 title="Message">
                 <MessageSquare className="h-2.5 w-2.5" />
             </button>
-            <button onClick={() => navigate("/salestrail")}
+            <button onClick={() => navigate("/fasterq")}
                 className="p-1.5 rounded-lg bg-purple-50 text-purple-500 hover:bg-purple-100 border border-purple-100 transition-colors"
                 title="Call">
                 <Phone className="h-2.5 w-2.5" />
@@ -132,7 +132,7 @@ const DrawerRow = ({ lead, navigate }) => (
                 className="p-1.5 rounded-lg bg-green-50 text-green-500 hover:bg-green-100 border border-green-100 transition-colors" title="Message">
                 <MessageSquare className="h-2.5 w-2.5" />
             </button>
-            <button onClick={() => navigate("/salestrail")}
+            <button onClick={() => navigate("/fasterq")}
                 className="p-1.5 rounded-lg bg-purple-50 text-purple-500 hover:bg-purple-100 border border-purple-100 transition-colors" title="Call">
                 <Phone className="h-2.5 w-2.5" />
             </button>

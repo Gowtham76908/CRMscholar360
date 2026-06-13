@@ -40,7 +40,7 @@ const Attendance             = lazy(() => import("./pages/Attendance"));
 const Leave                  = lazy(() => import("./pages/Leave"));
 const Leaderboard            = lazy(() => import("./pages/Leaderboard"));
 const InvoiceBilling         = lazy(() => import("./pages/InvoiceBilling"));
-const SalestrailCalls        = lazy(() => import("./pages/SalestrailCalls"));
+const FasterqCalls           = lazy(() => import("./pages/FasterqCalls"));
 const Automations            = lazy(() => import("./pages/Automations"));
 const Inbox                  = lazy(() => import("./pages/Inbox"));
 const WhatsAppCampaigns      = lazy(() => import("./pages/WhatsAppCampaigns"));
@@ -114,7 +114,7 @@ function App() {
               <Route path="/leaderboard"              element={<Leaderboard />} />
               <Route path="/settings"                 element={<Settings />} />
               <Route path="/invoices"                 element={<InvoiceBilling />} />
-              <Route path="/salestrail"               element={<SalestrailCalls />} />
+              <Route path="/fasterq"                  element={<FasterqCalls />} />
               <Route path="/automations"              element={<Automations />} />
               <Route path="/whatsapp/campaigns"       element={<WhatsAppCampaigns />} />
               <Route path="/whatsapp/campaigns/:id"   element={<WhatsAppCampaignDetail />} />

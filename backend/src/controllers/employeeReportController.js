@@ -111,7 +111,7 @@ const getKPIs = async (req, res, next) => {
             prisma.task.count({ where: { assignedToId: employeeId, status: "COMPLETED", updatedAt: dr } }),
             prisma.lead.count({ where: { assignedToId: employeeId, firstResponseAt: { not: null }, assignedAt: dr } }),
             prisma.lead.count({ where: { assignedToId: employeeId, assignedAt: dr } }),
-            prisma.salestrailCall.findMany({
+            prisma.fasterqCall.findMany({
                 where: { agentEmail: emp?.email, startedAt: dr },
                 select: { direction: true, status: true, duration: true },
             }),

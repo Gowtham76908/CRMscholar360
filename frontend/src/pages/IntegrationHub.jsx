@@ -46,7 +46,7 @@ const LinkedInIcon = ({ s = 26 }) => (
         <path d="M7.5 10h-2v7h2v-7zm-1-3a1.1 1.1 0 110 2.2A1.1 1.1 0 016.5 7zM17 10c-1.2 0-2 .6-2.4 1.2V10h-2v7h2v-3.5c0-1.1.4-1.8 1.3-1.8.9 0 1.1.7 1.1 1.7V17h2v-4c0-1.8-.9-3-2-3z" fill="white" />
     </svg>
 );
-const SalestrailIcon = ({ s = 26 }) => (
+const FasterqIcon = ({ s = 26 }) => (
     <svg width={s} height={s} viewBox="0 0 24 24">
         <rect width="24" height="24" rx="6" fill="#0F172A" />
         <path d="M7 17l4-5 3 3 4-6" stroke="#F97316" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -291,26 +291,26 @@ const PROVIDERS = [
         },
     },
     {
-        key: "salestrail",
-        name: "Salestrail Calls",
-        desc: "Receive call logs from Salestrail via webhook with Basic Auth.",
-        Icon: SalestrailIcon,
+        key: "fasterq",
+        name: "Fasterq Calls",
+        desc: "Receive call logs from Fasterq via webhook with Basic Auth.",
+        Icon: FasterqIcon,
         grad: "from-zinc-700 to-zinc-900",
         bg: "bg-zinc-100", border: "border-zinc-200", chip: "text-zinc-700 bg-zinc-100",
         oauth: false,
         tags: ["Call Logs", "Webhook", "Auto Lead Match", "Recording URL"],
         configFields: [
-            { key: "user", label: "Webhook Username", placeholder: "From Salestrail settings", type: "text" },
-            { key: "pass", label: "Webhook Password", placeholder: "From Salestrail settings", type: "password" },
+            { key: "user", label: "Webhook Username", placeholder: "From Fasterq settings", type: "text" },
+            { key: "pass", label: "Webhook Password", placeholder: "From Fasterq settings", type: "password" },
         ],
-        webhookPath: "/api/salestrail/webhook",
+        webhookPath: "/api/fasterq/webhook",
         setupGuide: {
-            title: "How to connect Salestrail",
+            title: "How to connect Fasterq",
             steps: [
-                { label: "Copy the Webhook URL", detail: "Copy the Webhook URL shown above (ends in /api/salestrail/webhook)." },
-                { label: "Open Salestrail settings", detail: "Log in to your Salestrail account → Settings → Integrations → Push API / Webhook." },
+                { label: "Copy the Webhook URL", detail: "Copy the Webhook URL shown above (ends in /api/fasterq/webhook)." },
+                { label: "Open Fasterq settings", detail: "Log in to your Fasterq account → Settings → Integrations → Push API / Webhook." },
                 { label: "Paste URL and set credentials", detail: "Enter the Webhook URL. Set a Username and Password of your choice (you make these up — they're for Basic Auth verification). Enter the same Username and Password in the fields above." },
-                { label: "Save on both sides", detail: "Save in Salestrail, then Save & Activate in the CRM. Call logs will now sync automatically after each call." },
+                { label: "Save on both sides", detail: "Save in Fasterq, then Save & Activate in the CRM. Call logs will now sync automatically after each call." },
             ],
             note: "The CRM will match call logs to existing leads by phone number. Unmatched calls are still stored in the call log.",
         },
@@ -402,7 +402,7 @@ function StatsBar({ integrations }) {
     const syncPct      = total > 0 ? Math.round((connected / total) * 100) : 0;
 
     const webhookProviders = integrations.filter(i =>
-        ["salestrail", "website_webhook"].includes(i.platform) && i.status === "CONNECTED"
+        ["fasterq", "website_webhook"].includes(i.platform) && i.status === "CONNECTED"
     );
     const webhookOk = webhookProviders.length > 0;
 

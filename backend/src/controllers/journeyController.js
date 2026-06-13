@@ -31,7 +31,7 @@ const fmtDuration = (secs) => {
 // ── Journey builder ───────────────────────────────────────────────────────────
 
 async function buildJourneyEvents(leadId) {
-    const [activities, calls, salestrailCalls, emails, waMessages, tasks, notes, assignments] =
+    const [activities, calls, fasterqCalls, emails, waMessages, tasks, notes, assignments] =
         await Promise.all([
             prisma.activity.findMany({
                 where: { leadId },
@@ -42,7 +42,7 @@ async function buildJourneyEvents(leadId) {
                 where: { leadId },
                 orderBy: { createdAt: "desc" },
             }),
-            prisma.salestrailCall.findMany({
+            prisma.fasterqCall.findMany({
                 where: { leadId },
                 orderBy: { createdAt: "desc" },
             }),
@@ -140,14 +140,14 @@ async function buildJourneyEvents(leadId) {
         });
     }
 
-    // SalestrailCalls
-    for (const c of salestrailCalls) {
+    // FasterqCalls
+    for (const c of fasterqCalls) {
         events.push({
             id: `stcall-${c.id}`,
             type: c.direction === "incoming" ? "CALL_RECEIVED" : "CALL_MADE",
             channel: "call",
             referenceId: c.id,
-            title: c.direction === "incoming" ? "Call received (Salestrail)" : "Call made (Salestrail)",
+            title: c.direction === "incoming" ? "Call received (Fasterq)" : "Call made (Fasterq)",
             description: [
                 c.agentName && `Agent: ${c.agentName}`,
                 c.duration && `Duration: ${fmtDuration(c.duration)}`,

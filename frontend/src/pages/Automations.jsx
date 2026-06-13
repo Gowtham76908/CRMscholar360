@@ -13,8 +13,9 @@ const TRIGGER_TYPES = [
     { value: "MISSED_CALL",    label: "Missed / unanswered call" },
 ];
 
-const STATUS_OPTIONS  = ["NEW", "CONTACTED", "FOLLOW_UP", "CONVERTED", "LOST"];
-const SOURCE_OPTIONS  = ["FACEBOOK", "INSTAGRAM", "GMAIL", "WEBSITE", "PHONE_CALL", "LINKEDIN"];
+const STATUS_OPTIONS       = ["NEW", "CONTACTED", "FOLLOW_UP", "CONVERTED", "LOST"];
+const SOURCE_OPTIONS       = ["FACEBOOK", "INSTAGRAM", "GMAIL", "WEBSITE", "PHONE_CALL", "LINKEDIN"];
+const ENQUIRY_TYPE_OPTIONS = ["PRODUCT", "WHITE_LABEL", "LMS", "SERVICES"];
 
 const CONDITION_FIELDS = [
     { value: "source",      label: "Lead Source" },
@@ -105,10 +106,21 @@ function RuleModal({ initial, users, onSave, onClose }) {
     const removeConstraint = (i) => setConstraints(getConstraints().filter((_, idx) => idx !== i));
     const setConstraint = (i, patch) => setConstraints(getConstraints().map((c, idx) => idx === i ? { ...c, ...patch } : c));
 
+    const hasWA = form.actions.some(a => a.type === "SEND_WHATSAPP");
+    const { data: waTemplates = [], error: waError, isLoading: waLoading } = useQuery({
+        queryKey: ["wa-templates"],
+        queryFn: () => api.get("/whatsapp/templates").then(r => r.data),
+        enabled: hasWA,
+        retry: false,
+        staleTime: 120_000,
+    });
+    const waNotConnected = !!waError;
+
     const needsValue = (op) => op === "equals" || op === "not_equals";
     const fieldValues = (field) => {
-        if (field === "source") return SOURCE_OPTIONS;
-        if (field === "status") return STATUS_OPTIONS;
+        if (field === "source")      return SOURCE_OPTIONS;
+        if (field === "status")      return STATUS_OPTIONS;
+        if (field === "enquiryType") return ENQUIRY_TYPE_OPTIONS;
         return [];
     };
 
@@ -267,14 +279,23 @@ function RuleModal({ initial, users, onSave, onClose }) {
                                     {OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                 </select>
                                 {needsValue(cond.operator) && (
-                                    fieldValues(cond.field).length > 0 ? (
+                                    cond.field === "assignedTo" ? (
+                                        <select
+                                            className="flex-1 min-w-[120px] border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                                            value={cond.value}
+                                            onChange={e => setCondition(i, { value: e.target.value })}
+                                        >
+                                            <option value="">— select user —</option>
+                                            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                        </select>
+                                    ) : fieldValues(cond.field).length > 0 ? (
                                         <select
                                             className="flex-1 min-w-[100px] border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none"
                                             value={cond.value}
                                             onChange={e => setCondition(i, { value: e.target.value })}
                                         >
                                             <option value="">— select —</option>
-                                            {fieldValues(cond.field).map(v => <option key={v} value={v}>{v}</option>)}
+                                            {fieldValues(cond.field).map(v => <option key={v} value={v}>{v.replace("_", " ")}</option>)}
                                         </select>
                                     ) : (
                                         <input
@@ -346,11 +367,17 @@ function RuleModal({ initial, users, onSave, onClose }) {
                                             value={action.config.title ?? ""}
                                             onChange={e => setActionConfig(i, { title: e.target.value })}
                                         />
+                                        <textarea
+                                            rows={2}
+                                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none resize-none"
+                                            placeholder="Description * — what should the employee do?"
+                                            value={action.config.description ?? ""}
+                                            onChange={e => setActionConfig(i, { description: e.target.value })}
+                                        />
                                         <div className="flex items-center gap-2">
                                             <input
                                                 type="number" min="1"
-                                                className="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
-                                                placeholder="Days"
+                                                className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
                                                 value={action.config.dueDaysFromNow ?? 1}
                                                 onChange={e => setActionConfig(i, { dueDaysFromNow: parseInt(e.target.value) || 1 })}
                                             />
@@ -396,13 +423,81 @@ function RuleModal({ initial, users, onSave, onClose }) {
                                 )}
                                 {action.type === "SEND_WHATSAPP" && (
                                     <div className="space-y-1.5">
-                                        <input
-                                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
-                                            placeholder="WATI template name (e.g. welcome_lead)"
-                                            value={action.config.templateName ?? ""}
-                                            onChange={e => setActionConfig(i, { templateName: e.target.value })}
-                                        />
-                                        <p className="text-[10px] text-gray-400">Use <code>{"{{lead.name}}"}</code> in parameters to insert the lead's name.</p>
+                                        {waNotConnected ? (
+                                            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 leading-snug">
+                                                WhatsApp is not connected.{" "}
+                                                <a href="/settings" className="underline font-medium">Settings → Integrations</a>
+                                                {" "}to connect your WhatsApp Business account first.
+                                            </div>
+                                        ) : waLoading ? (
+                                            <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                                                <Loader2 className="h-3 w-3 animate-spin" /> Loading templates…
+                                            </div>
+                                        ) : waTemplates.length > 0 ? (
+                                            <select
+                                                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
+                                                value={action.config.templateName ?? ""}
+                                                onChange={e => setActionConfig(i, { templateName: e.target.value, parameters: [] })}
+                                            >
+                                                <option value="">— select a template —</option>
+                                                {waTemplates.map(t => (
+                                                    <option key={t.name} value={t.name}>{t.name}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <input
+                                                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
+                                                placeholder="Template name (e.g. welcome_lead)"
+                                                value={action.config.templateName ?? ""}
+                                                onChange={e => setActionConfig(i, { templateName: e.target.value })}
+                                            />
+                                        )}
+                                        {/* Preview body + per-param inputs when a template is selected */}
+                                        {action.config.templateName && (() => {
+                                            const tpl = waTemplates.find(t => t.name === action.config.templateName);
+                                            const bodyText = tpl?.components?.find(c => c.type === "BODY")?.text;
+                                            const paramCount = bodyText ? (bodyText.match(/\{\{\d+\}\}/g) || []).length : 0;
+                                            return (
+                                                <div className="space-y-1.5">
+                                                    {bodyText && (
+                                                        <p className="text-[10px] text-gray-500 bg-gray-50 border border-gray-100 rounded px-2 py-1.5 leading-snug">
+                                                            <span className="font-semibold">Template: </span>{bodyText}
+                                                        </p>
+                                                    )}
+                                                    {paramCount > 0 && (
+                                                        <>
+                                                            <p className="text-[10px] font-medium text-gray-500">Fill in parameters:</p>
+                                                            {Array.from({ length: paramCount }, (_, idx) => (
+                                                                <div key={idx} className="flex items-center gap-2">
+                                                                    <span className="text-[10px] text-gray-400 w-8 shrink-0 font-mono">{`{{${idx + 1}}}`}</span>
+                                                                    <input
+                                                                        className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none"
+                                                                        placeholder={idx === 0 ? "e.g. {{lead.name}}" : "e.g. {{lead.phone}}"}
+                                                                        value={(action.config.parameters ?? [])[idx] ?? ""}
+                                                                        onChange={e => {
+                                                                            const params = [...(action.config.parameters ?? [])];
+                                                                            params[idx] = e.target.value;
+                                                                            setActionConfig(i, { parameters: params });
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            ))}
+                                                        </>
+                                                    )}
+                                                    {!bodyText && (
+                                                        <input
+                                                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
+                                                            placeholder="Parameters, comma-separated"
+                                                            value={(action.config.parameters ?? []).join(", ")}
+                                                            onChange={e => setActionConfig(i, {
+                                                                parameters: e.target.value.split(",").map(p => p.trim()).filter(Boolean)
+                                                            })}
+                                                        />
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                        <p className="text-[10px] text-gray-400">{"{{lead.name}}"} and {"{{lead.phone}}"} are replaced with the lead's real values.</p>
                                     </div>
                                 )}
                                 {action.type === "SEND_EMAIL" && (

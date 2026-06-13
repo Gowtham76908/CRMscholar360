@@ -85,12 +85,11 @@ async function executeAction(action, lead, childContext = {}, tx = prisma) {
             await tx.task.create({
                 data: {
                     title: cfg.title,
-                    description: cfg.description ?? null,
+                    description: cfg.description,
                     leadId: lead.id,
                     assignedToId: lead.assignedToId ?? null,
                     dueDate,
                     status: "PENDING",
-                    priority: cfg.priority ?? "MEDIUM",
                 }
             });
             await tx.activity.create({
@@ -298,7 +297,9 @@ function childContext(parent, ruleId) {
 // ─── Rule Runner ──────────────────────────────────────────────────────────────
 
 async function runRulesForLead(triggerType, lead, context = null) {
-    const ctx = context ?? makeRootContext();
+    // Merge caller-provided context with a fresh root so chainId/triggerDepth/ruleChain
+    // are always present even when callers only pass { prevStatus, newStatus }.
+    const ctx = context ? { ...makeRootContext(), ...context } : makeRootContext();
 
     if (ctx.triggerDepth > MAX_TRIGGER_DEPTH) {
         console.warn(
@@ -481,8 +482,6 @@ async function runNoActivityRules() {
             });
             const alreadyFired = new Set(recentLogs.map(l => l.leadId));
 
-            const newLogData = [];
-
             for (const lead of leads) {
                 if (alreadyFired.has(lead.id)) continue;
 
@@ -491,16 +490,38 @@ async function runNoActivityRules() {
 
                 if (!matchesAllConditions(lead, rule.conditions)) continue;
 
-                for (const action of rule.actions) {
-                    try { await executeAction(action, lead); } catch {}
+                const results = [];
+                const ruleCtx = childContext(makeRootContext(), rule.id);
+                let execFailed = false;
+
+                try {
+                    await prisma.$transaction(async (tx) => {
+                        let currentLead = lead;
+                        for (const action of rule.actions) {
+                            const result = await executeAction(action, currentLead, ruleCtx, tx);
+                            results.push(result);
+                            currentLead = await tx.lead.findUnique({ where: { id: currentLead.id } });
+                        }
+                        await tx.automationLog.create({
+                            data: { ruleId: rule.id, leadId: lead.id, status: "SUCCESS", details: { trigger: "NO_ACTIVITY", days, results } },
+                        });
+                    });
+                } catch (err) {
+                    execFailed = true;
+                    await prisma.automationLog.create({
+                        data: { ruleId: rule.id, leadId: lead.id, status: "FAILED", details: { trigger: "NO_ACTIVITY", days, error: err.message } },
+                    }).catch(console.error);
                 }
 
-                newLogData.push({ ruleId: rule.id, leadId: lead.id, status: "SUCCESS", details: { trigger: "NO_ACTIVITY", days } });
-            }
-
-            // Batch-write all success logs for this chunk in one query
-            if (newLogData.length > 0) {
-                await prisma.automationLog.createMany({ data: newLogData });
+                if (!execFailed) {
+                    for (const result of results) {
+                        if (result?._sideEffect) {
+                            runSideEffect(result._sideEffect).catch(err =>
+                                console.error(`[AutomationEngine] NO_ACTIVITY side-effect failed:`, err.message)
+                            );
+                        }
+                    }
+                }
             }
 
             if (leads.length < NO_ACTIVITY_CHUNK) break;

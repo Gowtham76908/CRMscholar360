@@ -62,7 +62,7 @@ const getKPIs = async (req, res, next) => {
                 prisma.lead.count({ where: { assignedToId: { in: teamIds }, assignedAt: dr } }),
                 prisma.lead.count({ where: { assignedToId: { in: teamIds }, status: "CONVERTED", updatedAt: dr } }),
                 prisma.lead.count({ where: { assignedToId: { in: teamIds }, status: "FOLLOW_UP" } }),
-                prisma.salestrailCall.findMany({
+                prisma.fasterqCall.findMany({
                     where: { startedAt: dr },
                     select: { duration: true, agentEmail: true },
                 }),
@@ -185,8 +185,8 @@ const getEmployeeTable = async (req, res, next) => {
                   AND "assignedAt" >= $1
                   AND "assignedAt" <= $2
                 GROUP BY "assignedToId"
-            `, dr.gte, dr.lte),
-            prisma.salestrailCall.findMany({
+            `, dr.gte, dr.lte ?? new Date()),
+            prisma.fasterqCall.findMany({
                 where: { startedAt: dr },
                 select: { agentEmail: true, duration: true },
             }),

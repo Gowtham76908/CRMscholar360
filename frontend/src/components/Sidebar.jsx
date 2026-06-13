@@ -34,7 +34,7 @@ const NAV = [
     { group: "Team",      icon: TrendingUp,    label: "Team Performance",   path: "/team-performance",  managerOnly: true },
     { group: "Team",      icon: IndianRupee,   label: "Revenue Report",     path: "/revenue-report",    managerOnly: true },
     { group: "Team",      icon: Trophy,        label: "Leaderboard",        path: "/leaderboard",       managerOnly: true },
-    { group: "Team",      icon: PhoneCall,     label: "Salestrail Calls",   path: "/salestrail",        managerOnly: true },
+    { group: "Team",      icon: PhoneCall,     label: "Fasterq Calls",      path: "/fasterq",           managerOnly: true },
     { group: "Team",      icon: BarChart,      label: "Reports",            path: "/reports",           managerOnly: true },
     { group: "Team",      icon: Sparkles,      label: "AI Usage",           path: "/ai-usage",          managerOnly: true },
 

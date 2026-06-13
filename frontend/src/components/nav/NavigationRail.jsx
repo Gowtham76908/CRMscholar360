@@ -55,7 +55,7 @@ export const MODES = [
         icon: Settings2,
         label: "Admin",
         defaultPath: "/team",
-        paths: ["/team", "/team-management", "/departments", "/invoices", "/salestrail", "/integrations", "/settings", "/attendance", "/leave", "/unassigned-leads"],
+        paths: ["/team", "/team-management", "/departments", "/invoices", "/fasterq", "/integrations", "/settings", "/attendance", "/leave", "/unassigned-leads"],
         shortcut: "6",
         adminOnly: true,
     },
