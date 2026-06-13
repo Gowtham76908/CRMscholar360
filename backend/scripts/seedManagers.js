@@ -1,4 +1,4 @@
-require("dotenv").config();
+﻿require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcrypt");
 const prisma = new PrismaClient();
@@ -45,8 +45,8 @@ async function main() {
     for (const m of MANAGERS) {
         const user = await prisma.user.upsert({
             where: { email: m.email },
-            update: { name: m.name, role: "MANAGER", department: m.dept, jobTitle: m.jobTitle, isActive: true },
-            create: { email: m.email, name: m.name, password, role: "MANAGER", department: m.dept, jobTitle: m.jobTitle, isActive: true },
+            update: { name: m.name, role: "ADMIN", department: m.dept, jobTitle: m.jobTitle, isActive: true },
+            create: { email: m.email, name: m.name, password, role: "ADMIN", department: m.dept, jobTitle: m.jobTitle, isActive: true },
         });
         managers.push(user);
         console.log(`  Manager: ${user.name} — ${user.id}`);

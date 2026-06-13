@@ -1,4 +1,4 @@
-const { z } = require("zod");
+﻿const { z } = require("zod");
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 const loginSchema = z.object({
@@ -12,7 +12,7 @@ const registerUserSchema = z.object({
     email: z.string().email("Invalid email"),
     password: z.string().min(6, "Password must be at least 6 characters"),
     phone: z.string().optional(),
-    role: z.enum(["SUPER_ADMIN", "MANAGER", "EMPLOYEE"]).optional(),
+    role: z.enum(["SUPER_ADMIN", "ADMIN", "EMPLOYEE"]).optional(),
     department: z.string().optional(),
 });
 

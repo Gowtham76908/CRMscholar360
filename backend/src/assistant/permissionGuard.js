@@ -1,4 +1,4 @@
-const logger = require("../utils/logger");
+﻿const logger = require("../utils/logger");
 
 // Tool allowlist per role. Tools NOT listed here are forbidden — they will
 // never appear in the LLM's tool list and are rejected if somehow invoked.
@@ -15,7 +15,7 @@ const ROLE_TOOLS = {
         "get_pipeline_summary",
         "get_top_leads_by_revenue",
     ],
-    MANAGER: [
+    ADMIN: [
         "search_leads",
         "count_leads_by_status",
         "list_my_tasks",

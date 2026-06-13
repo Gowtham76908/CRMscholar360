@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const { ApiError } = require("../utils/apiError");
 const { istDateKey } = require("../utils/istTime");
 const { signUploadUrl } = require("../utils/signedUpload");
@@ -7,7 +7,7 @@ const { signUploadUrl } = require("../utils/signedUpload");
 
 async function canViewLead(userId, role, lead) {
     if (role === "SUPER_ADMIN") return true;
-    if (role === "MANAGER") {
+    if (role === "ADMIN") {
         // manager sees their own + their team's leads
         const employees = await prisma.user.findMany({
             where: { managerId: userId },

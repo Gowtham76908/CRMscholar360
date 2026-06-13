@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+﻿import { useState, useMemo, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
@@ -634,7 +634,7 @@ export default function DealPipeline() {
     };
     const hasFilters = debouncedSearch || filterStage || filterOwner || filterMgr || dateFrom || dateTo;
 
-    const managers = members.filter(m => m.role === "MANAGER" || m.role === "SUPER_ADMIN");
+    const managers = members.filter(m => m.role === "ADMIN" || m.role === "SUPER_ADMIN");
 
     return (
         <div className="space-y-5">

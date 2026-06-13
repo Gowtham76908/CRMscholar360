@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
@@ -8,7 +8,7 @@ const { createSprintSchema, updateSprintSchema, addTasksToSprintSchema } = requi
 
 router.use(authMiddleware);
 
-const adminOnly = roleMiddleware(["SUPER_ADMIN", "MANAGER"]);
+const adminOnly = roleMiddleware(["SUPER_ADMIN", "ADMIN"]);
 
 // ── Read (all roles) ──────────────────────────────────────────────────────────
 router.get("/", c.getSprints);

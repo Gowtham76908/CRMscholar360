@@ -1,131 +1,104 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { X, Loader2, Tag, Plus } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import api from "../api/axios";
+import { toast } from "sonner";
+import FileDropzone from "./FileDropzone";
 
-// ── Config ────────────────────────────────────────────────────────────────────
+const taskSchema = z.object({
+    title:       z.string().min(2, "Title is required"),
+    description: z.string().optional(),
+    dueDate:     z.string().min(1, "Due date is required"),
+    assignedToId: z.string().optional(),
+    leadId:      z.string().optional(),
+    priority:    z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
+});
 
-const PRIORITIES = [
-    { value: "CRITICAL", label: "Critical", color: "bg-red-100 text-red-700 border-red-200" },
-    { value: "HIGH",     label: "High",     color: "bg-orange-100 text-orange-700 border-orange-200" },
-    { value: "MEDIUM",   label: "Medium",   color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-    { value: "LOW",      label: "Low",      color: "bg-green-100 text-green-700 border-green-200" },
-];
+const INPUT = "block w-full rounded-xl border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-3 bg-gray-50/50 appearance-none transition-all";
 
-const TYPES = [
-    { value: "EPIC",    label: "Epic",    emoji: "🟣" },
-    { value: "STORY",   label: "Story",   emoji: "🟢" },
-    { value: "TASK",    label: "Task",    emoji: "🔵" },
-    { value: "BUG",     label: "Bug",     emoji: "🔴" },
-    { value: "SUBTASK", label: "Subtask", emoji: "⚪" },
-];
-
-const STORY_POINTS = [1, 2, 3, 5, 8, 13, 21];
-
-// ── TaskModal ─────────────────────────────────────────────────────────────────
-
-/**
- * TaskModal — used for both Create and Edit.
- * Props:
- *   task         — existing task object (edit mode) or null (create mode)
- *   defaultSprint — sprintId to pre-select when creating from sprint board
- *   onClose      — close handler
- */
-const TaskModal = ({ task, defaultSprint, onClose }) => {
+const TaskModal = ({ task, defaultLeadId, onClose }) => {
     const queryClient = useQueryClient();
     const isEdit = !!task;
+    const [files, setFiles] = useState([]);
+    const [isUploading, setIsUploading] = useState(false);
 
-    const [form, setForm] = useState({
-        title:          task?.title          ?? "",
-        description:    task?.description    ?? "",
-        assignedTo:     task?.assignedTo?.id ?? "",
-        leadId:         task?.lead?.id       ?? "",
-        sprintId:       task?.sprint?.id     ?? defaultSprint ?? "",
-        dueDate:        task?.dueDate ? task.dueDate.split("T")[0] : "",
-        priority:       task?.priority       ?? "MEDIUM",
-        type:           task?.type           ?? "TASK",
-        storyPoints:    task?.storyPoints    ?? "",
-        estimatedHours: task?.estimatedHours ?? "",
-        actualHours:    task?.actualHours    ?? "",
-        labels:         task?.labels         ?? [],
+    const { register, handleSubmit, formState: { errors } } = useForm({
+        resolver: zodResolver(taskSchema),
+        defaultValues: {
+            title:        task?.title          ?? "",
+            description:  task?.description    ?? "",
+            dueDate:      task?.dueDate ? task.dueDate.split("T")[0] : "",
+            assignedToId: task?.assignedTo?.id ?? "",
+            leadId:       task?.lead?.id       ?? defaultLeadId ?? "",
+            priority:     task?.priority       ?? "MEDIUM",
+        },
     });
-    const [labelInput, setLabelInput] = useState("");
-    const [error, setError] = useState("");
 
-    const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
-
-    // Data fetches
     const { data: team = [] } = useQuery({
         queryKey: ["team"],
         queryFn: () => api.get("/team").then(r => r.data),
-    });
-    const { data: sprints = [] } = useQuery({
-        queryKey: ["sprints"],
-        queryFn: () => api.get("/sprints").then(r => r.data),
     });
     const { data: leads = [] } = useQuery({
         queryKey: ["leads"],
         queryFn: () => api.get("/leads", { params: { limit: 100 } }).then(r => r.data.data || r.data),
     });
 
-    // Create mutation
     const createMutation = useMutation({
         mutationFn: (data) => api.post("/tasks", data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["tasks"] });
-            queryClient.invalidateQueries({ queryKey: ["sprints"] });
-            queryClient.invalidateQueries({ queryKey: ["backlog"] });
             onClose();
         },
-        onError: (e) => setError(e.response?.data?.message || "Failed to create task"),
+        onError: (e) => toast.error(e.response?.data?.message || "Failed to create task"),
     });
 
-    // Edit mutation
     const editMutation = useMutation({
         mutationFn: (data) => api.put(`/tasks/${task.id}`, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["tasks"] });
-            queryClient.invalidateQueries({ queryKey: ["sprints"] });
-            queryClient.invalidateQueries({ queryKey: ["backlog"] });
+            queryClient.invalidateQueries({ queryKey: ["tasks", task.id] });
             onClose();
         },
-        onError: (e) => setError(e.response?.data?.message || "Failed to update task"),
+        onError: (e) => toast.error(e.response?.data?.message || "Failed to update task"),
     });
 
-    const isPending = createMutation.isPending || editMutation.isPending;
+    const isPending = createMutation.isPending || editMutation.isPending || isUploading;
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        setError("");
-        if (!form.title.trim()) return setError("Title is required");
-        if (!form.dueDate)      return setError("Due date is required");
+    const onSubmit = async (data) => {
+        try {
+            setIsUploading(true);
+            let uploadedFiles = [];
+            if (files.length > 0) {
+                const formData = new FormData();
+                files.forEach(f => formData.append("files", f));
+                const uploadRes = await api.post("/upload/task-files", formData, {
+                    headers: { "Content-Type": "multipart/form-data" },
+                });
+                uploadedFiles = uploadRes.data.files;
+            }
 
-        const payload = {
-            ...form,
-            assignedTo:     form.assignedTo     || null,
-            leadId:         form.leadId         || null,
-            sprintId:       form.sprintId       || null,
-            storyPoints:    form.storyPoints    ? Number(form.storyPoints)    : null,
-            estimatedHours: form.estimatedHours ? Number(form.estimatedHours) : null,
-            actualHours:    form.actualHours    ? Number(form.actualHours)    : null,
-            dueDate:        new Date(form.dueDate).toISOString(),
-        };
+            const payload = {
+                ...data,
+                assignedTo: data.assignedToId || null,
+                leadId:     data.leadId       || null,
+                dueDate:    new Date(data.dueDate).toISOString(),
+                ...(uploadedFiles.length > 0 && { files: uploadedFiles }),
+            };
 
-        isEdit ? editMutation.mutate(payload) : createMutation.mutate(payload);
+            isEdit ? editMutation.mutate(payload) : createMutation.mutate(payload);
+        } catch {
+            toast.error("Error uploading files. Please try again.");
+        } finally {
+            setIsUploading(false);
+        }
     };
-
-    const addLabel = () => {
-        const l = labelInput.trim();
-        if (l && !form.labels.includes(l)) set("labels", [...form.labels, l]);
-        setLabelInput("");
-    };
-
-    const removeLabel = (l) => set("labels", form.labels.filter(x => x !== l));
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                {/* Header */}
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
                     <h2 className="text-lg font-bold text-gray-900">
                         {isEdit ? "Edit Task" : "Create Task"}
@@ -135,171 +108,45 @@ const TaskModal = ({ task, defaultSprint, onClose }) => {
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
-                    {/* Error */}
-                    {error && (
-                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>
-                    )}
-
-                    {/* Type + Priority row */}
-                    <div className="flex gap-3">
-                        {/* Type */}
-                        <div className="flex-1">
-                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Type</label>
-                            <div className="flex gap-1.5 flex-wrap">
-                                {TYPES.map(t => (
-                                    <button
-                                        key={t.value}
-                                        type="button"
-                                        onClick={() => set("type", t.value)}
-                                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                                            form.type === t.value
-                                                ? "border-indigo-400 bg-indigo-50 text-indigo-700"
-                                                : "border-gray-200 text-gray-600 hover:border-gray-300"
-                                        }`}
-                                    >
-                                        <span>{t.emoji}</span>{t.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Priority */}
-                        <div className="w-40">
-                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Priority</label>
-                            <select
-                                value={form.priority}
-                                onChange={e => set("priority", e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            >
-                                {PRIORITIES.map(p => (
-                                    <option key={p.value} value={p.value}>{p.label}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
+                <form onSubmit={handleSubmit(onSubmit)} className="px-6 py-5 space-y-4">
                     {/* Title */}
                     <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Title *</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Task Title</label>
                         <input
-                            value={form.title}
-                            onChange={e => set("title", e.target.value)}
-                            placeholder="What needs to be done?"
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            {...register("title")}
+                            className={INPUT}
+                            placeholder="e.g. Follow up with client"
                         />
+                        {errors.title && <p className="text-red-500 text-xs mt-1 font-medium">{errors.title.message}</p>}
                     </div>
 
                     {/* Description */}
                     <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
                         <textarea
-                            value={form.description}
-                            onChange={e => set("description", e.target.value)}
+                            {...register("description")}
                             rows={3}
-                            placeholder="Add more detail..."
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                            className={INPUT}
+                            placeholder="Additional details..."
                         />
                     </div>
 
-                    {/* Assignee + Sprint */}
+                    {/* Assign To + Associate Lead */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Assignee</label>
-                            <select
-                                value={form.assignedTo}
-                                onChange={e => set("assignedTo", e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            >
-                                <option value="">Unassigned</option>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1">Assign To</label>
+                            <select {...register("assignedToId")} className={INPUT}>
+                                <option value="">Select a member</option>
                                 {team.filter(m => m.isActive).map(m => (
                                     <option key={m.id} value={m.id}>{m.name}</option>
                                 ))}
                             </select>
+                            {errors.assignedToId && <p className="text-red-500 text-xs mt-1 font-medium">{errors.assignedToId.message}</p>}
                         </div>
                         <div>
-                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Sprint</label>
-                            <select
-                                value={form.sprintId}
-                                onChange={e => set("sprintId", e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            >
-                                <option value="">Backlog (no sprint)</option>
-                                {sprints.filter(s => s.status !== "COMPLETED").map(s => (
-                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    {/* Due Date + Story Points + Est Hours */}
-                    <div className="grid grid-cols-3 gap-4">
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Due Date *</label>
-                            <input
-                                type="date"
-                                value={form.dueDate}
-                                onChange={e => set("dueDate", e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Story Points</label>
-                            <div className="flex gap-1 flex-wrap">
-                                {STORY_POINTS.map(sp => (
-                                    <button
-                                        key={sp}
-                                        type="button"
-                                        onClick={() => set("storyPoints", form.storyPoints === sp ? "" : sp)}
-                                        className={`w-8 h-8 rounded-lg text-xs font-bold border transition-colors ${
-                                            form.storyPoints === sp
-                                                ? "bg-indigo-600 text-white border-indigo-600"
-                                                : "border-gray-200 text-gray-600 hover:border-indigo-300"
-                                        }`}
-                                    >
-                                        {sp}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Est. Hours</label>
-                            <input
-                                type="number"
-                                min="0"
-                                step="0.5"
-                                value={form.estimatedHours}
-                                onChange={e => set("estimatedHours", e.target.value)}
-                                placeholder="0"
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Actual Hours (edit only) + Lead */}
-                    <div className="grid grid-cols-2 gap-4">
-                        {isEdit && (
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Actual Hours</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step="0.5"
-                                    value={form.actualHours}
-                                    onChange={e => set("actualHours", e.target.value)}
-                                    placeholder="0"
-                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                />
-                            </div>
-                        )}
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Linked Lead</label>
-                            <select
-                                value={form.leadId}
-                                onChange={e => set("leadId", e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            >
-                                <option value="">None</option>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1">Associate Lead</label>
+                            <select {...register("leadId")} className={INPUT}>
+                                <option value="">Select a lead</option>
                                 {leads.map(l => (
                                     <option key={l.id} value={l.id}>{l.name}</option>
                                 ))}
@@ -307,51 +154,50 @@ const TaskModal = ({ task, defaultSprint, onClose }) => {
                         </div>
                     </div>
 
-                    {/* Labels */}
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Labels</label>
-                        <div className="flex gap-2 flex-wrap mb-2">
-                            {form.labels.map(l => (
-                                <span key={l} className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium border border-indigo-100">
-                                    <Tag className="h-3 w-3" />{l}
-                                    <button type="button" onClick={() => removeLabel(l)} className="ml-1 hover:text-red-500">×</button>
-                                </span>
-                            ))}
-                        </div>
-                        <div className="flex gap-2">
+                    {/* Due Date + Priority */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1">Due Date</label>
                             <input
-                                value={labelInput}
-                                onChange={e => setLabelInput(e.target.value)}
-                                onKeyDown={e => e.key === "Enter" && (e.preventDefault(), addLabel())}
-                                placeholder="Add a label..."
-                                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                type="date"
+                                {...register("dueDate")}
+                                className={INPUT}
+                                min={new Date().toISOString().split("T")[0]}
                             />
-                            <button
-                                type="button"
-                                onClick={addLabel}
-                                className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 transition-colors"
-                            >
-                                <Plus className="h-4 w-4" />
-                            </button>
+                            {errors.dueDate && <p className="text-red-500 text-xs mt-1 font-medium">{errors.dueDate.message}</p>}
+                        </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1">Priority</label>
+                            <select {...register("priority")} className={INPUT}>
+                                <option value="LOW">Low</option>
+                                <option value="MEDIUM">Medium</option>
+                                <option value="HIGH">High</option>
+                                <option value="CRITICAL">Critical</option>
+                            </select>
                         </div>
                     </div>
 
+                    {/* Attachments */}
+                    <FileDropzone files={files} setFiles={setFiles} />
+
                     {/* Footer */}
-                    <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+                    <div className="flex justify-end pt-4 gap-3">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+                            className="px-6 py-2.5 text-sm font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors border border-gray-100"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={isPending}
-                            className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors disabled:opacity-50 shadow-sm"
+                            className="inline-flex items-center gap-2 px-8 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-lg shadow-indigo-100 disabled:opacity-50"
                         >
-                            {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                            {isEdit ? "Save Changes" : "Create Task"}
+                            {isPending && <Loader2 className="animate-spin h-4 w-4" />}
+                            {isEdit
+                                ? (isPending ? "Saving..." : "Save Changes")
+                                : (isPending ? "Creating..." : "Create Task")}
                         </button>
                     </div>
                 </form>

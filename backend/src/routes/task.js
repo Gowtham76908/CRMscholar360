@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
 const tc = require("../controllers/taskController");
 const authMiddleware = require("../middleware/authMiddleware");
@@ -8,14 +8,14 @@ const { createTaskSchema, updateTaskSchema, updateTaskStatusSchema, updateKanban
 
 router.use(authMiddleware);
 
-const adminOnly = roleMiddleware(["SUPER_ADMIN", "MANAGER"]);
+const adminOnly = roleMiddleware(["SUPER_ADMIN", "ADMIN"]);
 
 // ── Task CRUD ─────────────────────────────────────────────────────────────────
 router.get("/tasks", tc.getTasks);
 router.get("/tasks/:id", tc.getTaskById);
-router.post("/tasks", adminOnly, validate(createTaskSchema), tc.createTask);
+router.post("/tasks", validate(createTaskSchema), tc.createTask);
 router.put("/tasks/:id", adminOnly, validate(updateTaskSchema), tc.updateTask);
-router.delete("/tasks/:id", adminOnly, tc.deleteTask);
+router.delete("/tasks/:id", tc.deleteTask);
 
 // ── Status updates ────────────────────────────────────────────────────────────
 router.patch("/tasks/:id/status", validate(updateTaskStatusSchema), tc.updateTaskStatus);

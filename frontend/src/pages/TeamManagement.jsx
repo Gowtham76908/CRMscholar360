@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
     Users, UserCheck, ClipboardList, Clock, ChevronRight, X,
@@ -14,7 +14,7 @@ import { useAuth } from "../context/AuthContext";
 
 const ROLE_CONFIG = {
     SUPER_ADMIN: { label: "Super Admin", bg: "bg-red-100",    text: "text-red-700"    },
-    MANAGER:     { label: "Manager",     bg: "bg-orange-100", text: "text-orange-700" },
+    ADMIN:     { label: "Manager",     bg: "bg-orange-100", text: "text-orange-700" },
     EMPLOYEE:    { label: "Employee",    bg: "bg-blue-100",   text: "text-blue-700"   },
 };
 
@@ -205,7 +205,7 @@ const TeamManagement = () => {
     const [selectedId, setSelectedId] = useState(null);
 
     const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
-    const isAuthorized = ["SUPER_ADMIN", "MANAGER"].includes(currentUser?.role);
+    const isAuthorized = ["SUPER_ADMIN", "ADMIN"].includes(currentUser?.role);
 
     const { data: stats } = useQuery({
         queryKey: ["org-stats"],

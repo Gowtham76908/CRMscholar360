@@ -1,11 +1,11 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
 const reportController = require("../controllers/reportController");
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
 
 router.use(authMiddleware);
-router.use(roleMiddleware(["SUPER_ADMIN", "MANAGER"]));
+router.use(roleMiddleware(["SUPER_ADMIN", "ADMIN"]));
 
 router.get("/leads-by-source", reportController.getLeadsBySource);
 router.get("/leads-by-employee", reportController.getLeadsByEmployee);

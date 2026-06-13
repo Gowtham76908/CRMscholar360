@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const { getTeamMemberIds } = require("../services/organizationService");
 const { ApiError } = require("../utils/apiError");
 const { istDateKey } = require("../utils/istTime");
@@ -36,7 +36,7 @@ function dateRange(period, from, to) {
 async function assertAccess(req, employeeId) {
     const { userId, role } = req.user;
     if (role === "SUPER_ADMIN") return true;
-    if (role === "MANAGER") {
+    if (role === "ADMIN") {
         const teamIds = await getTeamMemberIds(userId);
         return teamIds.includes(employeeId);
     }

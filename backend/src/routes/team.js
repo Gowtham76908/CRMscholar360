@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
 const teamController = require("../controllers/teamController");
 const authMiddleware = require("../middleware/authMiddleware");
@@ -9,7 +9,7 @@ router.use(authMiddleware);
 
 // Managers may manage their own team (scoped inside teamController); hard-delete
 // and Manager-role assignment stay SUPER_ADMIN-only (enforced in the controller).
-router.use(roleMiddleware(["SUPER_ADMIN", "MANAGER"]));
+router.use(roleMiddleware(["SUPER_ADMIN", "ADMIN"]));
 
 // Get all users
 router.get("/", teamController.getTeam);

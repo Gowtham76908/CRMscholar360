@@ -3,6 +3,7 @@ const { createNotification } = require("../services/notificationService");
 const { getTasks: getTasksPaginated } = require("../services/taskService");
 const { getTasksSchema } = require("../validations/task.validation");
 const { ApiError, ERROR_CODES } = require("../utils/apiError");
+const logActivity = require("../utils/activityLogger");
 
 const taskInclude = {
     lead: { select: { id: true, name: true, phone: true, email: true } },
@@ -79,6 +80,13 @@ const createTask = async (req, res, next) => {
         });
 
         res.status(201).json({ message: "Task created successfully", task: newTask });
+
+        logActivity({
+            leadId:   newTask.leadId ?? null,
+            userId:   req.user.userId,
+            action:   "TASK_CREATED",
+            metadata: { taskId: newTask.id, title, priority, type, assignedTo: assignedTo ?? null, dueDate }
+        }).catch(console.error);
 
         // Notify the assignee if one was set
         if (assignedTo) {
@@ -174,6 +182,17 @@ const updateTask = async (req, res, next) => {
             include: taskInclude
         });
         res.json({ message: "Task updated", task });
+
+        const changes = Object.fromEntries(
+            Object.entries({ title, description, assignedTo, dueDate, priority, type, storyPoints, estimatedHours, actualHours, labels, sprintId, leadId })
+                .filter(([, v]) => v !== undefined)
+        );
+        logActivity({
+            leadId:   task.leadId ?? null,
+            userId:   req.user.userId,
+            action:   "TASK_UPDATED",
+            metadata: { taskId: id, taskTitle: task.title, changes }
+        }).catch(console.error);
     } catch (error) {
         return next(error);
     }
@@ -260,8 +279,24 @@ const updateKanbanStatus = async (req, res, next) => {
 
 const deleteTask = async (req, res, next) => {
     try {
+        const { userId, role } = req.user;
+        const task = await prisma.task.findUnique({ where: { id: req.params.id } });
+        if (!task) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Task not found");
+
+        // Employees can only delete tasks assigned to them
+        if (role === "EMPLOYEE" && task.assignedToId !== userId) {
+            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You can only delete tasks assigned to you");
+        }
+
         await prisma.task.delete({ where: { id: req.params.id } });
         res.json({ message: "Task deleted" });
+
+        logActivity({
+            leadId:   task.leadId ?? null,
+            userId,
+            action:   "TASK_DELETED",
+            metadata: { taskId: task.id, title: task.title, priority: task.priority, deletedBy: role }
+        }).catch(console.error);
     } catch (error) {
         return next(error);
     }

@@ -81,7 +81,7 @@ const getAvailableEmployees = async (req, res, next) => {
             },
         };
 
-        if (role === "MANAGER") {
+        if (role === "ADMIN") {
             userWhere.managerId = userId;
         }
 
@@ -133,8 +133,7 @@ const manualAssign = async (req, res, next) => {
             return res.status(400).json({ message: "leadId and employeeId are required" });
         }
 
-        // Scope check for MANAGER
-        if (role === "MANAGER") {
+        if (role === "ADMIN") {
             const teamIds = await getTeamMemberIds(userId);
             if (!teamIds.includes(employeeId)) {
                 return res.status(403).json({ message: "You can only assign to your own team members" });
@@ -180,7 +179,7 @@ const bulkAutoAssign = async (req, res, next) => {
             return res.status(400).json({ message: "leadIds is required or use all:true" });
         }
 
-        const opts = role === "MANAGER" ? { managerId: userId, actorId: userId } : { actorId: userId };
+        const opts = role === "ADMIN" ? { managerId: userId, actorId: userId } : { actorId: userId };
         const summary = await engine.assignLeads(leadIds, opts);
 
         res.json(summary);
@@ -212,7 +211,7 @@ const claimLead = async (req, res, next) => {
 
         let targetEmployee = employeeId;
 
-        if (targetEmployee && role === "MANAGER") {
+        if (targetEmployee && role === "ADMIN") {
             const teamIds = await getTeamMemberIds(userId);
             if (!teamIds.includes(targetEmployee)) {
                 return res.status(403).json({ message: "Target employee is not in your team" });
@@ -220,8 +219,7 @@ const claimLead = async (req, res, next) => {
         }
 
         if (!targetEmployee) {
-            // Manager claims for their best-available team member (or themselves if MANAGER)
-            const mgr = role === "MANAGER" ? userId : null;
+            const mgr = role === "ADMIN" ? userId : null;
             targetEmployee = mgr ? await engine.findBestEmployee(mgr) : null;
             if (!targetEmployee) return res.status(400).json({ message: "No available employee to assign" });
         }
@@ -276,13 +274,13 @@ const updateProfile = async (req, res, next) => {
         const { userId, role } = req.user;
 
         const isSelf    = userId === employeeId;
-        const isAdmin   = ["SUPER_ADMIN", "MANAGER"].includes(role);
+        const isAdmin   = ["SUPER_ADMIN", "ADMIN"].includes(role);
 
         if (!isSelf && !isAdmin) {
             return res.status(403).json({ message: "Access denied" });
         }
 
-        if (role === "MANAGER" && !isSelf) {
+        if (role === "ADMIN" && !isSelf) {
             const teamIds = await getTeamMemberIds(userId);
             if (!teamIds.includes(employeeId)) {
                 return res.status(403).json({ message: "Employee is not in your team" });

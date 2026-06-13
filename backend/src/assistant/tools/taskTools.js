@@ -1,8 +1,8 @@
-const { getTasks } = require("../../services/taskService");
+﻿const { getTasks } = require("../../services/taskService");
 
 const list_my_tasks = {
     name:        "list_my_tasks",
-    description: "List tasks visible to the current user. EMPLOYEE sees own tasks; MANAGER sees team tasks; SUPER_ADMIN sees all. Optionally filter by PENDING, COMPLETED, or OVERDUE.",
+    description: "List tasks visible to the current user. EMPLOYEE sees own tasks; ADMIN sees team tasks; SUPER_ADMIN sees all. Optionally filter by PENDING, COMPLETED, or OVERDUE.",
     parameters: {
         type: "object",
         properties: {

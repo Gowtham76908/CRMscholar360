@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const logActivity = require("../utils/activityLogger");
 const normalizePhone = require("../utils/normalizePhone");
 const FormData = require("form-data");
@@ -15,7 +15,7 @@ const signRecording = (cl) =>
 
 // Shared access check for a call log's underlying lead. Call recordings and
 // transcripts are sensitive customer data, so reads are scoped the same way
-// leads are: EMPLOYEE → own, MANAGER → team (+ unassigned), SUPER_ADMIN → all.
+// leads are: EMPLOYEE → own, ADMIN → team (+ unassigned), SUPER_ADMIN → all.
 async function canAccessCallLead(reqUser, assignedToId) {
     return canAccessLead(reqUser.userId, reqUser.role, { assignedToId: assignedToId ?? null });
 }

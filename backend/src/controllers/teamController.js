@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const bcrypt = require("bcrypt");
 const { upsertUserToStream } = require("./chatController");
 const { getTeamMemberIds } = require("../services/organizationService");
@@ -6,7 +6,7 @@ const { getTeamMemberIds } = require("../services/organizationService");
 // A manager may only act on members of their own team; a super admin on anyone.
 async function canManage(reqUser, targetId) {
     if (reqUser.role === "SUPER_ADMIN") return true;
-    if (reqUser.role !== "MANAGER") return false;
+    if (reqUser.role !== "ADMIN") return false;
     const teamIds = await getTeamMemberIds(reqUser.userId);
     return teamIds.includes(targetId);
 }
@@ -21,7 +21,7 @@ const createUser = async (req, res, next) => {
             return res.status(400).json({ message: "User already exists" });
         }
 
-        if (role === "MANAGER" && req.user.role !== "SUPER_ADMIN") {
+        if (role === "ADMIN" && req.user.role !== "SUPER_ADMIN") {
             return res.status(403).json({ message: "Only Super Admins can create Managers" });
         }
 
@@ -44,7 +44,7 @@ const createUser = async (req, res, next) => {
 
         // Managers can only create employees, and the new hire joins their own team.
         let { managerId } = req.body;
-        if (req.user.role === "MANAGER") {
+        if (req.user.role === "ADMIN") {
             managerId = req.user.userId;
         }
         if (managerId) {
@@ -86,7 +86,7 @@ const getTeam = async (req, res, next) => {
     try {
         // Managers see only their own team (plus themselves); super admins see everyone.
         const where = {};
-        if (req.user.role === "MANAGER") {
+        if (req.user.role === "ADMIN") {
             const teamIds = await getTeamMemberIds(req.user.userId);
             where.id = { in: [...teamIds, req.user.userId] };
         }
@@ -149,7 +149,7 @@ const updateUser = async (req, res, next) => {
         if (role === "SUPER_ADMIN") {
             return res.status(403).json({ message: "Cannot assign SUPER_ADMIN role" });
         }
-        if (role === "MANAGER" && req.user.role !== "SUPER_ADMIN") {
+        if (role === "ADMIN" && req.user.role !== "SUPER_ADMIN") {
             return res.status(403).json({ message: "Only Super Admins can assign the Manager role" });
         }
 
@@ -157,7 +157,7 @@ const updateUser = async (req, res, next) => {
             return res.status(403).json({ message: "You can only manage members of your own team" });
         }
         // Managers cannot change a member's role or reassign them to another team.
-        if (req.user.role === "MANAGER") {
+        if (req.user.role === "ADMIN") {
             role = undefined;
             managerId = undefined;
         }

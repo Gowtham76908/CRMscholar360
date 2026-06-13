@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const { calculateCompOffBalance, calculateCompOffBalanceBulk } = require("../utils/attendance");
 const { nowIST, todayIST } = require("../utils/istTime");
 const { getTeamMemberIds } = require("../services/organizationService");
@@ -21,7 +21,7 @@ function fmtHHMM(mins) {
 }
 
 // User ids a requester may view/manage attendance for. SUPER_ADMIN → null (all);
-// MANAGER → their own team plus themselves. Keeps one manager's HR data private
+// ADMIN → their own team plus themselves. Keeps one manager's HR data private
 // from another manager's team.
 async function scopedUserIds(user) {
     if (user.role === "SUPER_ADMIN") return null;

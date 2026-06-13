@@ -1,10 +1,10 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 
 // Team Performance Metrics
 const getTeamPerformance = async (req, res, next) => {
     try {
         const users = await prisma.user.findMany({
-            where: { role: { in: ["EMPLOYEE", "MANAGER"] } },
+            where: { role: { in: ["EMPLOYEE", "ADMIN"] } },
             include: {
                 leads: { select: { status: true, firstResponseAt: true, createdAt: true } },
                 tasks: { select: { status: true, dueDate: true } }

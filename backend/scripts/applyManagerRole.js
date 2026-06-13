@@ -1,23 +1,23 @@
-const { PrismaClient } = require("@prisma/client");
+﻿const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 async function main() {
-    // Add MANAGER value to the Role enum (safe — no-op if already exists)
+    // Add ADMIN value to the Role enum (safe — no-op if already exists)
     await prisma.$executeRawUnsafe(`
         DO $$
         BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM pg_enum
-                WHERE enumlabel = 'MANAGER'
+                WHERE enumlabel = 'ADMIN'
                   AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'Role')
             ) THEN
-                ALTER TYPE "Role" ADD VALUE 'MANAGER';
+                ALTER TYPE "Role" ADD VALUE 'ADMIN';
             END IF;
         END
         $$;
     `);
 
-    console.log("MANAGER role value added to Role enum");
+    console.log("ADMIN role value added to Role enum");
 }
 
 main()

@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const { getTeamMemberIds } = require("./organizationService");
 const paginate = require("../utils/paginate");
 const { signUploadUrl } = require("../utils/signedUpload");
@@ -22,11 +22,11 @@ const getLeads = async ({
 
     // Role-based visibility:
     // EMPLOYEE    — own leads only
-    // MANAGER     — team leads (employees where managerId = userId); falls back to all if no team
+    // ADMIN     — team leads (employees where managerId = userId); falls back to all if no team
     // SUPER_ADMIN — everything
     if (role === "EMPLOYEE" || filters.mine) {
         where.assignedToId = userId;
-    } else if (role === "MANAGER") {
+    } else if (role === "ADMIN") {
         const teamIds = await getTeamMemberIds(userId);
         if (teamIds.length > 0) {
             if (filters.assignedTo) {

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+﻿import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
     Users, ClipboardList, Zap, RefreshCw,
@@ -112,7 +112,7 @@ export default function UnassignedLeads() {
     const [selected, setSelected]   = useState(new Set());
     const [assignTarget, setAssignTarget] = useState(null); // lead being assigned
 
-    const isAuthorized = ["SUPER_ADMIN", "MANAGER"].includes(user?.role);
+    const isAuthorized = ["SUPER_ADMIN", "ADMIN"].includes(user?.role);
 
     // ── Queries ───────────────────────────────────────────────────────────────
 

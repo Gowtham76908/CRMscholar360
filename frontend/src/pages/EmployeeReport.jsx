@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -122,7 +122,7 @@ const EmployeeReport = () => {
     const [chartMode, setChartMode] = useState("daily");
     const [noteText,  setNoteText]  = useState("");
 
-    if (!["SUPER_ADMIN", "MANAGER"].includes(user?.role)) {
+    if (!["SUPER_ADMIN", "ADMIN"].includes(user?.role)) {
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="text-center">

@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const { currentFYStart } = require("../utils/attendance");
 const { createNotification } = require("../services/notificationService");
 const { getTeamMemberIds } = require("../services/organizationService");
@@ -250,7 +250,7 @@ const getPendingLeaves = async (req, res, next) => {
 const getAllLeaves = async (req, res, next) => {
     try {
         const where = {};
-        if (req.user.role === "MANAGER") {
+        if (req.user.role === "ADMIN") {
             const teamIds = await getTeamMemberIds(req.user.userId);
             where.userId = { in: [...teamIds, req.user.userId] };
         }

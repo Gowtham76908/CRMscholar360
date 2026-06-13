@@ -260,6 +260,7 @@ model Task {
   sprintId       String?
   orderIndex     Int          @default(0)
   completedAt    DateTime?
+  createdAt      DateTime     @default(now())
   updatedAt      DateTime     @default(now()) @updatedAt
   assignedTo     User?        @relation(fields: [assignedToId], references: [id])
   lead           Lead?        @relation(fields: [leadId], references: [id])
@@ -500,10 +501,7 @@ model Notification {
 enum Role {
   SUPER_ADMIN
   ADMIN
-  MANAGER
   EMPLOYEE
-  TEAM_LEAD
-  AGENT
 }
 
 enum LeadSource {

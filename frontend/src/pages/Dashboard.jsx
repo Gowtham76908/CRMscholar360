@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+﻿import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { cn } from "../lib/utils";
 
 const isSuperAdmin = (role) => role === "SUPER_ADMIN";
-const isManager    = (role) => role === "SUPER_ADMIN" || role === "MANAGER";
+const isManager    = (role) => role === "SUPER_ADMIN" || role === "ADMIN";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -647,7 +647,7 @@ const Dashboard = () => {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // MANAGER VIEW
+    // ADMIN VIEW
     // ══════════════════════════════════════════════════════════════════════════
     if (isManager(user?.role)) {
         const teamTotal     = teamStats.reduce((s, m) => s + m.total, 0);

@@ -1,4 +1,4 @@
-import {
+﻿import {
     LayoutDashboard, Users, CheckSquare, Settings, BarChart,
     Building, MessageSquare, Clock, Calendar, LogOut, SearchCheck,
     Linkedin, Receipt, PhoneCall, Bot, Send, Search,
@@ -13,7 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import api from "../api/axios";
 
 const isSuperAdmin  = (r) => r === "SUPER_ADMIN";
-const isManager     = (r) => r === "SUPER_ADMIN" || r === "MANAGER";
+const isManager     = (r) => r === "SUPER_ADMIN" || r === "ADMIN";
 // EMPLOYEE sees everything not gated by the above
 
 const NAV = [

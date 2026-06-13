@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 
 /**
  * Returns all employee IDs directly managed by managerId.
@@ -85,8 +85,8 @@ async function validateManagerAssignment(userId, managerId) {
     if (!manager) {
         return { ok: false, message: "Manager not found" };
     }
-    if (!["SUPER_ADMIN", "MANAGER"].includes(manager.role)) {
-        return { ok: false, message: "Manager must have MANAGER or SUPER_ADMIN role" };
+    if (!["SUPER_ADMIN", "ADMIN"].includes(manager.role)) {
+        return { ok: false, message: "Manager must have ADMIN or SUPER_ADMIN role" };
     }
 
     // Detect circular hierarchy: walk up from managerId — if we hit userId, it's circular
@@ -118,7 +118,7 @@ async function getOrgStats(userId, role) {
         return { totalEmployees, activeEmployees, assignedLeads, pendingLeads };
     }
 
-    // MANAGER: scoped to their team
+    // ADMIN: scoped to their team
     const teamIds = await getTeamMemberIds(userId);
     const [totalEmployees, activeEmployees, assignedLeads, pendingLeads] =
         await prisma.$transaction([

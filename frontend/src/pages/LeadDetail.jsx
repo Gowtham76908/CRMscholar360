@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+﻿import { useState, useMemo, useRef } from "react";
 import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { LeadDetailSkeleton } from "../components/ui/Skeleton";
@@ -10,12 +10,13 @@ import {
     Calendar, User, Loader2, PhoneCall, FileText, Activity,
     ChevronDown, ChevronRight, Play, Clock, AlertCircle, ChevronLeft,
     Zap, Users, Save, SlidersHorizontal, Eye, MousePointerClick, GitBranch,
-    TrendingUp, IndianRupee,
+    TrendingUp, IndianRupee, Pencil,
 } from "lucide-react";
 import { Modal } from "../components/Modal";
 import SlidePanel from "../components/SlidePanel";
 import { getScoreLabel } from "../utils/leadScore";
 import AddTaskForm from "../components/AddTaskForm";
+import AddLeadForm from "../components/AddLeadForm";
 import LeadSidebar from "../components/lead/LeadSidebar";
 import SmartSuggestions from "../components/lead/SmartSuggestions";
 import WhatsAppModal from "../components/lead/WhatsAppModal";
@@ -52,9 +53,18 @@ const ACTION_CONFIG = {
     CALL_MADE:      { icon: "📞", color: "text-green-500",  bg: "bg-green-50 border-green-100", label: "Call made" },
     NOTE_ADDED:     { icon: "📝", color: "text-amber-500",  bg: "bg-amber-50 border-amber-100", label: "Note added" },
     TASK_CREATED:   { icon: "☑", color: "text-teal-500",   bg: "bg-teal-50 border-teal-100",   label: "Task created" },
+    TASK_UPDATED:   { icon: "✎", color: "text-teal-600",   bg: "bg-teal-50 border-teal-100",   label: "Task updated" },
+    TASK_DELETED:   { icon: "✕", color: "text-red-500",    bg: "bg-red-50 border-red-100",     label: "Task deleted" },
     TASK_COMPLETED: { icon: "✓", color: "text-green-600",  bg: "bg-green-50 border-green-100", label: "Task completed" },
     REMINDER_SET:   { icon: "⏰", color: "text-orange-500", bg: "bg-orange-50 border-orange-100",label: "Reminder set" },
-    ASSIGNED:       { icon: "→", color: "text-violet-500", bg: "bg-violet-50 border-violet-100",label: "Assigned" },
+    ASSIGNED:            { icon: "→", color: "text-violet-500",  bg: "bg-violet-50 border-violet-100",  label: "Assigned" },
+    LEAD_ASSIGNED:       { icon: "→", color: "text-violet-500",  bg: "bg-violet-50 border-violet-100",  label: "Lead assigned" },
+    LEAD_REASSIGNED:     { icon: "⇄", color: "text-violet-600",  bg: "bg-violet-50 border-violet-100",  label: "Lead reassigned" },
+    LEAD_MERGED:         { icon: "⊕", color: "text-gray-600",    bg: "bg-gray-50 border-gray-100",      label: "Lead merged" },
+    LEAD_BULK_UPDATE:    { icon: "✎", color: "text-gray-500",    bg: "bg-gray-50 border-gray-100",      label: "Bulk update" },
+    LEAD_BULK_ASSIGN:    { icon: "→", color: "text-indigo-500",  bg: "bg-indigo-50 border-indigo-100",  label: "Bulk assigned" },
+    LEAD_CREATED_VIA_WEBHOOK: { icon: "⚡", color: "text-blue-500", bg: "bg-blue-50 border-blue-100",  label: "Lead via webhook" },
+    WEBHOOK_DUPLICATE_HIT:    { icon: "!", color: "text-amber-600", bg: "bg-amber-50 border-amber-100", label: "Duplicate detected" },
     WHATSAPP_SENT:  { icon: "→", color: "text-emerald-500", bg: "bg-emerald-50 border-emerald-100", label: "WhatsApp sent" },
     WHATSAPP_REPLY: { icon: "←", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100", label: "WhatsApp reply" },
     EMAIL_SENT:     { icon: "✉", color: "text-blue-500",    bg: "bg-blue-50 border-blue-100",       label: "Email sent" },
@@ -70,6 +80,7 @@ const FILTER_PILLS = [
     { id: "whatsapp", label: "WhatsApp" },
     { id: "email",    label: "Email" },
     { id: "activity", label: "Activity" },
+    { id: "task",     label: "Tasks" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -291,6 +302,58 @@ function TimelineItem({ item }) {
                 <p className="mt-1 text-xs text-gray-500">
                     Due {new Date(meta.remindAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                 </p>
+            );
+        }
+        if (["LEAD_ASSIGNED", "ASSIGNED"].includes(item.action) && meta.assignedTo) {
+            return (
+                <p className="mt-1 text-xs text-gray-600">
+                    Assigned to <span className="font-semibold">{meta.assignedTo}</span>
+                </p>
+            );
+        }
+        if (item.action === "LEAD_REASSIGNED" && meta.newEmployeeName) {
+            return (
+                <p className="mt-1 text-xs text-gray-600">
+                    {meta.previousEmployeeId ? "Reassigned" : "Assigned"} to <span className="font-semibold">{meta.newEmployeeName}</span>
+                    {meta.reason && <span className="text-gray-400"> · {meta.reason}</span>}
+                </p>
+            );
+        }
+        if (item.action === "LEAD_UPDATED" && meta.changes) {
+            const keys = Object.keys(meta.changes ?? {});
+            return keys.length > 0 ? (
+                <p className="mt-1 text-xs text-gray-500">Changed: {keys.join(", ")}</p>
+            ) : null;
+        }
+        if (item.action === "TASK_CREATED" && meta.title) {
+            return (
+                <div className="mt-1.5 bg-teal-50 border border-teal-100 rounded-lg px-2.5 py-1.5 space-y-0.5">
+                    <p className="text-xs font-semibold text-teal-800">"{meta.title}"</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {meta.priority && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white border border-teal-200 text-teal-700">{meta.priority}</span>}
+                        {meta.dueDate && <span className="text-[10px] text-teal-600">Due {new Date(meta.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>}
+                    </div>
+                </div>
+            );
+        }
+        if (item.action === "TASK_UPDATED" && meta.taskTitle) {
+            const changes = meta.changes ?? {};
+            const changeKeys = Object.keys(changes).filter(k => k !== "assignedTo");
+            return (
+                <div className="mt-1.5 bg-teal-50 border border-teal-100 rounded-lg px-2.5 py-1.5 space-y-0.5">
+                    <p className="text-xs font-semibold text-teal-800">"{meta.taskTitle}"</p>
+                    {changeKeys.length > 0 && (
+                        <p className="text-[10px] text-teal-600">Changed: {changeKeys.join(", ")}</p>
+                    )}
+                </div>
+            );
+        }
+        if (item.action === "TASK_DELETED" && meta.title) {
+            return (
+                <div className="mt-1.5 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5">
+                    <p className="text-xs font-semibold text-red-700">"{meta.title}" was deleted</p>
+                    {meta.deletedBy && <p className="text-[10px] text-red-500">by {meta.deletedBy.toLowerCase()}</p>}
+                </div>
             );
         }
         return null;
@@ -851,10 +914,11 @@ export default function LeadDetail() {
     const queryClient = useQueryClient();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
+    const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN";
 
     const [noteText, setNoteText] = useState("");
     const [showTaskModal, setShowTaskModal] = useState(false);
+    const [showEditLead, setShowEditLead] = useState(false);
     const [showWaModal, setShowWaModal] = useState(false);
     const [showPostCall, setShowPostCall] = useState(false);
     const [showEmailModal, setShowEmailModal] = useState(false);
@@ -977,7 +1041,11 @@ export default function LeadDetail() {
             ...emailLogs.map(e => ({ ...e, _type: "email", action: "EMAIL_SENT", _date: new Date(e.createdAt) })),
         ].sort((a, b) => b._date - a._date);
 
-        const filtered = timelineFilter === "all" ? allItems : allItems.filter(i => i._type === timelineFilter);
+        const isTaskAction = (i) => i._type === "activity" && i.action?.startsWith("TASK_");
+        const filtered = timelineFilter === "all"      ? allItems
+            : timelineFilter === "task"     ? allItems.filter(i => isTaskAction(i))
+            : timelineFilter === "activity" ? allItems.filter(i => i._type === "activity" && !isTaskAction(i))
+            : allItems.filter(i => i._type === timelineFilter);
 
         const now = Date.now();
         const MS_7D = 7 * 86_400_000;
@@ -1226,10 +1294,12 @@ export default function LeadDetail() {
                                     <p className="text-sm font-semibold text-gray-900 truncate">{lead.assignedTo.name}</p>
                                 </div>
                             </div>
-                        ) : <div className="flex items-center gap-3 px-3 py-2 text-gray-300">
+                        ) : (
+                            <div className="flex items-center gap-3 px-3 py-2 text-gray-300">
                                 <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center"><User className="h-4 w-4" /></div>
                                 <p className="text-xs">Unassigned</p>
-                            </div>}
+                            </div>
+                        )}
                     </div>
 
                     {/* Action bar — primary on left, secondary on right */}
@@ -1275,6 +1345,14 @@ export default function LeadDetail() {
                         </div>
 
                         <div className="flex items-center gap-2 flex-wrap">
+                            {isAdmin && (
+                                <button
+                                    onClick={() => setShowEditLead(true)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold border border-gray-200 rounded-lg transition-all"
+                                >
+                                    <Pencil className="h-3.5 w-3.5" /> Edit Lead
+                                </button>
+                            )}
                             {isAdmin && (
                                 <button
                                     onClick={() => setShowTaskModal(true)}
@@ -1629,6 +1707,17 @@ export default function LeadDetail() {
                     </div>
                 )}
             </div>
+
+            {/* Edit Lead SlidePanel */}
+            <SlidePanel isOpen={showEditLead} onClose={() => setShowEditLead(false)} title="Edit Lead">
+                <AddLeadForm
+                    lead={lead}
+                    onClose={() => {
+                        setShowEditLead(false);
+                        queryClient.invalidateQueries({ queryKey: ["lead", id] });
+                    }}
+                />
+            </SlidePanel>
 
             {/* Create Task SlidePanel */}
             <SlidePanel isOpen={showTaskModal} onClose={() => setShowTaskModal(false)} title="Create Task">

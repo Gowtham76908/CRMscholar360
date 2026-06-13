@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
@@ -19,10 +19,10 @@ const { createInvoiceSchema, addPaymentSchema } = require("../middleware/schemas
 
 router.use(authMiddleware);
 
-// All invoice access is privileged — financials are visible to MANAGER/SUPER_ADMIN
+// All invoice access is privileged — financials are visible to ADMIN/SUPER_ADMIN
 // (the sidebar already restricts the page to SUPER_ADMIN; managers may read via deal pages).
 // Without this gate, EMPLOYEEs could list/read/aggregate any invoice in the system.
-const READ_ROLES  = ["SUPER_ADMIN", "MANAGER"];
+const READ_ROLES  = ["SUPER_ADMIN", "ADMIN"];
 const WRITE_ROLES = ["SUPER_ADMIN"];
 
 router.get("/balance-sheet", roleMiddleware(READ_ROLES), getBalanceSheet);

@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const router  = express.Router();
 const auth    = require("../middleware/authMiddleware");
 const role    = require("../middleware/roleMiddleware");
@@ -6,7 +6,7 @@ const ctrl    = require("../controllers/teamPerformanceController");
 
 router.use(auth);
 
-const MANAGERS = ["SUPER_ADMIN", "MANAGER"];
+const MANAGERS = ["SUPER_ADMIN", "ADMIN"];
 
 router.get("/kpis",           role(MANAGERS), ctrl.getKPIs);
 router.get("/lead-chart",     role(MANAGERS), ctrl.getLeadChart);

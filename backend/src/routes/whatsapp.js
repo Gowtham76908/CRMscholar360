@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
@@ -35,16 +35,16 @@ router.get("/:leadId/messages", getMessages);
 
 // Campaigns — write operations restricted to ADMIN+
 router.get("/campaigns", listCampaigns);
-router.post("/campaigns", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), validate(createCampaignSchema), createCampaign);
+router.post("/campaigns", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(createCampaignSchema), createCampaign);
 router.get("/campaigns/:id", getCampaign);
-router.post("/campaigns/:id/start", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), startCampaign);
-router.post("/campaigns/:id/pause", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), pauseCampaign);
-router.post("/campaigns/:id/resume", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), resumeCampaign);
+router.post("/campaigns/:id/start", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), startCampaign);
+router.post("/campaigns/:id/pause", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), pauseCampaign);
+router.post("/campaigns/:id/resume", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), resumeCampaign);
 
 // Auto-replies — write operations restricted to ADMIN+
 router.get("/auto-replies", listAutoReplies);
-router.post("/auto-replies", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), validate(createAutoReplySchema), createAutoReply);
-router.patch("/auto-replies/:id", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), updateAutoReply);
-router.delete("/auto-replies/:id", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), deleteAutoReply);
+router.post("/auto-replies", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(createAutoReplySchema), createAutoReply);
+router.patch("/auto-replies/:id", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), updateAutoReply);
+router.delete("/auto-replies/:id", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), deleteAutoReply);
 
 module.exports = router;

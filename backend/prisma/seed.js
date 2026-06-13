@@ -1,4 +1,4 @@
-/**
+﻿/**
  * DCRM Complete Seed
  *
  * Structure:
@@ -149,7 +149,7 @@ async function main() {
     const managers = [];
     for (const m of managersData) {
         const mgr = await prisma.user.create({
-            data: { ...m, password, role: "MANAGER", isActive: true, managerId: superAdmin.id },
+            data: { ...m, password, role: "ADMIN", isActive: true, managerId: superAdmin.id },
         });
         await prisma.employeeProfile.create({
             data: {
@@ -164,7 +164,7 @@ async function main() {
             },
         });
         managers.push(mgr);
-        console.log(`  ✓ ${mgr.name} (MANAGER)`);
+        console.log(`  ✓ ${mgr.name} (ADMIN)`);
     }
 
     // ── 3. Employees (10 per manager) ──────────────────────────────────────────
@@ -552,8 +552,8 @@ async function main() {
     console.log("\nLogin credentials (password: Demo@1234)");
     console.log("─────────────────────────────────────────");
     console.log("  SUPER_ADMIN  admin@dcrm.com");
-    console.log("  MANAGER      arun.manager@dcrm.com");
-    console.log("  MANAGER      meena.manager@dcrm.com");
+    console.log("  ADMIN      arun.manager@dcrm.com");
+    console.log("  ADMIN      meena.manager@dcrm.com");
     console.log("  EMPLOYEE     rahul.verma@dcrm.com  (Team Arun)");
     console.log("  EMPLOYEE     arjun.nair@dcrm.com   (Team Meena)");
     console.log("─────────────────────────────────────────");

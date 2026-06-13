@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+﻿import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../../lib/utils";
 import api from "../../api/axios";
@@ -237,7 +237,7 @@ function AnalyticsPanel() {
 function AdminPanel() {
     const { user } = useAuth();
     const isSuperAdmin = user?.role === "SUPER_ADMIN";
-    const isManager = isSuperAdmin || user?.role === "MANAGER";
+    const isManager = isSuperAdmin || user?.role === "ADMIN";
 
     return (
         <>

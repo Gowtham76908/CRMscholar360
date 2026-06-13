@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const { toIST, istDateKey } = require("../utils/istTime");
 
 // A task is "on time" if completed on or before its due date (IST calendar day).
@@ -18,7 +18,7 @@ const getLeaderboard = async (req, res, next) => {
         // Rank all active staff (employees + managers) — super admins are excluded.
         const employees = await prisma.user.findMany({
             where: {
-                role: { in: ['EMPLOYEE', 'MANAGER'] },
+                role: { in: ['EMPLOYEE', 'ADMIN'] },
                 isActive: true
             },
             select: { id: true, name: true, email: true, department: true, jobTitle: true, profilePhoto: true }

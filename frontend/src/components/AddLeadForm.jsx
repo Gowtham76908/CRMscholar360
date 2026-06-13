@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
 import { Loader2, AlertTriangle, ExternalLink } from "lucide-react";
@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 // System field keys that map to top-level Lead columns (not customFields JSON)
 const SYSTEM_KEYS = new Set([
     "name", "phone", "email", "company", "source",
-    "enquiryType", "biodata", "jobTitle", "linkedinUrl", "category",
+    "enquiryType", "biodata", "jobTitle", "linkedinUrl",
 ]);
 
 // Human-readable labels for enum values
@@ -71,6 +71,13 @@ const AddLeadForm = ({ onClose, lead }) => {
     const queryClient = useQueryClient();
     const isEdit = !!lead;
     const [errors, setErrors] = useState({});
+    const [assignedToId, setAssignedToId] = useState(lead?.assignedToId ?? "");
+    const [team, setTeam] = useState([]);
+
+    useEffect(() => {
+        if (!isEdit) return;
+        api.get("/team").then(r => setTeam(r.data)).catch(() => {});
+    }, [isEdit]);
 
     const { data: allFields = [], isLoading: fieldsLoading } = useQuery({
         queryKey: ["lead-fields"],
@@ -78,7 +85,7 @@ const AddLeadForm = ({ onClose, lead }) => {
         staleTime: 5 * 60_000,
     });
 
-    const visibleFields = allFields.filter(f => f.visible);
+    const visibleFields = allFields.filter(f => f.visible && f.fieldKey !== "category");
 
     // Build initial values from lead (edit mode) or empty
     const buildInitial = () => {
@@ -176,6 +183,9 @@ const AddLeadForm = ({ onClose, lead }) => {
         if (isEdit && followUpDate) {
             payload.nextFollowUpAt = followUpDate;
         }
+        if (isEdit) {
+            payload.assignedToId = assignedToId || null;
+        }
 
         mutation.mutate(payload);
     };
@@ -225,7 +235,21 @@ const AddLeadForm = ({ onClose, lead }) => {
             ))}
 
             {isEdit && (
-                <div className="border-t border-gray-100 pt-4">
+                <div className="border-t border-gray-100 pt-4 space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Assign To</label>
+                        <select
+                            value={assignedToId}
+                            onChange={e => setAssignedToId(e.target.value)}
+                            className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl bg-gray-50/50 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all shadow-sm appearance-none"
+                        >
+                            <option value="">Unassigned</option>
+                            {team.map(m => (
+                                <option key={m.id} value={m.id}>{m.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
                         Follow-up Date
                         <span className="ml-1 text-[10px] text-gray-400 font-normal normal-case">(optional)</span>
@@ -239,6 +263,7 @@ const AddLeadForm = ({ onClose, lead }) => {
                     {followUpDate && new Date(followUpDate) < new Date() && (
                         <p className="text-xs text-red-500 mt-1 font-semibold">This date is in the past — lead will appear overdue.</p>
                     )}
+                    </div>
                 </div>
             )}
 

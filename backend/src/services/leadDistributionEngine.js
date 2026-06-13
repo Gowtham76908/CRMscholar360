@@ -468,7 +468,7 @@ async function notifyAdminsOfUnassignedBacklog() {
     if (unassignedCount === 0) return;
 
     const admins = await prisma.user.findMany({
-        where: { role: { in: ["SUPER_ADMIN", "MANAGER"] }, isActive: true },
+        where: { role: { in: ["SUPER_ADMIN", "ADMIN"] }, isActive: true },
         select: { id: true },
     });
     if (admins.length === 0) return;

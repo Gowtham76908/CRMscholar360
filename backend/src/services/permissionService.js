@@ -1,10 +1,10 @@
-const { getTeamMemberIds } = require("./organizationService");
+﻿const { getTeamMemberIds } = require("./organizationService");
 
 async function canAccessUser(requesterId, requesterRole, targetUserId) {
     if (requesterRole === "SUPER_ADMIN") return true;
     if (requesterId === targetUserId) return true;
 
-    if (requesterRole === "MANAGER") {
+    if (requesterRole === "ADMIN") {
         const teamIds = await getTeamMemberIds(requesterId);
         return teamIds.includes(targetUserId);
     }
@@ -19,7 +19,7 @@ async function canAccessLead(requesterId, requesterRole, lead) {
         return lead.assignedToId === requesterId;
     }
 
-    if (requesterRole === "MANAGER") {
+    if (requesterRole === "ADMIN") {
         if (!lead.assignedToId) return true;
         const teamIds = await getTeamMemberIds(requesterId);
         return teamIds.includes(lead.assignedToId);
@@ -30,13 +30,7 @@ async function canAccessLead(requesterId, requesterRole, lead) {
 
 async function canReassignLeadTo(requesterId, requesterRole, targetEmployeeId) {
     if (requesterRole === "EMPLOYEE") return false;
-    if (requesterRole === "SUPER_ADMIN") return true;
-
-    if (requesterRole === "MANAGER") {
-        const teamIds = await getTeamMemberIds(requesterId);
-        return teamIds.includes(targetEmployeeId);
-    }
-
+    if (requesterRole === "SUPER_ADMIN" || requesterRole === "ADMIN") return true;
     return false;
 }
 

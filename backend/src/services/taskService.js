@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const paginate = require("../utils/paginate");
 
 const taskInclude = {
@@ -18,7 +18,7 @@ const getTasks = async ({ userId, role, page, limit, filter, leadId }) => {
         ? { leadId }
         : role === "EMPLOYEE"
             ? { assignedToId: userId }
-            : role === "MANAGER"
+            : role === "ADMIN"
                 ? { assignedTo: { managerId: userId } }
                 : {};
 

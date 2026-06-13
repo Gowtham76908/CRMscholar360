@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const paginate = require("../utils/paginate");
 const { canAccessLead } = require("./permissionService");
 
@@ -44,7 +44,7 @@ function withComputed(deal) {
 // Build a Prisma where clause based on role
 function rbacWhere(userId, role) {
     if (role === "SUPER_ADMIN") return { deletedAt: null };
-    if (role === "MANAGER") {
+    if (role === "ADMIN") {
         return {
             deletedAt: null,
             OR: [
@@ -213,7 +213,7 @@ const getPipelineMembers = async (userId, role) => {
             orderBy: { name: "asc" },
         });
     }
-    if (role === "MANAGER") {
+    if (role === "ADMIN") {
         return prisma.user.findMany({
             where: { OR: [{ id: userId }, { managerId: userId }], isActive: true },
             select: { id: true, name: true, role: true, managerId: true },

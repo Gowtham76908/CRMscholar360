@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useEffect, useCallback } from "react";
+﻿import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Search, Filter, Edit, Plus, Upload, Phone, PhoneCall, Play, Pause, SearchCheck, Users, History, Mail, ChevronLeft, ChevronRight as ChevronRightIcon, LayoutGrid, List, Zap, X, SlidersHorizontal, AlertTriangle, ChevronDown, User, Calendar, Star, Tag, Globe, CheckCircle2 } from "lucide-react";
@@ -114,7 +114,7 @@ const Leads = () => {
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const queryClient = useQueryClient();
     const { user } = useAuth();
-    const isManager = ["SUPER_ADMIN", "MANAGER"].includes(user?.role);
+    const isManager = ["SUPER_ADMIN", "ADMIN"].includes(user?.role);
 
     const { data: leadsData, isLoading, isFetching } = useQuery({
         queryKey: ["leads", page, searchTerm, statusFilter, activeTab, sortBy, sortOrder, scoreMin, scoreMax, mineFilter, sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, assignedToFilter],

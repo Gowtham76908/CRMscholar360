@@ -1,8 +1,8 @@
-const { getPipelineDeals, getRevenueStats, getTopLeadsByRevenue } = require("../../services/dealService");
+﻿const { getPipelineDeals, getRevenueStats, getTopLeadsByRevenue } = require("../../services/dealService");
 
 const get_pipeline_summary = {
     name:        "get_pipeline_summary",
-    description: "Deal pipeline grouped by stage (NEW, NEGOTIATION, WON, LOST). Returns count and total amount per stage, plus KPIs (active value, won revenue, lost revenue, avg deal size, total deals, win rate %). RBAC: EMPLOYEE sees own deals, MANAGER sees team, SUPER_ADMIN sees all. Currency is INR.",
+    description: "Deal pipeline grouped by stage (NEW, NEGOTIATION, WON, LOST). Returns count and total amount per stage, plus KPIs (active value, won revenue, lost revenue, avg deal size, total deals, win rate %). RBAC: EMPLOYEE sees own deals, ADMIN sees team, SUPER_ADMIN sees all. Currency is INR.",
     parameters:  { type: "object", properties: {}, required: [] },
     execute: async (_args, { userId, role }) => {
         const { columns, kpi } = await getPipelineDeals(userId, role);
@@ -27,7 +27,7 @@ const get_revenue_stats = {
 
 const get_top_leads_by_revenue = {
     name:        "get_top_leads_by_revenue",
-    description: "Top leads ranked by total deal amount in a given stage. Use this for questions like 'top customers by revenue', 'biggest accounts', 'which leads brought the most money', 'top deals in negotiation'. Defaults to WON (realised revenue). Returns lead id (use for entity links), name, status, contact, summed amount, and deal count. RBAC: EMPLOYEE = own deals, MANAGER = team, SUPER_ADMIN = all. Amounts in INR.",
+    description: "Top leads ranked by total deal amount in a given stage. Use this for questions like 'top customers by revenue', 'biggest accounts', 'which leads brought the most money', 'top deals in negotiation'. Defaults to WON (realised revenue). Returns lead id (use for entity links), name, status, contact, summed amount, and deal count. RBAC: EMPLOYEE = own deals, ADMIN = team, SUPER_ADMIN = all. Amounts in INR.",
     parameters:  {
         type: "object",
         properties: {

@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const { getTeamMemberIds } = require("../services/organizationService");
 const { csvField } = require("../utils/csv");
 
@@ -10,7 +10,7 @@ const exportTasks = async (req, res, next) => {
         const where = {};
         if (role === "EMPLOYEE") {
             where.assignedToId = userId;
-        } else if (role === "MANAGER") {
+        } else if (role === "ADMIN") {
             const teamIds = await getTeamMemberIds(userId);
             if (teamIds.length > 0) where.assignedToId = { in: [...teamIds, userId] };
         }
@@ -51,7 +51,7 @@ const exportTeamPerformance = async (req, res, next) => {
 
         // A manager only exports their own team; super admin exports all employees.
         const where = { role: "EMPLOYEE" };
-        if (role === "MANAGER") {
+        if (role === "ADMIN") {
             const teamIds = await getTeamMemberIds(userId);
             where.id = { in: teamIds };
         }

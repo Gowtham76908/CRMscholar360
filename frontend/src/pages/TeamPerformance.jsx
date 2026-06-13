@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
@@ -98,7 +98,7 @@ const TeamPerformance = () => {
     const [sortBy,  setSortBy]  = useState("name");
     const [sortDir, setSortDir] = useState("asc");
 
-    if (!["SUPER_ADMIN", "MANAGER"].includes(user?.role)) {
+    if (!["SUPER_ADMIN", "ADMIN"].includes(user?.role)) {
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="text-center">

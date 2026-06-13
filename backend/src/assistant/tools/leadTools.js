@@ -1,4 +1,4 @@
-const prisma                = require("../../utils/prisma");
+﻿const prisma                = require("../../utils/prisma");
 const { getLeads }          = require("../../services/leadService");
 const { getTeamMemberIds }  = require("../../services/organizationService");
 
@@ -50,7 +50,7 @@ const count_leads_by_status = {
         const where = { status: { not: "MERGED" } };
         if (role === "EMPLOYEE") {
             where.assignedToId = userId;
-        } else if (role === "MANAGER") {
+        } else if (role === "ADMIN") {
             const teamIds = await getTeamMemberIds(userId);
             if (teamIds.length > 0) {
                 where.OR = [{ assignedToId: { in: teamIds } }, { assignedToId: null }];

@@ -37,7 +37,24 @@ const getMyReminders = async (req, res, next) => {
             where,
             orderBy: { remindAt: "asc" }
         });
-        res.json(reminders);
+
+        // Attach lead name/id manually (Reminder model has no declared relation)
+        const leadIds = [...new Set(reminders.map(r => r.leadId).filter(Boolean))];
+        let leadMap = {};
+        if (leadIds.length) {
+            const leads = await prisma.lead.findMany({
+                where: { id: { in: leadIds } },
+                select: { id: true, name: true },
+            });
+            leadMap = Object.fromEntries(leads.map(l => [l.id, l]));
+        }
+
+        const result = reminders.map(r => ({
+            ...r,
+            lead: r.leadId ? (leadMap[r.leadId] ?? null) : null,
+        }));
+
+        res.json(result);
     } catch (error) {
         return next(error);
     }

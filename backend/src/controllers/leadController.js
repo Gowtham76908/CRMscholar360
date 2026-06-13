@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const paginate = require("../utils/paginate");
 const calculateLeadScore = require("../utils/leadScorer");
 const { recomputeLeadScore } = require("../services/leadScoringService");
@@ -466,11 +466,11 @@ const exportLeads = async (req, res, next) => {
         try {
             // Apply the same role-based scoping used in getLeads — prevents a non-admin
             // from exfiltrating the entire lead database via a single export request.
-            // EMPLOYEE → own leads, MANAGER → team (+ unassigned), SUPER_ADMIN → all.
+            // EMPLOYEE → own leads, ADMIN → team (+ unassigned), SUPER_ADMIN → all.
             const where = {};
             if (role === "EMPLOYEE") {
                 where.assignedToId = userId;
-            } else if (role === "MANAGER") {
+            } else if (role === "ADMIN") {
                 const teamIds = await getTeamMemberIds(userId);
                 if (teamIds.length > 0) {
                     where.OR = [{ assignedToId: { in: teamIds } }, { assignedToId: null }];
@@ -864,7 +864,7 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
         if (allocationMode === "smart" && createdLeadIds.length > 0) {
             await updateJob({ stage: "assigning", progress: 75 });
             try {
-                const assignOpts = role === "MANAGER"
+                const assignOpts = role === "ADMIN"
                     ? { managerId: userId, actorId: userId }
                     : { actorId: userId };
                 const result = await batchAssignLeads(createdLeadIds, assignOpts);
@@ -1097,7 +1097,7 @@ const getDuplicates = async (req, res, next) => {
 const getTeamStats = async (req, res, next) => {
     try {
         const { role } = req.user;
-        if (!["SUPER_ADMIN", "MANAGER"].includes(role)) {
+        if (!["SUPER_ADMIN", "ADMIN"].includes(role)) {
             throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Forbidden");
         }
 
@@ -1186,17 +1186,6 @@ const reassignLead = async (req, res, next) => {
 
         const lead = await prisma.lead.findUnique({ where: { id } });
         if (!lead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
-
-        // MANAGER: current lead assignee must also be in same team
-        if (role === "MANAGER" && lead.assignedToId) {
-            const assignee = await prisma.user.findUnique({
-                where: { id: lead.assignedToId },
-                select: { managerId: true },
-            });
-            if (assignee?.managerId !== userId) {
-                throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You can only reassign leads currently assigned to your team members");
-            }
-        }
 
         const employee = await prisma.user.findUnique({ where: { id: employeeId } });
         if (!employee) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Employee not found");

@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const { ApiError } = require("../utils/apiError");
 const {
     getTeamWithStats,
@@ -18,7 +18,7 @@ const getOrgTeam = async (req, res, next) => {
         const members =
             role === "SUPER_ADMIN"
                 ? await getFullOrgWithStats()
-                : await getTeamWithStats(userId); // MANAGER sees own team
+                : await getTeamWithStats(userId); // ADMIN sees own team
         res.json(members);
     } catch (err) {
         return next(err);
@@ -126,7 +126,7 @@ const setManager = async (req, res, next) => {
 const getManagers = async (req, res, next) => {
     try {
         const managers = await prisma.user.findMany({
-            where: { role: { in: ["SUPER_ADMIN", "MANAGER"] }, isActive: true },
+            where: { role: { in: ["SUPER_ADMIN", "ADMIN"] }, isActive: true },
             select: { id: true, name: true, email: true, role: true, department: true },
             orderBy: { name: "asc" },
         });

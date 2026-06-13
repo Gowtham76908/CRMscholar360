@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Tests for leadService.getLeads
  *
  * Strategy: mock prisma.$transaction so we never hit a real DB.
@@ -63,9 +63,9 @@ describe("getLeads — role visibility", () => {
         expect(whereArg.OR).toBeUndefined();
     });
 
-    test("MANAGER with team members: where.OR includes team + unassigned", async () => {
+    test("ADMIN with team members: where.OR includes team + unassigned", async () => {
         getTeamMemberIds.mockResolvedValue(["emp-1", "emp-2"]);
-        await getLeads({ userId: "mgr-1", role: "MANAGER" });
+        await getLeads({ userId: "mgr-1", role: "ADMIN" });
 
         const whereArg = prisma.lead.count.mock.calls[0][0].where;
         expect(whereArg.OR).toHaveLength(2);
@@ -73,9 +73,9 @@ describe("getLeads — role visibility", () => {
         expect(whereArg.OR[1]).toMatchObject({ assignedToId: null });
     });
 
-    test("MANAGER with empty team: no OR restriction (sees all)", async () => {
+    test("ADMIN with empty team: no OR restriction (sees all)", async () => {
         getTeamMemberIds.mockResolvedValue([]);
-        await getLeads({ userId: "mgr-1", role: "MANAGER" });
+        await getLeads({ userId: "mgr-1", role: "ADMIN" });
 
         const whereArg = prisma.lead.count.mock.calls[0][0].where;
         expect(whereArg.OR).toBeUndefined();
@@ -175,7 +175,7 @@ describe("getLeads — search", () => {
 
     test("search with existing manager OR: merges into AND to avoid overwriting scope", async () => {
         getTeamMemberIds.mockResolvedValue(["emp-1"]);
-        await getLeads({ userId: "mgr-1", role: "MANAGER", search: "Bob" });
+        await getLeads({ userId: "mgr-1", role: "ADMIN", search: "Bob" });
 
         const where = prisma.lead.count.mock.calls[0][0].where;
         // Manager scope moved to AND[0].OR; search in AND[1].OR

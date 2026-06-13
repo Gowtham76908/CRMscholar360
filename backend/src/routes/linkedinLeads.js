@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
@@ -10,6 +10,6 @@ router.use(authMiddleware);
 router.post("/", searchLinkedInLeads);
 
 // Import selected LinkedIn leads (managers + super admin)
-router.post("/import", roleMiddleware(["SUPER_ADMIN", "MANAGER"]), importLinkedInLeads);
+router.post("/import", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), importLinkedInLeads);
 
 module.exports = router;

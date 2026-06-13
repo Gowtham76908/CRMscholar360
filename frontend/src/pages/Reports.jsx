@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Download, TrendingUp, PieChart as PieIcon, Users, Shield, Loader2, Trophy, Clock, Target } from "lucide-react";
@@ -10,7 +10,7 @@ import { cn } from "../lib/utils";
 const Reports = () => {
     const { user: currentUser } = useAuth();
     const [dateRange, setDateRange] = useState({ from: "", to: "" });
-    const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "MANAGER";
+    const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
 
     const { data: leadsBySource, isLoading: loadingSource } = useQuery({
         queryKey: ["leads-by-source", dateRange],

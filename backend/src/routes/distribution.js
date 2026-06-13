@@ -8,7 +8,7 @@ const ctrl    = require("../controllers/distributionController");
 
 router.use(auth);
 
-const MANAGERS = ["SUPER_ADMIN", "MANAGER"];
+const MANAGERS = ["SUPER_ADMIN", "ADMIN"];
 
 // Unassigned pool
 router.get("/unassigned",             role(MANAGERS),    ctrl.getUnassignedLeads);

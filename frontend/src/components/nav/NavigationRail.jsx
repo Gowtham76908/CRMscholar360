@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+﻿import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Users, MessageSquare, Zap, BarChart, Settings2, Command } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -76,7 +76,7 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
     const location = useLocation();
     const { user, onlineStatus } = useAuth();
     const isSuperAdmin = user?.role === "SUPER_ADMIN";
-    const isManager = isSuperAdmin || user?.role === "MANAGER";
+    const isManager = isSuperAdmin || user?.role === "ADMIN";
     const activeMode = getModeFromPath(location.pathname);
 
     // The Admin mode is shown to managers too; AdminPanel gates individual links

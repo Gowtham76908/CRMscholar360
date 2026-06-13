@@ -1,4 +1,4 @@
-/**
+﻿/**
  * DCRM - Comprehensive System Seed Script
  * Creates realistic operational data for end-to-end QA testing.
  * Run: node seed.js
@@ -234,7 +234,7 @@ async function main() {
             name: "Karthik Reddy",
             email: "karthik.reddy@dcrm.io",
             phone: "+91 9876512345",
-            role: "TEAM_LEAD",
+            role: "EMPLOYEE",
             department: "Sales",
             jobTitle: "Senior Sales Executive",
         },
@@ -242,7 +242,7 @@ async function main() {
             name: "Ananya Nair",
             email: "ananya.nair@dcrm.io",
             phone: "+91 9765432109",
-            role: "TEAM_LEAD",
+            role: "EMPLOYEE",
             department: "Customer Support",
             jobTitle: "Support Lead",
         },
@@ -292,7 +292,7 @@ async function main() {
             name: "Suresh Murugesan",
             email: "suresh.agent@dcrm.io",
             phone: "+91 9109876543",
-            role: "AGENT",
+            role: "EMPLOYEE",
             department: "Customer Support",
             jobTitle: "Support Agent",
         },
@@ -300,7 +300,7 @@ async function main() {
             name: "Kavya Annamalai",
             email: "kavya.agent@dcrm.io",
             phone: "+91 9009876543",
-            role: "AGENT",
+            role: "EMPLOYEE",
             department: "Sales",
             jobTitle: "Sales Agent",
         },
@@ -308,7 +308,7 @@ async function main() {
             name: "Nikhil Natarajan",
             email: "nikhil.agent@dcrm.io",
             phone: "+91 8998765432",
-            role: "AGENT",
+            role: "EMPLOYEE",
             department: "Technical",
             jobTitle: "Technical Agent",
         },
@@ -316,7 +316,7 @@ async function main() {
             name: "Divya Selvaraj",
             email: "divya.agent@dcrm.io",
             phone: "+91 8887654321",
-            role: "AGENT",
+            role: "EMPLOYEE",
             department: "Customer Support",
             jobTitle: "Customer Agent",
         },
@@ -324,7 +324,7 @@ async function main() {
             name: "Bala Chandrasekaran",
             email: "bala.agent@dcrm.io",
             phone: "+91 8776543210",
-            role: "AGENT",
+            role: "EMPLOYEE",
             department: "Sales",
             jobTitle: "Lead Generation Agent",
         },
@@ -353,9 +353,9 @@ async function main() {
         });
         users.push(user);
     }
-    console.log(`  ✓ ${users.length} users (1 SUPER_ADMIN, 2 ADMIN, 2 TEAM_LEAD, 5 EMPLOYEE, 5 AGENT)`);
+    console.log(`  ✓ ${users.length} users (1 SUPER_ADMIN, 2 ADMIN, 2 EMPLOYEE, 5 EMPLOYEE, 5 AGENT)`);
 
-    const salesUsers = users.filter(u => ["EMPLOYEE", "AGENT", "TEAM_LEAD"].includes(u.role));
+    const salesUsers = users.filter(u => ["EMPLOYEE", "EMPLOYEE", "EMPLOYEE"].includes(u.role));
     const adminUsers = users.filter(u => ["SUPER_ADMIN", "ADMIN"].includes(u.role));
     const allAssignableUsers = [...salesUsers, ...adminUsers.slice(0, 1)];
 

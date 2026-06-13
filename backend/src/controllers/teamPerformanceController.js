@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const { getTeamMemberIds } = require("../services/organizationService");
 const { ApiError } = require("../utils/apiError");
 const { istDateKey } = require("../utils/istTime");
@@ -777,7 +777,7 @@ const getRevenueByManager = async (req, res, next) => {
         const dr = dateRange(period, from, to);
 
         const managers = await prisma.user.findMany({
-            where: { role: "MANAGER", isActive: true },
+            where: { role: "ADMIN", isActive: true },
             select: { id: true, name: true },
         });
 

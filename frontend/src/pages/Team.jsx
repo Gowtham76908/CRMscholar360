@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
 import { Loader2, Trash2, Power, UserPlus, Shield, ToggleLeft, ToggleRight, Edit, Mail, Building } from "lucide-react";
@@ -12,7 +12,7 @@ import { cn } from "../lib/utils";
 
 const ROLE_STYLES = {
     SUPER_ADMIN: "bg-indigo-100 text-indigo-700",
-    MANAGER:     "bg-orange-100 text-orange-700",
+    ADMIN:     "bg-orange-100 text-orange-700",
     EMPLOYEE:    "bg-gray-100 text-gray-600",
 };
 
@@ -62,7 +62,7 @@ const Team = () => {
     if (teamError) return <div className="text-center py-20 text-red-500">{teamError.response?.data?.message || "Failed to load team."}</div>;
 
     const active = team?.filter(m => m.isActive).length ?? 0;
-    const admins = team?.filter(m => ["MANAGER","SUPER_ADMIN"].includes(m.role)).length ?? 0;
+    const admins = team?.filter(m => ["ADMIN","SUPER_ADMIN"].includes(m.role)).length ?? 0;
 
     return (
         <div className="space-y-6">
@@ -133,18 +133,18 @@ const Team = () => {
                                 {/* Admin toggle — super admin only */}
                                 {currentUser.role === "SUPER_ADMIN" ? (
                                     <button
-                                        onClick={() => roleMutation.mutate({ userId: member.id, role: member.role === "MANAGER" ? "EMPLOYEE" : "MANAGER" })}
+                                        onClick={() => roleMutation.mutate({ userId: member.id, role: member.role === "ADMIN" ? "EMPLOYEE" : "ADMIN" })}
                                         title="Toggle Manager"
                                         className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-indigo-600 transition-colors"
                                     >
-                                        {member.role === "MANAGER"
+                                        {member.role === "ADMIN"
                                             ? <ToggleRight className="h-5 w-5 text-orange-500" />
                                             : <ToggleLeft className="h-5 w-5 text-gray-300" />
                                         }
-                                        <span>{member.role === "MANAGER" ? "Manager" : "Employee"}</span>
+                                        <span>{member.role === "ADMIN" ? "Manager" : "Employee"}</span>
                                     </button>
                                 ) : (
-                                    <span className="text-xs text-gray-400">{member.role === "MANAGER" ? "Manager access" : "Standard access"}</span>
+                                    <span className="text-xs text-gray-400">{member.role === "ADMIN" ? "Manager access" : "Standard access"}</span>
                                 )}
 
                                 <div className="flex items-center gap-1.5">

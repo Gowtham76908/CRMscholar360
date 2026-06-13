@@ -1,25 +1,34 @@
+import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
-import { 
-    ChevronLeft, 
-    Calendar, 
-    User, 
-    Tag, 
-    FileText, 
-    Download, 
-    ExternalLink, 
-    Clock, 
-    CheckCircle2, 
+import { useAuth } from "../context/AuthContext";
+import TaskModal from "../components/TaskModal";
+import {
+    ChevronLeft,
+    Calendar,
+    User,
+    Tag,
+    FileText,
+    Download,
+    ExternalLink,
+    Clock,
+    CheckCircle2,
     Circle,
     Loader2,
-    Briefcase
+    Briefcase,
+    Pencil,
+    Trash2
 } from "lucide-react";
 
 const TaskDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const { user } = useAuth();
+    const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN";
+    const [showEdit, setShowEdit] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     const { data: task, isLoading, error } = useQuery({
         queryKey: ["tasks", id],
@@ -36,6 +45,14 @@ const TaskDetail = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["tasks", id] });
             queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        },
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: () => api.delete(`/tasks/${id}`),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            task?.leadId ? navigate(`/leads/${task.leadId}`) : navigate("/tasks");
         },
     });
 
@@ -57,33 +74,50 @@ const TaskDetail = () => {
             <div className="p-8 text-center">
                 <h2 className="text-xl font-bold text-gray-900">Task not found</h2>
                 <button 
-                    onClick={() => navigate("/tasks")}
+                    onClick={() => navigate(-1)}
                     className="mt-4 text-indigo-600 hover:text-indigo-800 font-medium"
                 >
-                    Back to Tasks
+                    Go Back
                 </button>
             </div>
         );
     }
 
     return (
+        <>
         <div className="max-w-5xl mx-auto space-y-6 pb-12">
             {/* Header / Breadcrumbs */}
             <div className="flex items-center justify-between">
                 <button
-                    onClick={() => navigate("/tasks")}
+                    onClick={() => task?.leadId ? navigate(`/leads/${task.leadId}`) : navigate("/tasks")}
                     className="flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
                 >
                     <ChevronLeft className="h-4 w-4 mr-1" />
-                    Back to Tasks
+                    {task?.leadId ? "Back to Lead" : "Back to Tasks"}
                 </button>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                    {isAdmin && (
+                        <button
+                            onClick={() => setShowEdit(true)}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all"
+                        >
+                            <Pencil className="h-4 w-4" />
+                            Edit
+                        </button>
+                    )}
+                    <button
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold bg-red-50 text-red-600 hover:bg-red-100 transition-all"
+                    >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                    </button>
                     <button
                         onClick={handleStatusToggle}
                         disabled={statusMutation.isPending}
                         className={`inline-flex items-center px-4 py-2 rounded-xl text-sm font-bold transition-all
-                            ${task.status === 'COMPLETED' 
-                                ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                            ${task.status === 'COMPLETED'
+                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
                                 : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100'}`}
                     >
                         {statusMutation.isPending ? (
@@ -237,7 +271,9 @@ const TaskDetail = () => {
                             <div className="mt-4">
                                 <p className="text-[10px] text-gray-400 font-bold uppercase">Created</p>
                                 <p className="text-[11px] font-bold text-gray-600 mt-0.5">
-                                    {new Date(task.createdAt).toLocaleString()}
+                                    {task.createdAt
+                                        ? new Date(task.createdAt).toLocaleString()
+                                        : new Date(task.updatedAt).toLocaleString()}
                                 </p>
                             </div>
                         </div>
@@ -245,6 +281,46 @@ const TaskDetail = () => {
                 </div>
             </div>
         </div>
+
+        {/* Edit modal */}
+        {showEdit && (
+            <TaskModal
+                task={task}
+                onClose={() => {
+                    setShowEdit(false);
+                    queryClient.invalidateQueries({ queryKey: ["tasks", id] });
+                }}
+            />
+        )}
+
+        {/* Delete confirmation */}
+        {showDeleteConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+                    <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Task?</h3>
+                    <p className="text-sm text-gray-500 mb-6">
+                        "<span className="font-medium text-gray-700">{task.title}</span>" will be permanently deleted.
+                    </p>
+                    <div className="flex gap-3 justify-end">
+                        <button
+                            onClick={() => setShowDeleteConfirm(false)}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={() => deleteMutation.mutate()}
+                            disabled={deleteMutation.isPending}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors disabled:opacity-50"
+                        >
+                            {deleteMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
     );
 };
 

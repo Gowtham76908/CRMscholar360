@@ -1,4 +1,4 @@
-const prisma = require("../utils/prisma");
+﻿const prisma = require("../utils/prisma");
 const logger = require("../utils/logger");
 const { toIST, istDateKey } = require("../utils/istTime");
 
@@ -21,7 +21,7 @@ const getPrevMonthWinner = async () => {
     const startDate = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), 1));
 
     const employees = await prisma.user.findMany({
-        where: { role: { in: ["EMPLOYEE", "MANAGER"] }, isActive: true },
+        where: { role: { in: ["EMPLOYEE", "ADMIN"] }, isActive: true },
         select: { id: true, name: true }
     });
     if (employees.length === 0) return null;
