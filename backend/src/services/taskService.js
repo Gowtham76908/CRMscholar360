@@ -57,4 +57,27 @@ const getTasks = async ({ userId, role, page, limit, filter, leadId }) => {
     });
 };
 
-module.exports = { getTasks };
+// Lightweight payload for the calendar grid — chips only need title/status/dates,
+// not comments or files. No pagination: a month of tasks is small and the grid
+// needs every task in the range at once.
+const calendarInclude = {
+    lead: { select: { id: true, name: true } },
+    assignedTo: { select: { id: true, name: true } },
+};
+
+const getTasksForCalendar = async ({ userId, role, from, to }) => {
+    const rbacWhere = role === "EMPLOYEE"
+        ? { assignedToId: userId }
+        : role === "ADMIN"
+            ? { assignedTo: { managerId: userId } }
+            : {};
+
+    const tasks = await prisma.task.findMany({
+        where: { ...rbacWhere, dueDate: { gte: from, lte: to } },
+        include: calendarInclude,
+        orderBy: [{ dueDate: "asc" }],
+    });
+    return tasks;
+};
+
+module.exports = { getTasks, getTasksForCalendar };

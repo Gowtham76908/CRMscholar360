@@ -43,7 +43,8 @@ model User {
   leaves         Leave[]
   leaveApprovals LeaveApproval[] @relation("ApproverLeaves")
   sessions       Session[]
-  tasks          Task[]
+  tasks          Task[]          @relation("AssignedTasks")
+  createdTasks   Task[]          @relation("CreatedTasks")
   invoices       Invoice[]       @relation("CreatedInvoices")
   createdDeals   Deal[]          @relation("CreatedDeals")
   assignedDeals  Deal[]          @relation("AssignedDeals")
@@ -248,6 +249,7 @@ model Task {
   description    String?
   leadId         String?
   assignedToId   String?
+  createdById    String?
   dueDate        DateTime
   status         TaskStatus   @default(PENDING)
   kanbanStatus   KanbanStatus @default(TODO)
@@ -262,7 +264,8 @@ model Task {
   completedAt    DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @default(now()) @updatedAt
-  assignedTo     User?        @relation(fields: [assignedToId], references: [id])
+  assignedTo     User?        @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  createdBy      User?        @relation("CreatedTasks", fields: [createdById], references: [id])
   lead           Lead?        @relation(fields: [leadId], references: [id])
   sprint         Sprint?      @relation(fields: [sprintId], references: [id])
   files          TaskFile[]

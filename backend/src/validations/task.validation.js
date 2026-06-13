@@ -7,4 +7,9 @@ const getTasksSchema = z.object({
     leadId: z.string().uuid().optional(),
 });
 
-module.exports = { getTasksSchema };
+const getCalendarSchema = z.object({
+    from: z.coerce.date(),
+    to: z.coerce.date(),
+});
+
+module.exports = { getTasksSchema, getCalendarSchema };

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
@@ -24,6 +24,10 @@ import {
 const TaskDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
+    // Honor where the user came from (e.g. the Tasks calendar/list) so "Back"
+    // returns there instead of always defaulting to the linked lead.
+    const cameFrom = location.state?.from;
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN";
@@ -89,11 +93,14 @@ const TaskDetail = () => {
             {/* Header / Breadcrumbs */}
             <div className="flex items-center justify-between">
                 <button
-                    onClick={() => task?.leadId ? navigate(`/leads/${task.leadId}`) : navigate("/tasks")}
+                    onClick={() => {
+                        if (cameFrom === "/tasks") return navigate("/tasks");
+                        return task?.leadId ? navigate(`/leads/${task.leadId}`) : navigate("/tasks");
+                    }}
                     className="flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
                 >
                     <ChevronLeft className="h-4 w-4 mr-1" />
-                    {task?.leadId ? "Back to Lead" : "Back to Tasks"}
+                    {cameFrom === "/tasks" ? "Back to Tasks" : task?.leadId ? "Back to Lead" : "Back to Tasks"}
                 </button>
                 <div className="flex items-center gap-2">
                     {isAdmin && (
@@ -223,6 +230,15 @@ const TaskDetail = () => {
                                     <div>
                                         <p className="text-[10px] text-gray-400 font-bold uppercase">Assigned To</p>
                                         <p className="text-sm font-bold text-gray-900">{task.assignedTo?.name || "Unassigned"}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-violet-50 rounded-lg text-violet-600 font-bold">
+                                        <User className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase">Created By</p>
+                                        <p className="text-sm font-bold text-gray-900">{task.createdBy?.name || "Automation"}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">

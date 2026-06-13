@@ -2,10 +2,11 @@ import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
 import { toast } from "sonner";
-import { Loader2, CheckCircle, Circle, Plus, Calendar, User } from "lucide-react";
+import { Loader2, CheckCircle, Circle, Plus, Calendar, User, List, CalendarDays } from "lucide-react";
 import { Modal } from "../components/Modal";
 import SlidePanel from "../components/SlidePanel";
 import AddTaskForm from "../components/AddTaskForm";
+import TaskCalendar from "../components/TaskCalendar";
 import { useAuth } from "../context/AuthContext";
 import { Link } from "react-router-dom";
 
@@ -25,6 +26,7 @@ const getPages = (current, total) => {
 const Tasks = () => {
     const queryClient = useQueryClient();
     const [filter, setFilter] = useState("ALL");
+    const [view, setView] = useState("list");
     const [page, setPage] = useState(1);
     const limit = 20;
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -80,7 +82,9 @@ const Tasks = () => {
         statusMutation.mutate({ id: task.id, status: newStatus });
     };
 
-    if (isLoading) {
+    // Calendar view fetches its own data, so don't gate the page on the
+    // paginated list query — only block the full page in list view.
+    if (isLoading && view === "list") {
         return (
             <div className="flex items-center justify-center h-64">
                 <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
@@ -88,7 +92,7 @@ const Tasks = () => {
         );
     }
 
-    if (error) {
+    if (error && view === "list") {
         return (
             <div className="bg-red-50 p-6 rounded-2xl border border-red-100 text-center">
                 <p className="text-red-600 font-bold">Failed to load tasks</p>
@@ -137,6 +141,30 @@ const Tasks = () => {
                 </div>
             </div>
 
+            {/* View toggle */}
+            <div className="flex justify-end">
+                <div className="inline-flex bg-gray-100 rounded-lg p-1 gap-1">
+                    <button
+                        onClick={() => setView("list")}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors
+                            ${view === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                    >
+                        <List className="h-4 w-4" /> List
+                    </button>
+                    <button
+                        onClick={() => setView("calendar")}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors
+                            ${view === "calendar" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                    >
+                        <CalendarDays className="h-4 w-4" /> Calendar
+                    </button>
+                </div>
+            </div>
+
+            {view === "calendar" ? (
+                <TaskCalendar />
+            ) : (
+            <>
             {/* Filter Tabs */}
             <div className="flex gap-2 border-b border-gray-200 pb-1">
                 {["ALL", "PENDING", "COMPLETED", "OVERDUE"].map((f) => (
@@ -169,7 +197,7 @@ const Tasks = () => {
                                         : <Circle className="h-6 w-6" />
                                 }
                             </button>
-                            <Link to={`/tasks/${task.id}`} className="min-w-0 flex-1 group/link">
+                            <Link to={`/tasks/${task.id}`} state={{ from: "/tasks" }} className="min-w-0 flex-1 group/link">
                                 <h3 className={`font-bold text-gray-900 truncate group-hover/link:text-indigo-600 transition-colors ${task.status === "COMPLETED" ? "line-through text-gray-400" : ""}`}>
                                     {task.title}
                                 </h3>
@@ -257,6 +285,8 @@ const Tasks = () => {
                         </button>
                     </nav>
                 </div>
+            )}
+            </>
             )}
 
             <SlidePanel isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Create New Task">

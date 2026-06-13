@@ -1,13 +1,14 @@
 const prisma = require("../utils/prisma");
 const { createNotification } = require("../services/notificationService");
-const { getTasks: getTasksPaginated } = require("../services/taskService");
-const { getTasksSchema } = require("../validations/task.validation");
+const { getTasks: getTasksPaginated, getTasksForCalendar } = require("../services/taskService");
+const { getTasksSchema, getCalendarSchema } = require("../validations/task.validation");
 const { ApiError, ERROR_CODES } = require("../utils/apiError");
 const logActivity = require("../utils/activityLogger");
 
 const taskInclude = {
     lead: { select: { id: true, name: true, phone: true, email: true } },
     assignedTo: { select: { id: true, name: true, email: true } },
+    createdBy: { select: { id: true, name: true, email: true } },
     sprint: { select: { id: true, name: true, status: true } },
     files: true,
     comments: {
@@ -60,6 +61,7 @@ const createTask = async (req, res, next) => {
                 description: description || null,
                 leadId,
                 assignedToId: assignedTo || null,
+                createdById: req.user.userId,
                 dueDate: new Date(dueDate),
                 status: "PENDING",
                 kanbanStatus: resolvedKanbanStatus,
@@ -133,6 +135,25 @@ const getTasks = async (req, res, next) => {
 
         const result = await getTasksPaginated({ userId, role, page, limit, filter, leadId });
         res.json(result);
+    } catch (error) {
+        return next(error);
+    }
+};
+
+// ─── Get Tasks for Calendar (date range, no pagination) ───────────────────────
+
+const getCalendarTasks = async (req, res, next) => {
+    try {
+        const { userId, role } = req.user;
+
+        const validation = getCalendarSchema.safeParse(req.query);
+        if (!validation.success) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "from and to dates are required");
+        }
+
+        const { from, to } = validation.data;
+        const tasks = await getTasksForCalendar({ userId, role, from, to });
+        res.json(tasks);
     } catch (error) {
         return next(error);
     }
@@ -354,7 +375,7 @@ const deleteComment = async (req, res, next) => {
 };
 
 module.exports = {
-    createTask, getTasks, getTaskById,
+    createTask, getTasks, getCalendarTasks, getTaskById,
     updateTask, updateTaskStatus, updateKanbanStatus,
     deleteTask, addComment, getComments, deleteComment
 };

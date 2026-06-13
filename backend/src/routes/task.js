@@ -12,6 +12,7 @@ const adminOnly = roleMiddleware(["SUPER_ADMIN", "ADMIN"]);
 
 // ── Task CRUD ─────────────────────────────────────────────────────────────────
 router.get("/tasks", tc.getTasks);
+router.get("/tasks/calendar", tc.getCalendarTasks);
 router.get("/tasks/:id", tc.getTaskById);
 router.post("/tasks", validate(createTaskSchema), tc.createTask);
 router.put("/tasks/:id", adminOnly, validate(updateTaskSchema), tc.updateTask);
