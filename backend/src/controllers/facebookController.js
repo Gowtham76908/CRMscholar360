@@ -1,11 +1,11 @@
 const prisma = require("../utils/prisma");
+const leadService = require("../services/leadService");
 const axios = require("axios");
 const calculateLeadScore = require("../utils/leadScorer");
 const normalizePhone = require("../utils/normalizePhone");
 const logActivity = require("../utils/activityLogger");
 const { encrypt, decrypt } = require("../utils/encrypt");
 const { ApiError } = require("../utils/apiError");
-const { assignLeadOrAlert: autoAssignLead } = require("../services/leadDistributionEngine");
 const { runRulesForLead } = require("../services/automationEngine");
 
 const FB_API = "https://graph.facebook.com/v18.0";
@@ -161,17 +161,16 @@ const syncLeads = async (req, res, next) => {
 
                 const { score, category } = calculateLeadScore({ source: "FACEBOOK", phone: r.phone, email: r.email });
 
-                const lead = await prisma.lead.create({
-                    data: {
-                        name:            r.name,
-                        email:           r.email || null,
-                        phone:           r.phone || null,
-                        phoneNormalized: normalized,
-                        source:          "FACEBOOK",
-                        enquiryType:     "PRODUCT",
-                        score,
-                        category,
-                    },
+                // Centralized creation: Lead + SALES LeadDepartment (unassigned)
+                const lead = await leadService.createLead({
+                    name:            r.name,
+                    email:           r.email || null,
+                    phone:           r.phone || null,
+                    phoneNormalized: normalized,
+                    source:          "FACEBOOK",
+                    enquiryType:     "PRODUCT",
+                    score,
+                    category,
                 });
 
                 // Track newly inserted phones/emails so within-batch dupes are caught too
@@ -185,10 +184,9 @@ const syncLeads = async (req, res, next) => {
                     metadata: { source: "FACEBOOK_ADS", fbLeadId: r.fbId },
                 });
 
-                // Route the new lead: automation rules + auto-assign (fire-and-forget)
+                // Route the new lead via automation rules (fire-and-forget). The
+                // SALES service is created unassigned for a manager to allocate.
                 runRulesForLead("LEAD_CREATED", lead).catch(console.error);
-                autoAssignLead(lead.id, { actorId: userId, reason: "AUTO_ASSIGNMENT" })
-                    .catch(err => console.error(`[AutoAssign] fb-sync ${lead.id}:`, err.message || err));
 
                 results.imported++;
             } catch (e) {
@@ -272,15 +270,12 @@ const receiveWebhookEvent = async (req, res, next) => {
                     }
 
                     const { score, category } = calculateLeadScore({ source: "FACEBOOK", phone, email });
-                    const lead = await prisma.lead.create({
-                        data: { name, email, phone, source: "FACEBOOK", enquiryType: "PRODUCT", score, category },
-                    });
+                    // Centralized creation: Lead + SALES LeadDepartment (unassigned)
+                    const lead = await leadService.createLead({ name, email, phone, source: "FACEBOOK", enquiryType: "PRODUCT", score, category });
                     await logActivity({ leadId: lead.id, action: "LEAD_CREATED_VIA_WEBHOOK", metadata: { source: "FACEBOOK_REALTIME", leadgenId, formId } });
 
-                    // Route the new lead: automation rules + auto-assign (fire-and-forget)
+                    // Route the new lead via automation rules (fire-and-forget).
                     runRulesForLead("LEAD_CREATED", lead).catch(console.error);
-                    autoAssignLead(lead.id, { reason: "AUTO_ASSIGNMENT" })
-                        .catch(err => console.error(`[AutoAssign] fb-realtime ${lead.id}:`, err.message || err));
                     console.log(`[Facebook] Real-time lead created: ${lead.id}`);
                 } catch (err) {
                     console.error(`[Facebook] Error processing leadgen ${leadgenId}:`, err.message);

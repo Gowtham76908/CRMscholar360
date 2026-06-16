@@ -18,7 +18,7 @@ const NAV_COMMANDS = [
     { id: "nav-reports",     label: "Go to Reports",      path: "/reports",            icon: BarChart,        group: "Navigation" },
     { id: "nav-attendance",  label: "Go to Attendance",   path: "/attendance",         icon: Clock,           group: "Navigation" },
     { id: "nav-leave",       label: "Go to Leave",        path: "/leave",              icon: Calendar,        group: "Navigation" },
-    { id: "nav-departments", label: "Go to Departments",  path: "/departments",        icon: Building,        group: "Navigation" },
+    { id: "nav-dept-queue",  label: "Go to Department Queue", path: "/department-queue", icon: Building,        group: "Navigation" },
     { id: "nav-automations", label: "Go to Automations",  path: "/automations",        icon: Bot,             group: "Navigation" },
     { id: "nav-campaigns",   label: "Go to WA Campaigns", path: "/whatsapp/campaigns", icon: Send,            group: "Navigation" },
     { id: "nav-invoices",    label: "Go to Invoices",     path: "/invoices",           icon: Receipt,         group: "Navigation" },

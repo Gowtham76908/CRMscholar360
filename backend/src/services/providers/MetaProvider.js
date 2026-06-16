@@ -1,5 +1,6 @@
 const ProviderInterface = require("./ProviderInterface");
 const prisma = require("../../utils/prisma");
+const leadService = require("../leadService");
 const { decrypt } = require("../../utils/encrypt");
 
 class MetaProvider extends ProviderInterface {
@@ -49,14 +50,13 @@ class MetaProvider extends ProviderInterface {
                     where: { email: fields.email || null, source: "FACEBOOK" },
                 });
                 if (!existing && (fields.email || fields.phone_number)) {
-                    await prisma.lead.create({
-                        data: {
-                            name: fields.full_name || fields.first_name || "Facebook Lead",
-                            email: fields.email || null,
-                            phone: fields.phone_number || null,
-                            source: "FACEBOOK",
-                            enquiryType: "PRODUCT",
-                        },
+                    // Centralized creation: Lead + SALES LeadDepartment (unassigned)
+                    await leadService.createLead({
+                        name: fields.full_name || fields.first_name || "Facebook Lead",
+                        email: fields.email || null,
+                        phone: fields.phone_number || null,
+                        source: "FACEBOOK",
+                        enquiryType: "PRODUCT",
                     });
                     synced++;
                 }

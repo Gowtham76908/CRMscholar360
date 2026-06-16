@@ -2,14 +2,13 @@
 const router = express.Router();
 const multer = require("multer");
 const leadController = require("../controllers/leadController");
+const leadDepartmentController = require("../controllers/leadDepartmentController");
 const customFieldController = require("../controllers/customFieldController");
 const emailController = require("../controllers/emailController");
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
-const bulkController = require("../controllers/bulkController");
 const validate = require("../middleware/validate");
-const { createLeadSchema, updateLeadSchema, assignLeadSchema, mergeLeadsSchema, checkDuplicateSchema, bulkUpdateSchema, bulkAssignSchema } = require("../middleware/schemas");
-const { bulkSmartAssignLeads } = require("../controllers/bulkController");
+const { createLeadSchema, updateLeadSchema, mergeLeadsSchema, checkDuplicateSchema } = require("../middleware/schemas");
 
 const fileUpload = multer({
     storage: multer.memoryStorage(),
@@ -23,16 +22,13 @@ const fileUpload = multer({
 // All routes require authentication
 router.use(authMiddleware);
 
-// Bulk Actions
-router.patch("/bulk-update", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(bulkUpdateSchema), bulkController.bulkUpdateLeads);
-router.patch("/bulk-assign", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(bulkAssignSchema), bulkController.bulkAssignLeads);
-router.post("/bulk-smart-assign", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), bulkSmartAssignLeads);
+// Global bulk status/assign actions were retired with Lead.status/assignedToId.
+// Bulk stage/consultant changes are per-department (see /lead-departments).
 
-// Get Lead Stats for Dashboard
-router.get("/stats",             leadController.getDashboardStats);
+// Lead lists / alerts (department-scoped). Global status dashboards were retired
+// in favour of per-department analytics (/lead-departments/dashboard).
 router.get("/overdue-followups", leadController.getOverdueFollowUps);
 router.get("/sla-alerts",        leadController.getSLAAlerts);
-router.get("/team-stats",        leadController.getTeamStats);
 router.get("/duplicates",  roleMiddleware(["SUPER_ADMIN", "ADMIN"]), leadController.getDuplicates);
 
 // Export Leads (admin/team_lead only — prevents bulk data leakage)
@@ -48,6 +44,12 @@ router.post("/check-duplicate", validate(checkDuplicateSchema), leadController.c
 
 // Merge Leads (managers + super admin)
 router.post("/merge", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(mergeLeadsSchema), leadController.mergeLeads);
+
+// Multi-department: a lead's department services.
+// List is scoped to the actor; allocation authorization is enforced in the service
+// (Director, Sales Manager, or the assigned Sales consultant).
+router.get("/:id/departments", leadDepartmentController.listForLead);
+router.post("/:id/departments", leadDepartmentController.allocate);
 
 // Get Lead Activities
 router.get("/:id/activities", leadController.getLeadActivities);
@@ -65,14 +67,8 @@ router.get("/", leadController.getLeads);
 // Create Lead (Super Admin & Admin Only)
 router.post("/", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(createLeadSchema), leadController.createLead);
 
-// Assign Lead
-router.patch("/:id/assign", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), validate(assignLeadSchema), leadController.assignLead);
-
-// Reassign Lead with history (Super Admin & Manager)
-router.post("/:id/reassign", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), leadController.reassignLead);
-
-// Update Lead Status (e.g. Employee can update status)
-router.patch("/:id/status", validate(updateLeadSchema), leadController.updateLead);
+// Consultant/stage assignment is per-department: see /lead-departments/:id/assign
+// and /lead-departments/:id/stage. Global lead assign/reassign/status endpoints removed.
 
 // Update entire Lead
 router.put("/:id", validate(updateLeadSchema), leadController.updateLead);

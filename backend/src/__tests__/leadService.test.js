@@ -11,12 +11,16 @@ jest.mock("../utils/prisma", () => ({
     lead: { count: jest.fn(), findMany: jest.fn() },
 }));
 
-jest.mock("../services/organizationService", () => ({
-    getTeamMemberIds: jest.fn(),
+// leadService destructures these from leadDepartmentService at module load.
+// getUserDepartments drives ADMIN visibility scope; the others are unused here.
+jest.mock("../services/leadDepartmentService", () => ({
+    getUserDepartments: jest.fn(),
+    createSalesAssignment: jest.fn(),
+    isMemberOfDepartment: jest.fn(),
 }));
 
 const prisma = require("../utils/prisma");
-const { getTeamMemberIds } = require("../services/organizationService");
+const { getUserDepartments } = require("../services/leadDepartmentService");
 const { getLeads } = require("../services/leadService");
 
 // Helpers
@@ -40,85 +44,91 @@ beforeEach(() => {
     // Default stubs — individual tests override as needed
     prisma.lead.count.mockResolvedValue(0);
     prisma.lead.findMany.mockResolvedValue([]);
-    getTeamMemberIds.mockResolvedValue([]);
+    getUserDepartments.mockResolvedValue([]);
 });
 
 // ── Role-based visibility ─────────────────────────────────────────────────────
 
 describe("getLeads — role visibility", () => {
-    test("EMPLOYEE: restricts to own leads (assignedToId = userId)", async () => {
+    test("EMPLOYEE: restricts to services they are assigned (leadDepartments.some.assignedEmployeeId)", async () => {
         await getLeads({ userId: "emp-1", role: "EMPLOYEE" });
 
-        const [, findCall] = prisma.$transaction.mock.calls[0][0];
-        // The count call receives the where clause
         const whereArg = prisma.lead.count.mock.calls[0][0].where;
-        expect(whereArg.assignedToId).toBe("emp-1");
+        expect(whereArg.leadDepartments).toMatchObject({ some: { assignedEmployeeId: "emp-1" } });
     });
 
-    test("SUPER_ADMIN: no assignedToId restriction on where clause", async () => {
+    test("SUPER_ADMIN: no leadDepartments scope on where clause (sees all)", async () => {
         await getLeads({ userId: "admin-1", role: "SUPER_ADMIN" });
 
         const whereArg = prisma.lead.count.mock.calls[0][0].where;
-        expect(whereArg.assignedToId).toBeUndefined();
-        expect(whereArg.OR).toBeUndefined();
+        expect(whereArg.leadDepartments).toBeUndefined();
     });
 
-    test("ADMIN with team members: where.OR includes team + unassigned", async () => {
-        getTeamMemberIds.mockResolvedValue(["emp-1", "emp-2"]);
+    test("ADMIN with managed departments: scope = OR of managed depts + own assignments", async () => {
+        getUserDepartments.mockResolvedValue(["LOAN", "FOREX"]);
         await getLeads({ userId: "mgr-1", role: "ADMIN" });
 
-        const whereArg = prisma.lead.count.mock.calls[0][0].where;
-        expect(whereArg.OR).toHaveLength(2);
-        expect(whereArg.OR[0]).toMatchObject({ assignedToId: { in: ["emp-1", "emp-2"] } });
-        expect(whereArg.OR[1]).toMatchObject({ assignedToId: null });
+        const scope = prisma.lead.count.mock.calls[0][0].where.leadDepartments.some;
+        expect(scope.OR).toHaveLength(2);
+        expect(scope.OR[0]).toMatchObject({ department: { in: ["LOAN", "FOREX"] } });
+        expect(scope.OR[1]).toMatchObject({ assignedEmployeeId: "mgr-1" });
     });
 
-    test("ADMIN with empty team: no OR restriction (sees all)", async () => {
-        getTeamMemberIds.mockResolvedValue([]);
+    test("ADMIN with no department membership: only own assignments", async () => {
+        getUserDepartments.mockResolvedValue([]);
         await getLeads({ userId: "mgr-1", role: "ADMIN" });
 
-        const whereArg = prisma.lead.count.mock.calls[0][0].where;
-        expect(whereArg.OR).toBeUndefined();
-        expect(whereArg.assignedToId).toBeUndefined();
+        const scope = prisma.lead.count.mock.calls[0][0].where.leadDepartments.some;
+        expect(scope.assignedEmployeeId).toBe("mgr-1");
+        expect(scope.OR).toBeUndefined();
     });
 
-    test("filters.mine overrides SUPER_ADMIN to own leads", async () => {
+    test("filters.mine overrides SUPER_ADMIN to own assignments", async () => {
         await getLeads({ userId: "admin-1", role: "SUPER_ADMIN", filters: { mine: true } });
 
-        const whereArg = prisma.lead.count.mock.calls[0][0].where;
-        expect(whereArg.assignedToId).toBe("admin-1");
+        const scope = prisma.lead.count.mock.calls[0][0].where.leadDepartments.some;
+        expect(scope.assignedEmployeeId).toBe("admin-1");
     });
 
-    test("always excludes MERGED leads", async () => {
+    test("always excludes merged leads via mergedIntoId", async () => {
         await getLeads({ userId: "u", role: "SUPER_ADMIN" });
 
         const whereArg = prisma.lead.count.mock.calls[0][0].where;
-        expect(whereArg.status).toMatchObject({ not: "MERGED" });
+        expect(whereArg.mergedIntoId).toBeNull();
     });
 });
 
-// ── Status filter ─────────────────────────────────────────────────────────────
+// ── Department / stage filter ──────────────────────────────────────────────────
 
-describe("getLeads — status filter", () => {
-    test("single status: exact string match", async () => {
-        await getLeads({ userId: "u", role: "SUPER_ADMIN", filters: { status: "CONTACTED" } });
+describe("getLeads — department & stage filter", () => {
+    test("SUPER_ADMIN department filter pins leadDepartments.some.department", async () => {
+        await getLeads({ userId: "u", role: "SUPER_ADMIN", filters: { department: "LOAN" } });
 
-        const where = prisma.lead.count.mock.calls[0][0].where;
-        expect(where.status).toBe("CONTACTED");
+        const scope = prisma.lead.count.mock.calls[0][0].where.leadDepartments.some;
+        expect(scope.department).toBe("LOAN");
     });
 
-    test("comma-separated statuses: uses { in: [...] }", async () => {
-        await getLeads({ userId: "u", role: "SUPER_ADMIN", filters: { status: "FOLLOW_UP,CONTACTED" } });
+    test("ADMIN department filter for a managed dept is honored", async () => {
+        getUserDepartments.mockResolvedValue(["LOAN"]);
+        await getLeads({ userId: "mgr-1", role: "ADMIN", filters: { department: "LOAN" } });
 
-        const where = prisma.lead.count.mock.calls[0][0].where;
-        expect(where.status).toMatchObject({ in: ["FOLLOW_UP", "CONTACTED"] });
+        const scope = prisma.lead.count.mock.calls[0][0].where.leadDepartments.some;
+        expect(scope.department).toBe("LOAN");
     });
 
-    test("status filter with whitespace around comma is trimmed", async () => {
-        await getLeads({ userId: "u", role: "SUPER_ADMIN", filters: { status: " NEW , HOT " } });
+    test("ADMIN department filter for an unmanaged dept is ignored (no leak)", async () => {
+        getUserDepartments.mockResolvedValue(["LOAN"]);
+        await getLeads({ userId: "mgr-1", role: "ADMIN", filters: { department: "FOREX" } });
 
-        const where = prisma.lead.count.mock.calls[0][0].where;
-        expect(where.status).toMatchObject({ in: ["NEW", "HOT"] });
+        const scope = prisma.lead.count.mock.calls[0][0].where.leadDepartments.some;
+        expect(scope.department).toBeUndefined();
+    });
+
+    test("stage filter narrows the same service row", async () => {
+        await getLeads({ userId: "u", role: "SUPER_ADMIN", filters: { stage: "APPROVED" } });
+
+        const scope = prisma.lead.count.mock.calls[0][0].where.leadDepartments.some;
+        expect(scope.stage).toBe("APPROVED");
     });
 });
 
@@ -173,14 +183,16 @@ describe("getLeads — search", () => {
         expect(where.OR[0]).toMatchObject({ name: { contains: "Alice", mode: "insensitive" } });
     });
 
-    test("search with existing manager OR: merges into AND to avoid overwriting scope", async () => {
-        getTeamMemberIds.mockResolvedValue(["emp-1"]);
+    test("manager scope lives in leadDepartments, so search sets where.OR directly", async () => {
+        getUserDepartments.mockResolvedValue(["LOAN"]);
         await getLeads({ userId: "mgr-1", role: "ADMIN", search: "Bob" });
 
         const where = prisma.lead.count.mock.calls[0][0].where;
-        // Manager scope moved to AND[0].OR; search in AND[1].OR
-        expect(where.AND).toHaveLength(2);
-        expect(where.OR).toBeUndefined(); // original OR removed
+        // Manager scope is on leadDepartments.some.OR — it does not collide with the
+        // top-level search OR, so no AND wrapping is needed.
+        expect(where.OR).toHaveLength(3);
+        expect(where.AND).toBeUndefined();
+        expect(where.leadDepartments.some.OR).toHaveLength(2);
     });
 });
 

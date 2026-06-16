@@ -3,17 +3,17 @@ const prisma = require("../utils/prisma");
 const getCommissions = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
-        let where = {};
+        const { department } = req.query;
 
-        if (role === "EMPLOYEE") {
-            where.userId = userId;
-        }
+        const where = {};
+        if (role === "EMPLOYEE") where.userId = userId; // consultants see only their own
+        if (department) where.department = department;   // optional department filter
 
         // Commission has no `user` relation in the schema (only a scalar userId),
         // so we resolve names with a separate lookup and attach them.
         const rows = await prisma.commission.findMany({
             where,
-            orderBy: { createdAt: "desc" }
+            orderBy: { createdAt: "desc" },
         });
 
         const userIds = [...new Set(rows.map((c) => c.userId))];
@@ -26,7 +26,15 @@ const getCommissions = async (req, res, next) => {
         const commissions = rows.map((c) => ({ ...c, user: { name: nameById[c.userId] ?? null } }));
         const totalAmount = commissions.reduce((sum, c) => sum + c.amount, 0);
 
-        res.json({ totalAmount, commissions });
+        // Per-department breakdown — commissions are department-scoped now.
+        const byDepartment = commissions.reduce((acc, c) => {
+            const entry = acc[c.department] || (acc[c.department] = { count: 0, amount: 0 });
+            entry.count += 1;
+            entry.amount += c.amount;
+            return acc;
+        }, {});
+
+        res.json({ totalAmount, byDepartment, commissions });
     } catch (error) {
         return next(error);
     }

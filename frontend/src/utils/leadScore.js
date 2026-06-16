@@ -26,3 +26,15 @@ export const scoreChipClass = (score = 0) => {
     const s = getScoreStyle(score);
     return `${s.text} ${s.bg}`;
 };
+
+// SLA applies to leads that still have at least one department service in flight.
+// Shared by the Leads list and the Board view so both flag staleness identically.
+export const getSLAStatus = (lead, warningDays = 3, breachDays = 7) => {
+    if (!lead.leadDepartments?.length) return null;
+    const ref = lead.lastActivityAt ?? lead.updatedAt;
+    const days = (Date.now() - new Date(ref).getTime()) / 86_400_000;
+    const daysRounded = Math.floor(days);
+    if (days > breachDays) return { level: "breach", days: daysRounded };
+    if (days > warningDays) return { level: "warning", days: daysRounded };
+    return null;
+};

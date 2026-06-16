@@ -1,9 +1,9 @@
 const prisma = require("../utils/prisma");
+const leadService = require("../services/leadService");
 const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
 const { ApiError } = require("../utils/apiError");
 const { decrypt } = require("../utils/encrypt");
-const { assignLeadOrAlert: autoAssignLead } = require("../services/leadDistributionEngine");
 const { runRulesForLead } = require("../services/automationEngine");
 
 // Look up the workspace integration by API key
@@ -86,18 +86,17 @@ const capturePublicLead = async (req, res, next) => {
 
         const { score, category } = calculateLeadScore({ source: "WEBSITE", phone, email });
 
-        const newLead = await prisma.lead.create({
-            data: {
-                name: name.trim(),
-                email: email?.trim() || null,
-                phone: phone?.trim() || null,
-                source: "WEBSITE",
-                enquiryType: enquiryType || "SERVICES",
-                score,
-                category,
-                workspaceId: workspace.workspaceId || null,
-                biodata: message?.trim() || null,
-            }
+        // Centralized creation: Lead + SALES LeadDepartment (unassigned — no human creator).
+        const newLead = await leadService.createLead({
+            name: name.trim(),
+            email: email?.trim() || null,
+            phone: phone?.trim() || null,
+            source: "WEBSITE",
+            enquiryType: enquiryType || "SERVICES",
+            score,
+            category,
+            workspaceId: workspace.workspaceId || null,
+            biodata: message?.trim() || null,
         });
 
         await logActivity({
@@ -106,10 +105,9 @@ const capturePublicLead = async (req, res, next) => {
             metadata: { source: "WEBSITE_FORM", origin: req.headers.origin || "unknown" }
         });
 
-        // Fire automation rules + auto-assign async — don't block the public response
+        // Fire automation rules async — don't block the public response. The SALES
+        // service is created unassigned for a manager to allocate.
         runRulesForLead("LEAD_CREATED", newLead).catch(console.error);
-        autoAssignLead(newLead.id, { reason: "AUTO_ASSIGNMENT" })
-            .catch(err => console.error(`[AutoAssign] webhook ${newLead.id}:`, err.message || err));
 
         res.status(201).json({ success: true, message: "Thank you! We'll be in touch." });
     } catch (err) {

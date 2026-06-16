@@ -2,6 +2,13 @@
 const { getTeamMemberIds } = require("../services/organizationService");
 const { ApiError } = require("../utils/apiError");
 const { istDateKey } = require("../utils/istTime");
+const { wonStageFilter, lostStageFilter, terminalStageFilter, isWonStage, isLostStage } = require("../config/departmentWorkflows");
+
+// Employee "leads" are now their department services (LeadDepartment rows where
+// assignedEmployeeId = the employee). Outcomes are classified by stage.
+const WON_OR = wonStageFilter();
+const LOST_OR = lostStageFilter();
+const TERMINAL_OR = terminalStageFilter();
 
 // ── Date range helper ─────────────────────────────────────────────────────────
 function dateRange(period, from, to) {
@@ -92,25 +99,25 @@ const getKPIs = async (req, res, next) => {
         });
 
         const [
-            assigned, contacted, converted, lost,
+            assigned, active, converted, lost,
             pendingFollowUps,
             emailsSent, whatsappSent, whatsappReplies,
             tasksAssigned, tasksCompleted,
             responded, totalAssigned,
             callRows,
         ] = await prisma.$transaction([
-            prisma.lead.count({ where: { assignedToId: employeeId, assignedAt: dr } }),
-            prisma.lead.count({ where: { assignedToId: employeeId, status: "CONTACTED", updatedAt: dr } }),
-            prisma.lead.count({ where: { assignedToId: employeeId, status: "CONVERTED", updatedAt: dr } }),
-            prisma.lead.count({ where: { assignedToId: employeeId, status: "LOST",      updatedAt: dr } }),
-            prisma.lead.count({ where: { assignedToId: employeeId, status: "FOLLOW_UP" } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: employeeId, assignedAt: dr } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: employeeId, updatedAt: dr, NOT: { OR: TERMINAL_OR } } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: employeeId, updatedAt: dr, OR: WON_OR } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: employeeId, updatedAt: dr, OR: LOST_OR } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: employeeId, NOT: { OR: TERMINAL_OR } } }),
             prisma.emailLog.count({ where: { sentById: employeeId, createdAt: dr } }),
             prisma.whatsAppMessage.count({ where: { userId: employeeId, direction: "OUTBOUND", sentAt: dr } }),
             prisma.whatsAppMessage.count({ where: { userId: employeeId, direction: "INBOUND",  sentAt: dr } }),
             prisma.task.count({ where: { assignedToId: employeeId, updatedAt: dr } }),
             prisma.task.count({ where: { assignedToId: employeeId, status: "COMPLETED", updatedAt: dr } }),
-            prisma.lead.count({ where: { assignedToId: employeeId, firstResponseAt: { not: null }, assignedAt: dr } }),
-            prisma.lead.count({ where: { assignedToId: employeeId, assignedAt: dr } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: employeeId, assignedAt: dr, lead: { firstResponseAt: { not: null } } } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: employeeId, assignedAt: dr } }),
             prisma.fasterqCall.findMany({
                 where: { agentEmail: emp?.email, startedAt: dr },
                 select: { direction: true, status: true, duration: true },
@@ -127,7 +134,7 @@ const getKPIs = async (req, res, next) => {
 
         res.json({
             assignedLeads:    assigned,
-            contactedLeads:   contacted,
+            contactedLeads:   active,
             convertedLeads:   converted,
             lostLeads:        lost,
             pendingFollowUps,
@@ -154,9 +161,9 @@ const getLeadChart = async (req, res, next) => {
         const { period = "30d", from, to, mode = "daily" } = req.query;
         const dr = dateRange(period, from, to);
 
-        const leads = await prisma.lead.findMany({
-            where: { assignedToId: employeeId, assignedAt: dr },
-            select: { status: true, assignedAt: true },
+        const services = await prisma.leadDepartment.findMany({
+            where: { assignedEmployeeId: employeeId, assignedAt: dr },
+            select: { department: true, stage: true, assignedAt: true },
         });
 
         const dayCount = Math.max(Math.ceil((Date.now() - new Date(dr.gte)) / 86_400_000), 1);
@@ -168,13 +175,13 @@ const getLeadChart = async (req, res, next) => {
             dayMap[key] = { date: key, assigned: 0, contacted: 0, converted: 0, lost: 0 };
         }
 
-        for (const l of leads) {
-            const key = l.assignedAt ? istDateKey(l.assignedAt) : null;
+        for (const s of services) {
+            const key = s.assignedAt ? istDateKey(s.assignedAt) : null;
             if (!key || !dayMap[key]) continue;
             dayMap[key].assigned++;
-            if (l.status === "CONTACTED") dayMap[key].contacted++;
-            if (l.status === "CONVERTED") dayMap[key].converted++;
-            if (l.status === "LOST")      dayMap[key].lost++;
+            if (isWonStage(s.department, s.stage))       dayMap[key].converted++;
+            else if (isLostStage(s.department, s.stage)) dayMap[key].lost++;
+            else                                         dayMap[key].contacted++; // active
         }
 
         const daily = Object.values(dayMap);
@@ -347,48 +354,49 @@ const getProductivity = async (req, res, next) => {
         const [
             tasksAssigned, tasksCompleted, tasksPending, tasksOverdue,
             assignedLeads, convertedLeads,
-            responseTimes, followupLeads, allLeads,
+            responseTimes, progressedServices, allServices,
         ] = await prisma.$transaction([
             prisma.task.count({ where: { assignedToId: employeeId, updatedAt: dr } }),
             prisma.task.count({ where: { assignedToId: employeeId, status: "COMPLETED", updatedAt: dr } }),
             prisma.task.count({ where: { assignedToId: employeeId, status: "PENDING" } }),
             prisma.task.count({ where: { assignedToId: employeeId, status: "PENDING", dueDate: { lt: new Date() } } }),
-            prisma.lead.count({ where: { assignedToId: employeeId, assignedAt: dr } }),
-            prisma.lead.count({ where: { assignedToId: employeeId, status: "CONVERTED", updatedAt: dr } }),
-            prisma.lead.findMany({
-                where: { assignedToId: employeeId, firstResponseAt: { not: null }, assignedAt: { not: null }, assignedAt: dr },
-                select: { assignedAt: true, firstResponseAt: true },
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: employeeId, assignedAt: dr } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: employeeId, updatedAt: dr, OR: WON_OR } }),
+            prisma.leadDepartment.findMany({
+                where: { assignedEmployeeId: employeeId, assignedAt: dr, lead: { firstResponseAt: { not: null } } },
+                select: { assignedAt: true, lead: { select: { firstResponseAt: true } } },
             }),
-            prisma.lead.findMany({
-                where: { assignedToId: employeeId, status: { in: ["FOLLOW_UP", "CONVERTED"] }, assignedAt: { not: null }, updatedAt: dr },
+            // "progressed" = reached a won stage in range (assigned → won duration)
+            prisma.leadDepartment.findMany({
+                where: { assignedEmployeeId: employeeId, updatedAt: dr, assignedAt: { not: null }, OR: WON_OR },
                 select: { assignedAt: true, updatedAt: true },
             }),
-            prisma.lead.findMany({
-                where: { assignedToId: employeeId, assignedAt: dr },
-                select: { assignedAt: true, updatedAt: true, status: true },
+            prisma.leadDepartment.findMany({
+                where: { assignedEmployeeId: employeeId, assignedAt: dr },
+                select: { assignedAt: true, updatedAt: true, department: true, stage: true },
             }),
         ]);
 
         // avg response time
         let avgResponseTime = 0;
         if (responseTimes.length > 0) {
-            const total = responseTimes.reduce((s, l) => s + (new Date(l.firstResponseAt) - new Date(l.assignedAt)) / 3_600_000, 0);
+            const total = responseTimes.reduce((s, l) => s + (new Date(l.lead.firstResponseAt) - new Date(l.assignedAt)) / 3_600_000, 0);
             avgResponseTime = parseFloat((total / responseTimes.length).toFixed(1));
         }
 
-        // avg follow-up completion time (hours from assigned to follow-up/converted)
+        // avg time-to-win (hours from assigned to reaching a won stage)
         let avgFollowupTime = 0;
-        if (followupLeads.length > 0) {
-            const total = followupLeads.reduce((s, l) => s + (new Date(l.updatedAt) - new Date(l.assignedAt)) / 3_600_000, 0);
-            avgFollowupTime = parseFloat((total / followupLeads.length).toFixed(1));
+        if (progressedServices.length > 0) {
+            const total = progressedServices.reduce((s, l) => s + (new Date(l.updatedAt) - new Date(l.assignedAt)) / 3_600_000, 0);
+            avgFollowupTime = parseFloat((total / progressedServices.length).toFixed(1));
         }
 
-        // avg lead aging (days open)
+        // avg service aging (days open) — services not yet at a terminal stage
         let avgLeadAging = 0;
-        const openLeads = allLeads.filter(l => !["CONVERTED", "LOST"].includes(l.status));
-        if (openLeads.length > 0) {
-            const total = openLeads.reduce((s, l) => s + (Date.now() - new Date(l.assignedAt)) / 86_400_000, 0);
-            avgLeadAging = parseFloat((total / openLeads.length).toFixed(1));
+        const openServices = allServices.filter(l => !isWonStage(l.department, l.stage) && !isLostStage(l.department, l.stage) && l.assignedAt);
+        if (openServices.length > 0) {
+            const total = openServices.reduce((s, l) => s + (Date.now() - new Date(l.assignedAt)) / 86_400_000, 0);
+            avgLeadAging = parseFloat((total / openServices.length).toFixed(1));
         }
 
         // task trend: per day in period
@@ -437,20 +445,20 @@ const getFunnel = async (req, res, next) => {
         const { period = "30d", from, to } = req.query;
         const dr = dateRange(period, from, to);
 
-        const [total, contacted, followUp, converted, lost] = await prisma.$transaction([
-            prisma.lead.count({ where: { assignedToId: employeeId, assignedAt: dr } }),
-            prisma.lead.count({ where: { assignedToId: employeeId, status: { in: ["CONTACTED", "FOLLOW_UP", "CONVERTED", "LOST"] }, updatedAt: dr } }),
-            prisma.lead.count({ where: { assignedToId: employeeId, status: { in: ["FOLLOW_UP", "CONVERTED"] }, updatedAt: dr } }),
-            prisma.lead.count({ where: { assignedToId: employeeId, status: "CONVERTED", updatedAt: dr } }),
-            prisma.lead.count({ where: { assignedToId: employeeId, status: "LOST",      updatedAt: dr } }),
+        const [total, active, won, lost] = await prisma.$transaction([
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: employeeId, assignedAt: dr } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: employeeId, updatedAt: dr, NOT: { OR: TERMINAL_OR } } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: employeeId, updatedAt: dr, OR: WON_OR } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: employeeId, updatedAt: dr, OR: LOST_OR } }),
         ]);
 
+        // Per-department services have no single shared mid-funnel stage, so the
+        // funnel is Assigned → Active (in-progress) → Won → Lost.
         res.json([
-            { stage: "Assigned",   count: total,     pct: 100 },
-            { stage: "Contacted",  count: contacted, pct: total > 0 ? Math.round((contacted / total) * 100) : 0 },
-            { stage: "Follow-up",  count: followUp,  pct: total > 0 ? Math.round((followUp  / total) * 100) : 0 },
-            { stage: "Converted",  count: converted, pct: total > 0 ? Math.round((converted / total) * 100) : 0 },
-            { stage: "Lost",       count: lost,      pct: total > 0 ? Math.round((lost      / total) * 100) : 0 },
+            { stage: "Assigned", count: total,  pct: 100 },
+            { stage: "Active",   count: active, pct: total > 0 ? Math.round((active / total) * 100) : 0 },
+            { stage: "Won",      count: won,    pct: total > 0 ? Math.round((won   / total) * 100) : 0 },
+            { stage: "Lost",     count: lost,   pct: total > 0 ? Math.round((lost  / total) * 100) : 0 },
         ]);
     } catch (err) {
         return next(err);

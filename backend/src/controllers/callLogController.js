@@ -16,8 +16,8 @@ const signRecording = (cl) =>
 // Shared access check for a call log's underlying lead. Call recordings and
 // transcripts are sensitive customer data, so reads are scoped the same way
 // leads are: EMPLOYEE → own, ADMIN → team (+ unassigned), SUPER_ADMIN → all.
-async function canAccessCallLead(reqUser, assignedToId) {
-    return canAccessLead(reqUser.userId, reqUser.role, { assignedToId: assignedToId ?? null });
+async function canAccessCallLead(reqUser, lead) {
+    return canAccessLead(reqUser.userId, reqUser.role, lead);
 }
 
 // Initiate Click2Call via Greeter
@@ -44,11 +44,11 @@ const initiateCall = async (req, res, next) => {
 
         // Scope to the requester's leads — an agent shouldn't be able to dial out on,
         // or attach call logs to, another team's lead by passing its id.
-        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true } });
+        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true } });
         if (!lead) {
             return res.status(404).json({ message: "Lead not found" });
         }
-        if (!(await canAccessCallLead(req.user, lead.assignedToId))) {
+        if (!(await canAccessCallLead(req.user, lead))) {
             return res.status(403).json({ message: "Access denied" });
         }
 
@@ -293,9 +293,9 @@ const logCall = async (req, res, next) => {
 const getCallLogs = async (req, res, next) => {
     try {
         const { leadId } = req.params;
-        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true } });
+        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true } });
         if (!lead) return res.status(404).json({ message: "Lead not found" });
-        if (!(await canAccessCallLead(req.user, lead.assignedToId))) {
+        if (!(await canAccessCallLead(req.user, lead))) {
             return res.status(403).json({ message: "Access denied" });
         }
         const logs = await prisma.callLog.findMany({
@@ -315,12 +315,12 @@ const transcribeCall = async (req, res, next) => {
 
         const callLog = await prisma.callLog.findUnique({
             where: { id: callLogId },
-            include: { lead: { select: { assignedToId: true } } },
+            include: { lead: { select: { id: true } } },
         });
         if (!callLog) {
             return res.status(404).json({ message: "Call log not found" });
         }
-        if (!(await canAccessCallLead(req.user, callLog.lead?.assignedToId))) {
+        if (!(await canAccessCallLead(req.user, callLog.lead))) {
             return res.status(403).json({ message: "Access denied" });
         }
 
@@ -408,12 +408,12 @@ const getCallLogDetails = async (req, res, next) => {
         const { callLogId } = req.params;
         const callLog = await prisma.callLog.findUnique({
             where: { id: callLogId },
-            include: { lead: { select: { name: true, phone: true, assignedToId: true } } }
+            include: { lead: { select: { id: true, name: true, phone: true } } }
         });
         if (!callLog) {
             return res.status(404).json({ message: "Call log not found" });
         }
-        if (!(await canAccessCallLead(req.user, callLog.lead?.assignedToId))) {
+        if (!(await canAccessCallLead(req.user, callLog.lead))) {
             return res.status(403).json({ message: "Access denied" });
         }
         res.json(signRecording(callLog));
@@ -502,7 +502,7 @@ const uploadAndTranscribe = async (req, res, next) => {
         if (!lead) {
             return res.status(404).json({ message: "Lead not found" });
         }
-        if (!(await canAccessCallLead(req.user, lead.assignedToId))) {
+        if (!(await canAccessCallLead(req.user, lead))) {
             return res.status(403).json({ message: "Access denied" });
         }
 

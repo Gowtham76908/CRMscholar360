@@ -1,4 +1,15 @@
 const prisma = require("../utils/prisma");
+const { isWonStage, isLostStage, getInitialStage } = require("../config/departmentWorkflows");
+
+// Derived lead state from its department services (no global Lead.status):
+//   open  — at least one service is not at a terminal (won/lost) stage
+//   isNew — has a SALES service still at its initial stage (proxy for "untouched")
+function deriveState(leadDepartments = []) {
+    const open = leadDepartments.some(d => !isWonStage(d.department, d.stage) && !isLostStage(d.department, d.stage));
+    const sales = leadDepartments.find(d => d.department === "SALES");
+    const isNew = Boolean(sales && sales.stage === getInitialStage("SALES"));
+    return { open, isNew };
+}
 
 // ─── Pattern Detectors ────────────────────────────────────────────────────────
 
@@ -46,7 +57,7 @@ function detectMissedCalls(lead) {
 }
 
 function detectNeverContacted(lead) {
-    if (lead.status !== "NEW") return null;
+    if (!lead.isNew) return null;
     if (lead.callLogs.length > 0 || lead.notes.length > 0) return null;
     const hours = hoursSince(lead.createdAt);
     if (hours < 2) return null;
@@ -72,7 +83,7 @@ function detectOverdueTasks(lead) {
 }
 
 function detectHighUrgency(lead) {
-    if (["CONVERTED", "LOST"].includes(lead.status)) return null;
+    if (!lead.open) return null;
     const last = lead.callLogs.find(c => c.isTranscribed);
     if (!last || last.urgency !== "High") return null;
     const days = daysSince(last.createdAt);
@@ -100,14 +111,13 @@ function detectNegativeSentiment(lead) {
 }
 
 function detectStuckInStatus(lead) {
-    if (["CONVERTED", "LOST"].includes(lead.status)) return null;
+    if (!lead.open) return null;
     const days = daysSince(lead.updatedAt);
     if (days < 5) return null;
-    const labels = { NEW: "New", CONTACTED: "Contacted", FOLLOW_UP: "Follow Up" };
     return {
         type: "FOLLOW_UP", priority: "MEDIUM", icon: "clock",
-        headline: `Stuck in "${labels[lead.status] ?? lead.status}" for ${days} days`,
-        detail: "Consider updating status or taking action to move this forward",
+        headline: `No stage progress for ${days} days`,
+        detail: "Consider advancing a department stage or taking action to move this forward",
         ctaAction: "note", cta: "Add Note",
     };
 }
@@ -124,10 +134,13 @@ async function getSuggestionsForLead(leadId) {
             notes:      { orderBy: { createdAt: "desc" }, take: 5 },
             tasks:      { where: { status: "PENDING" }, orderBy: { dueDate: "asc" } },
             activities: { orderBy: { createdAt: "desc" }, take: 1 },
+            leadDepartments: { select: { department: true, stage: true } },
         },
     });
 
     if (!lead) return [];
+
+    Object.assign(lead, deriveState(lead.leadDepartments));
 
     const detectors = [
         detectNeverContacted,

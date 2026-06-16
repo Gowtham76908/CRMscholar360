@@ -27,7 +27,7 @@ const get_revenue_stats = {
 
 const get_top_leads_by_revenue = {
     name:        "get_top_leads_by_revenue",
-    description: "Top leads ranked by total deal amount in a given stage. Use this for questions like 'top customers by revenue', 'biggest accounts', 'which leads brought the most money', 'top deals in negotiation'. Defaults to WON (realised revenue). Returns lead id (use for entity links), name, status, contact, summed amount, and deal count. RBAC: EMPLOYEE = own deals, ADMIN = team, SUPER_ADMIN = all. Amounts in INR.",
+    description: "Top leads ranked by total deal amount in a given stage. Use this for questions like 'top customers by revenue', 'biggest accounts', 'which leads brought the most money', 'top deals in negotiation'. Defaults to WON (realised revenue). Returns lead id (use for entity links), name, contact, summed amount, and deal count. RBAC: EMPLOYEE = own deals, ADMIN = team, SUPER_ADMIN = all. Amounts in INR.",
     parameters:  {
         type: "object",
         properties: {

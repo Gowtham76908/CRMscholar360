@@ -1,6 +1,7 @@
 ﻿const prisma = require("../utils/prisma");
 const { getTeamMemberIds } = require("../services/organizationService");
 const { csvField } = require("../utils/csv");
+const { isWonStage } = require("../config/departmentWorkflows");
 
 const exportTasks = async (req, res, next) => {
     try {
@@ -58,26 +59,35 @@ const exportTeamPerformance = async (req, res, next) => {
 
         const users = await prisma.user.findMany({
             where,
-            include: {
-                leads: { select: { status: true } },
-                tasks: { select: { status: true } }
-            }
+            include: { tasks: { select: { status: true } } },
         });
+
+        // A user's "leads" are their department services; converted = won stage.
+        const services = await prisma.leadDepartment.findMany({
+            where: { assignedEmployeeId: { in: users.map(u => u.id) } },
+            select: { assignedEmployeeId: true, department: true, stage: true },
+        });
+        const tally = new Map();
+        for (const s of services) {
+            const t = tally.get(s.assignedEmployeeId) || { total: 0, won: 0 };
+            t.total += 1;
+            if (isWonStage(s.department, s.stage)) t.won += 1;
+            tally.set(s.assignedEmployeeId, t);
+        }
 
         const fields = ["Employee", "Total Leads", "Converted", "Conversion Rate", "Pending Tasks"];
         const csv = [
             fields.map(csvField).join(","),
             ...users.map(user => {
-                const totalLeads = user.leads.length;
-                const converted = user.leads.filter(l => l.status === "CONVERTED").length;
-                const rate = totalLeads > 0 ? ((converted / totalLeads) * 100).toFixed(1) + "%" : "0%";
+                const t = tally.get(user.id) || { total: 0, won: 0 };
+                const rate = t.total > 0 ? ((t.won / t.total) * 100).toFixed(1) + "%" : "0%";
 
                 return [
                     user.name,
-                    totalLeads,
-                    converted,
+                    t.total,
+                    t.won,
                     rate,
-                    user.tasks.filter(t => t.status === "PENDING").length
+                    user.tasks.filter(tk => tk.status === "PENDING").length
                 ].map(csvField).join(",");
             })
         ].join("\r\n");

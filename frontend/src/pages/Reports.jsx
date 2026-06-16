@@ -12,14 +12,9 @@ import {
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/utils";
-
-const STAGE_CONFIG = [
-    { key: "NEW",        label: "New",        bg: "bg-indigo-500",  text: "text-indigo-600"  },
-    { key: "CONTACTED",  label: "Contacted",  bg: "bg-blue-500",    text: "text-blue-600"    },
-    { key: "FOLLOW_UP",  label: "Follow-up",  bg: "bg-amber-400",   text: "text-amber-600"   },
-    { key: "CONVERTED",  label: "Converted",  bg: "bg-emerald-500", text: "text-emerald-600" },
-    { key: "LOST",       label: "Lost",       bg: "bg-red-400",     text: "text-red-500"     },
-];
+import DepartmentSelector from "../components/DepartmentSelector";
+import DepartmentInsights from "../components/department/DepartmentInsights";
+import { useDepartmentSelection } from "../hooks/useDepartments";
 
 const SOURCE_COLORS = {
     FACEBOOK: "#1877F2", INSTAGRAM: "#E1306C", GMAIL: "#EA4335",
@@ -44,16 +39,9 @@ const Reports = () => {
         ...(dateRange.to   && { to:   dateRange.to   }),
     };
 
-    const { data: conversionData, isLoading: loadingConversion } = useQuery({
-        queryKey: ["conversion-rate", dateRange],
-        queryFn: () => api.get("/reports/conversion-rate", { params }).then(r => r.data),
-        enabled: isAdmin,
-    });
-    const { data: statusData = [], isLoading: loadingStatus } = useQuery({
-        queryKey: ["leads-by-status", dateRange],
-        queryFn: () => api.get("/reports/leads-by-status", { params }).then(r => r.data),
-        enabled: isAdmin,
-    });
+    // Lead funnel/conversion is now per-department (see DepartmentInsights).
+    const { department, setDepartment, options: deptOptions } = useDepartmentSelection();
+
     const { data: sourceData = [], isLoading: loadingSource } = useQuery({
         queryKey: ["leads-by-source", dateRange],
         queryFn: () => api.get("/reports/leads-by-source", { params }).then(r => r.data),
@@ -95,16 +83,11 @@ const Reports = () => {
         </div>
     );
 
-    const total = conversionData?.totalLeads ?? 0;
-    const statusMap = Object.fromEntries(statusData.map(r => [r.status, r._count.id]));
-    const maxStageCount = Math.max(...STAGE_CONFIG.map(s => statusMap[s.key] || 0), 1);
-
     const activeTeam = teamPerformance
         .filter(m => m.totalLeads > 0)
         .sort((a, b) => b.totalLeads - a.totalLeads);
     const maxTeamLeads = Math.max(...activeTeam.map(m => m.totalLeads), 1);
     const maxTeamRate  = Math.max(...activeTeam.map(m => parseFloat(m.conversionRate) || 0), 1);
-    const topPerformer = [...teamPerformance].sort((a, b) => parseFloat(b.conversionRate) - parseFloat(a.conversionRate))[0];
 
     const maxSourceTotal = Math.max(...sourceData.map(s => s.total), 1);
 
@@ -141,93 +124,14 @@ const Reports = () => {
                 </div>
             </div>
 
-            {/* KPI cards */}
-            {loadingConversion ? <SectionLoader className="h-28" /> : (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                    {
-                        label: "Total Leads",
-                        value: conversionData?.totalLeads ?? 0,
-                        icon: Users,
-                        color: "bg-indigo-50 text-indigo-600",
-                        sub: "In selected range",
-                    },
-                    {
-                        label: "Converted",
-                        value: conversionData?.convertedLeads ?? 0,
-                        icon: CheckCircle2,
-                        color: "bg-emerald-50 text-emerald-600",
-                        sub: conversionData?.conversionRate ?? "0%",
-                    },
-                    {
-                        label: "Lost",
-                        value: conversionData?.lostLeads ?? 0,
-                        icon: XCircle,
-                        color: "bg-red-50 text-red-500",
-                        sub: `${pct(conversionData?.lostLeads, total)}% of total`,
-                    },
-                    {
-                        label: "Top Performer",
-                        value: topPerformer?.name?.split(" ")[0] ?? "—",
-                        icon: Trophy,
-                        color: "bg-violet-50 text-violet-600",
-                        sub: topPerformer ? `${topPerformer.conversionRate} conv.` : "N/A",
-                    },
-                ].map(({ label, value, icon: Icon, color, sub }) => (
-                    <div key={label} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
-                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", color)}>
-                            <Icon className="h-5 w-5" />
-                        </div>
-                        <div className="min-w-0">
-                            <p className="text-xs text-gray-500 font-medium truncate">{label}</p>
-                            <p className="text-xl font-bold text-gray-900 truncate">{value}</p>
-                            <p className="text-[10px] text-gray-400">{sub}</p>
-                        </div>
-                    </div>
-                ))}
+            {/* Per-department funnel, conversion, aging & workload */}
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+                <h2 className="text-sm font-bold text-gray-700">Department Performance</h2>
+                <DepartmentSelector value={department} onChange={setDepartment} options={deptOptions} />
             </div>
-            )}
-
-            {/* Pipeline Funnel */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-bold text-gray-900">Pipeline Funnel</h3>
-                    <span className="text-xs text-gray-400">{total} total leads</span>
-                </div>
-                {loadingStatus ? <SectionLoader className="h-36" /> : (
-                <div className="space-y-2.5">
-                    {STAGE_CONFIG.map(stage => {
-                        const count  = statusMap[stage.key] || 0;
-                        const share  = pct(count, total);
-                        const barW   = pct(count, maxStageCount);
-                        return (
-                            <div key={stage.key} className="flex items-center gap-3">
-                                <span className="text-xs font-medium text-gray-500 w-[72px] text-right shrink-0">
-                                    {stage.label}
-                                </span>
-                                <div className="flex-1 h-7 bg-gray-100 rounded-lg overflow-hidden">
-                                    <div
-                                        className={cn("h-full rounded-lg flex items-center px-3 transition-all duration-700", stage.bg)}
-                                        style={{ width: `${Math.max(barW, 1.5)}%` }}>
-                                        {barW > 12 && (
-                                            <span className="text-white text-xs font-semibold">{count}</span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0 w-20 justify-end">
-                                    {barW <= 12 && (
-                                        <span className="text-xs font-medium text-gray-700">{count}</span>
-                                    )}
-                                    <span className={cn("text-xs font-semibold w-10 text-right", stage.text)}>
-                                        {share}%
-                                    </span>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-                )}
-            </div>
+            {department
+                ? <DepartmentInsights department={department} />
+                : <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-sm text-gray-500">Select a department to view its funnel.</div>}
 
             {/* Source Quality + Monthly Growth */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

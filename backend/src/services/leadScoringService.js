@@ -46,90 +46,18 @@ const titleCase = (s) => (s || "").toLowerCase().replace(/(^|_)([a-z])/g, (_, p,
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 /**
- * Recompute a lead's score from its full interaction history and persist it.
- * @returns {Promise<{score:number, category:string}|null>}
+ * DISABLED. Engagement-based lead scoring is turned off in the multi-department
+ * model (it keyed off the now-removed global Lead.status). The intake score set at
+ * creation by utils/leadScorer (source + contact info, no status) is left as-is.
+ *
+ * Kept as a no-op so the many fire-and-forget callers
+ * (recomputeLeadScore(id).catch(...)) and the `if (rescored)` guards stay valid
+ * without edits. Re-enable as a per-department engagement model later if needed.
+ *
+ * @returns {Promise<null>}
  */
-async function recomputeLeadScore(leadId) {
-    const lead = await prisma.lead.findUnique({
-        where: { id: leadId },
-        select: { id: true, source: true, phone: true, email: true, status: true },
-    });
-    if (!lead) return null;
-
-    const [calls, emails, inboundWa] = await Promise.all([
-        prisma.callLog.findMany({ where: { leadId }, select: { callStatus: true, duration: true, sentiment: true, callDate: true, createdAt: true } }),
-        prisma.emailLog.findMany({ where: { leadId }, select: { openedAt: true, clickCount: true, lastClickedAt: true, createdAt: true } }),
-        prisma.whatsAppMessage.findMany({ where: { leadId, direction: "INBOUND" }, select: { createdAt: true } }),
-    ]);
-
-    const factors = [];
-
-    // 1. Intake base (no decay) ───────────────────────────────────────────────
-    let base = SOURCE_SCORE[lead.source] ?? 5;
-    factors.push({ label: `${titleCase(lead.source)} lead`, delta: SOURCE_SCORE[lead.source] ?? 5, direction: "up" });
-    if (lead.phone) { base += 3; factors.push({ label: "Phone number on file", delta: 3, direction: "up" }); }
-    if (lead.email) { base += 2; factors.push({ label: "Email on file", delta: 2, direction: "up" }); }
-
-    // 2. Engagement (decayed) ──────────────────────────────────────────────────
-    let engagement = 0, undecayed = 0, lastActivity = 0;
-    const add = (when, raw) => {
-        const d = raw * decay(ageDays(when));
-        engagement += d; undecayed += raw;
-        lastActivity = Math.max(lastActivity, new Date(when).getTime());
-        return d;
-    };
-
-    // Calls — grouped by disposition so the explanation reads clearly.
-    const callPts = { pos: 0, neu: 0, neg: 0, attempt: 0 };
-    const callCnt = { pos: 0, neu: 0, neg: 0, attempt: 0 };
-    for (const c of calls) {
-        const when = c.callDate || c.createdAt;
-        const answered = ANSWERED_STATUSES.has((c.callStatus || "").toUpperCase()) || (c.duration || 0) > 0;
-        if (!answered) { callPts.attempt += add(when, PTS.CALL_ATTEMPT); callCnt.attempt++; continue; }
-        const sent = sentimentClass(c.sentiment);
-        if (sent === "pos") { callPts.pos += add(when, PTS.CALL_POSITIVE); callCnt.pos++; }
-        else if (sent === "neg") { callPts.neg += add(when, PTS.CALL_NEGATIVE); callCnt.neg++; }
-        else { callPts.neu += add(when, PTS.CALL_ANSWERED); callCnt.neu++; }
-    }
-    if (callCnt.pos)     factors.push({ label: plural(callCnt.pos, "positive call"), delta: Math.round(callPts.pos), direction: "up" });
-    if (callCnt.neu)     factors.push({ label: `${plural(callCnt.neu, "call")} connected`, delta: Math.round(callPts.neu), direction: "up" });
-    if (callCnt.attempt) factors.push({ label: `${plural(callCnt.attempt, "call")} attempted`, delta: Math.round(callPts.attempt), direction: "up" });
-    if (callCnt.neg)     factors.push({ label: plural(callCnt.neg, "negative call"), delta: Math.round(callPts.neg), direction: "down" });
-
-    // Emails — opens and clicks.
-    let openPts = 0, clickPts = 0, opens = 0, clicks = 0;
-    for (const e of emails) {
-        if (e.openedAt) { openPts += add(e.openedAt, PTS.EMAIL_OPENED); opens++; }
-        if ((e.clickCount || 0) > 0) { clickPts += add(e.lastClickedAt || e.createdAt, PTS.EMAIL_CLICKED); clicks++; }
-    }
-    if (opens)  factors.push({ label: `${plural(opens, "email")} opened`, delta: Math.round(openPts), direction: "up" });
-    if (clicks) factors.push({ label: `${plural(clicks, "email link")} clicked`, delta: Math.round(clickPts), direction: "up" });
-
-    // WhatsApp inbound replies.
-    let waPts = 0;
-    for (const m of inboundWa) waPts += add(m.createdAt, PTS.WHATSAPP_REPLY);
-    if (inboundWa.length) factors.push({ label: `${plural(inboundWa.length, "WhatsApp reply")} received`, delta: Math.round(waPts), direction: "up" });
-
-    // 3. Status bonus (current state, no decay) ────────────────────────────────
-    const statusBonus = STATUS_BONUS[lead.status] ?? 0;
-    if (statusBonus !== 0) factors.push({ label: `Stage: ${titleCase(lead.status)}`, delta: statusBonus, direction: statusBonus >= 0 ? "up" : "down" });
-
-    // 4. Cooling — surface decay once past engagement has faded.
-    const cooled = undecayed - engagement;
-    if (cooled >= 4 && lastActivity) {
-        const idle = Math.round(ageDays(lastActivity));
-        if (idle >= 14) factors.push({ label: `No activity for ${idle} days`, delta: -Math.round(cooled), direction: "down" });
-    }
-
-    const score = Math.max(0, Math.min(100, Math.round(base + engagement + statusBonus)));
-    const category = categoryFromScore(score);
-
-    await prisma.lead.update({
-        where: { id: leadId },
-        data: { score, category, scoreExplanation: { factors, scoredAt: new Date().toISOString() } },
-    });
-
-    return { score, category };
+async function recomputeLeadScore(_leadId) {
+    return null;
 }
 
 // ── Per-call transcription sentiment scoring (used by the AI call analysis) ────

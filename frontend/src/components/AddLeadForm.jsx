@@ -71,13 +71,6 @@ const AddLeadForm = ({ onClose, lead }) => {
     const queryClient = useQueryClient();
     const isEdit = !!lead;
     const [errors, setErrors] = useState({});
-    const [assignedToId, setAssignedToId] = useState(lead?.assignedToId ?? "");
-    const [team, setTeam] = useState([]);
-
-    useEffect(() => {
-        if (!isEdit) return;
-        api.get("/team").then(r => setTeam(r.data)).catch(() => {});
-    }, [isEdit]);
 
     const { data: allFields = [], isLoading: fieldsLoading } = useQuery({
         queryKey: ["lead-fields"],
@@ -183,9 +176,6 @@ const AddLeadForm = ({ onClose, lead }) => {
         if (isEdit && followUpDate) {
             payload.nextFollowUpAt = followUpDate;
         }
-        if (isEdit) {
-            payload.assignedToId = assignedToId || null;
-        }
 
         mutation.mutate(payload);
     };
@@ -236,19 +226,6 @@ const AddLeadForm = ({ onClose, lead }) => {
 
             {isEdit && (
                 <div className="border-t border-gray-100 pt-4 space-y-4">
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Assign To</label>
-                        <select
-                            value={assignedToId}
-                            onChange={e => setAssignedToId(e.target.value)}
-                            className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl bg-gray-50/50 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all shadow-sm appearance-none"
-                        >
-                            <option value="">Unassigned</option>
-                            {team.map(m => (
-                                <option key={m.id} value={m.id}>{m.name}</option>
-                            ))}
-                        </select>
-                    </div>
                     <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
                         Follow-up Date

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../lib/utils";
+import DepartmentSection from "../components/department/DepartmentSection";
 
 const isSuperAdmin = (role) => role === "SUPER_ADMIN";
 const isManager    = (role) => role === "SUPER_ADMIN" || role === "ADMIN";
@@ -37,14 +38,6 @@ const fmtINR = (n) => {
     return `₹${v.toLocaleString("en-IN")}`;
 };
 
-const STATUS_BADGE = {
-    NEW: "info", CONTACTED: "indigo", FOLLOW_UP: "warning",
-    CONVERTED: "success", LOST: "error",
-};
-const STATUS_LABEL = {
-    NEW: "New", CONTACTED: "Contacted", FOLLOW_UP: "Follow Up",
-    CONVERTED: "Converted", LOST: "Lost",
-};
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
@@ -134,7 +127,9 @@ function ActionItem({ lead, snoozed, onSnooze }) {
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                     {due && <Badge variant={due.variant} size="sm">{due.label}</Badge>}
-                    <Badge variant={STATUS_BADGE[lead.status]} size="sm">{STATUS_LABEL[lead.status]}</Badge>
+                    {lead.leadDepartments?.[0] && (
+                        <Badge variant="indigo" size="sm">{lead.leadDepartments[0].stage?.replace(/_/g, " ")}</Badge>
+                    )}
                 </div>
             </div>
             <div className="hidden group-hover:flex items-center gap-1.5 px-3 pb-2.5">
@@ -468,9 +463,6 @@ function OverdueFollowUpsWidget({ leads }) {
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">
                                 {daysOverdue(lead.nextFollowUpAt)}
                             </span>
-                            {lead.assignedTo && (
-                                <span className="text-[10px] text-gray-400">{lead.assignedTo.name}</span>
-                            )}
                         </div>
                     </Link>
                 ))}
@@ -603,16 +595,8 @@ const Dashboard = () => {
                     </Link>
                 </header>
 
-                {/* My Lead KPIs */}
-                <section>
-                    <SectionHeader icon={Users} title="Organisation — Lead Overview" to="/leads" />
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        <KPICard label="Total Leads"     value={stats?.total}        sub="All time"                             icon={Users}       accent="indigo" />
-                        <KPICard label="Follow-ups"      value={stats?.followUp}     sub="Need action"                          icon={Clock}       accent="amber" />
-                        <KPICard label="Converted"       value={stats?.converted}    sub={`${stats?.conversionRate ?? 0}% rate`} icon={CheckCircle} accent="emerald" />
-                        <KPICard label="My Pending Tasks" value={pendingTasks.length} sub="Assigned to me"                      icon={AlertCircle} accent="red" />
-                    </div>
-                </section>
+                {/* Per-department lead overview (no global funnel) */}
+                <DepartmentSection />
 
                 {/* Revenue KPIs */}
                 <section>
@@ -673,16 +657,8 @@ const Dashboard = () => {
                     </Link>
                 </header>
 
-                {/* Team Lead KPIs — aggregated across all assigned employees */}
-                <section>
-                    <SectionHeader icon={Users} title="Team Lead Overview" to="/leads" />
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        <KPICard label="Team Total Leads"  value={teamTotal}             sub={`Across ${teamStats.length} members`}   icon={Users}       accent="indigo" />
-                        <KPICard label="Team Converted"    value={teamConverted}         sub={`${teamWinRate}% team win rate`}        icon={CheckCircle} accent="emerald" />
-                        <KPICard label="Team Follow-ups"   value={teamFollowUp}          sub="Need attention"                        icon={Clock}       accent="amber" />
-                        <KPICard label="My Pending Tasks"  value={pendingTasks.length}   sub="Assigned to me"                        icon={AlertCircle} accent="red" />
-                    </div>
-                </section>
+                {/* Per-department lead overview (no global funnel) */}
+                <DepartmentSection />
 
                 {/* Team Revenue KPIs */}
                 <section>
@@ -740,24 +716,8 @@ const Dashboard = () => {
                 </Link>
             </header>
 
-            {/* My Lead KPIs */}
-            <section>
-                <SectionHeader icon={Users} title="My Leads" />
-                {stats?.total === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-10 gap-2 bg-white border border-gray-200 rounded-xl">
-                        <Users className="h-10 w-10 text-gray-200" />
-                        <p className="text-sm font-semibold text-gray-500">No leads assigned yet</p>
-                        <p className="text-xs text-gray-400">Leads assigned to you will appear here.</p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        <KPICard label="My Total Leads"   value={stats?.total}        sub="All time"                             icon={Users}       accent="indigo" />
-                        <KPICard label="Converted"        value={stats?.converted}    sub={`${stats?.conversionRate ?? 0}% rate`} icon={UserCheck}   accent="emerald" />
-                        <KPICard label="Need Follow-up"   value={stats?.followUp}     sub="Waiting on me"                        icon={Target}      accent="amber" />
-                        <KPICard label="My Pending Tasks" value={pendingTasks.length} sub="Assigned to me"                       icon={AlertCircle} accent="red" />
-                    </div>
-                )}
-            </section>
+            {/* Per-department lead overview (no global funnel) */}
+            <DepartmentSection />
 
             {/* My Revenue KPIs */}
             {myRevKPIs && (

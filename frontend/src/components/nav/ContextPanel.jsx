@@ -11,16 +11,6 @@ import {
     Clock, Calendar, ChevronRight, TrendingUp, IndianRupee, AlertCircle, Sparkles,
 } from "lucide-react";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const STATUS_DOT = {
-    NEW:       "bg-blue-500",
-    CONTACTED: "bg-indigo-500",
-    FOLLOW_UP: "bg-amber-500",
-    CONVERTED: "bg-emerald-500",
-    LOST:      "bg-red-400",
-};
-
 function PanelLink({ to, icon: Icon, label, count, active, dot }) {
     const location = useLocation();
     const isActive = active ?? (location.pathname === to || (to !== "/dashboard" && location.pathname.startsWith(to)));
@@ -69,49 +59,23 @@ function WorkloadPanel() {
 }
 
 function CRMPanel() {
-    const { data: stats = {} } = useQuery({
-        queryKey: ["crm-panel-stats"],
-        queryFn: () =>
-            api.get("/leads", { params: { limit: 500 } }).then(r => {
-                const leads = r.data.data || r.data || [];
-                return Array.isArray(leads)
-                    ? leads.reduce((acc, l) => {
-                          acc[l.status] = (acc[l.status] || 0) + 1;
-                          acc.total = (acc.total || 0) + 1;
-                          return acc;
-                      }, {})
-                    : {};
-            }),
+    const { data: total } = useQuery({
+        queryKey: ["crm-panel-lead-count"],
+        queryFn: () => api.get("/leads", { params: { limit: 1 } }).then(r => r.data.total ?? 0),
         staleTime: 60_000,
     });
-
-    const statuses = [
-        { id: "NEW",       label: "New" },
-        { id: "CONTACTED", label: "Contacted" },
-        { id: "FOLLOW_UP", label: "Follow Up" },
-        { id: "CONVERTED", label: "Converted" },
-        { id: "LOST",      label: "Lost" },
-    ];
 
     return (
         <>
             <PanelSection title="Pipeline">
-                <PanelLink to="/leads" icon={Users} label="All Leads" count={stats.total} />
-                {statuses.map(s => (
-                    <PanelLink
-                        key={s.id}
-                        to={`/leads?status=${s.id}`}
-                        label={s.label}
-                        count={stats[s.id]}
-                        dot={STATUS_DOT[s.id]}
-                    />
-                ))}
+                <PanelLink to="/leads" icon={Users} label="All Leads" count={total} />
             </PanelSection>
 
             <PanelSection title="Views">
                 <PanelLink to="/leads?mine=true" icon={Star} label="My Leads" />
                 <PanelLink to="/leads?score_min=61" icon={Star} label="Hot Leads" />
-                {/* <PanelLink to="/kanban" icon={KanbanSquare} label="Kanban Board" /> */}
+                <PanelLink to="/leads?view=kanban" icon={KanbanSquare} label="Board View" />
+                <PanelLink to="/department-board" icon={Building} label="Department Board" />
                 <PanelLink to="/search-leads" icon={SearchCheck} label="Search Leads" />
                 <PanelLink to="/linkedin-leads" icon={Linkedin} label="LinkedIn Leads" />
             </PanelSection>
@@ -243,7 +207,7 @@ function AdminPanel() {
         <>
             <PanelSection title="People">
                 <PanelLink to="/team"        icon={UserCog}    label="Team" />
-                {isSuperAdmin && <PanelLink to="/departments" icon={Building} label="Departments" />}
+                {isSuperAdmin && <PanelLink to="/department-staffing" icon={Building} label="Dept. Staffing" />}
                 <PanelLink to="/attendance"  icon={Clock}      label="Attendance" />
                 <PanelLink to="/leave"       icon={Calendar}   label="Leave" />
             </PanelSection>
@@ -254,7 +218,7 @@ function AdminPanel() {
 
             <PanelSection title="Leads">
                 <PanelLink to="/fasterq" icon={PhoneCall} label="Fasterq Calls" />
-                {isManager && <PanelLink to="/unassigned-leads" icon={AlertCircle} label="Unassigned Leads" />}
+                {isManager && <PanelLink to="/department-queue" icon={AlertCircle} label="Department Queue" />}
             </PanelSection>
 
             <PanelSection title="System">

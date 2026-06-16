@@ -10,14 +10,14 @@
 const ROLE_TOOLS = {
     EMPLOYEE: [
         "search_leads",
-        "count_leads_by_status",
+        "count_leads_by_department",
         "list_my_tasks",
         "get_pipeline_summary",
         "get_top_leads_by_revenue",
     ],
     ADMIN: [
         "search_leads",
-        "count_leads_by_status",
+        "count_leads_by_department",
         "list_my_tasks",
         "get_pipeline_summary",
         "get_revenue_stats",
@@ -25,7 +25,7 @@ const ROLE_TOOLS = {
     ],
     SUPER_ADMIN: [
         "search_leads",
-        "count_leads_by_status",
+        "count_leads_by_department",
         "list_my_tasks",
         "get_pipeline_summary",
         "get_revenue_stats",

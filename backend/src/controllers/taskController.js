@@ -4,6 +4,7 @@ const { getTasks: getTasksPaginated, getTasksForCalendar } = require("../service
 const { getTasksSchema, getCalendarSchema } = require("../validations/task.validation");
 const { ApiError, ERROR_CODES } = require("../utils/apiError");
 const logActivity = require("../utils/activityLogger");
+const { canAccessLead } = require("../services/permissionService");
 
 const taskInclude = {
     lead: { select: { id: true, name: true, phone: true, email: true } },
@@ -125,10 +126,10 @@ const getTasks = async (req, res, next) => {
         if (leadId) {
             const lead = await prisma.lead.findUnique({
                 where: { id: leadId },
-                select: { assignedToId: true }
+                select: { id: true }
             });
             if (!lead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
-            if (role === "EMPLOYEE" && lead.assignedToId !== userId) {
+            if (!(await canAccessLead(userId, role, lead))) {
                 throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Access denied");
             }
         }

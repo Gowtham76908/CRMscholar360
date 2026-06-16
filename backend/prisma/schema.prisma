@@ -24,7 +24,6 @@ model User {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   workspaceId    String?
-  departmentId   String?
   breakStartedAt    DateTime?
   onlineStatus      OnlineStatus    @default(OFFLINE)
   lastSeen          DateTime?
@@ -35,7 +34,6 @@ model User {
   employees      User[]          @relation("ManagerEmployees")
   activities       Activity[]
   attendances      Attendance[]
-  leads            Lead[]
   whatsappMessages WhatsAppMessage[]
   whatsappCampaigns WhatsAppCampaign[]
   whatsappAutoReplies WhatsAppAutoReply[]
@@ -50,7 +48,6 @@ model User {
   assignedDeals  Deal[]          @relation("AssignedDeals")
   sentEmails     EmailLog[]      @relation("SentEmails")
   emailTemplates EmailTemplate[]
-  departmentRel  Department?     @relation(fields: [departmentId], references: [id])
   workspace      Workspace?      @relation(fields: [workspaceId], references: [id])
   statusLogs     UserStatusLog[]
   assignmentHistoriesAsEmployee  AssignmentHistory[] @relation("HistoryEmployee")
@@ -63,6 +60,8 @@ model User {
   chatChannels       ChatChannel[]
   chatMembers        ChatMember[]
   chatMessages       ChatMessage[]
+  userDepartments    UserDepartment[]
+  leadDepartments    LeadDepartment[]
 
   @@index([phoneNormalized])
   @@index([managerId])
@@ -110,8 +109,7 @@ model Lead {
   phoneNormalized String?     @db.VarChar(15)
   source          LeadSource
   enquiryType     EnquiryType?
-  status          LeadStatus  @default(NEW)
-  assignedToId    String?
+  mergedIntoId    String?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   score            Int         @default(0)
@@ -129,8 +127,6 @@ model Lead {
   activities      Activity[]
   callLogs        CallLog[]
   fasterqCalls    FasterqCall[]
-  assignedAt      DateTime?
-  assignedTo      User?       @relation(fields: [assignedToId], references: [id])
   workspace       Workspace?  @relation(fields: [workspaceId], references: [id])
   notes           Note[]
   tasks           Task[]
@@ -142,15 +138,13 @@ model Lead {
   whatsappOptIn   Boolean   @default(false)
   whatsappOptInAt DateTime?
   emails          EmailLog[]
+  leadDepartments LeadDepartment[]
 
   lastActivityAt  DateTime?
 
   @@index([phoneNormalized])
-  @@index([assignedToId])
-  @@index([status])
   @@index([createdAt])
-  @@index([assignedToId, status])
-  @@index([assignedToId, createdAt])
+  @@index([mergedIntoId])
   @@index([lastActivityAt])
   @@index([score])
   @@index([nextFollowUpAt])
@@ -161,8 +155,8 @@ model AutomationRule {
   name          String
   description   String?
   isActive      Boolean               @default(true)
-  triggerType   String                // LEAD_CREATED | STATUS_CHANGED | NO_ACTIVITY | LEAD_ASSIGNED
-  triggerConfig Json?                 // { status: "CONTACTED" } | { days: 1 }
+  triggerType   String                // LEAD_CREATED | STAGE_CHANGED | ASSIGNED | UNASSIGNED | DEPARTMENT_ALLOCATED | NO_ACTIVITY | MISSED_CALL
+  triggerConfig Json?                 // { department: "LOAN", stage: "APPROVED" } | { days: 1 }
   conditions    AutomationCondition[]
   actions       AutomationAction[]
   logs          AutomationLog[]
@@ -173,7 +167,7 @@ model AutomationRule {
 model AutomationCondition {
   id       String         @id @default(uuid())
   ruleId   String
-  field    String         // source | status | assignedTo
+  field    String         // source | enquiryType | department | stage | assignedTo
   operator String         // equals | not_equals | is_empty | is_not_empty
   value    String?
   rule     AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
@@ -367,13 +361,18 @@ model Reminder {
 }
 
 model Commission {
-  id        String   @id @default(uuid())
-  userId    String
-  leadId    String
-  amount    Float
-  createdAt DateTime @default(now())
+  id         String         @id @default(uuid())
+  userId     String
+  leadId     String
+  department DepartmentType
+  amount     Float
+  createdAt  DateTime       @default(now())
 
-  @@unique([userId, leadId])
+  // One commission per department-service on a lead (a customer can earn a
+  // commission in SALES and again in FOREX, etc.). Recipient is that service's
+  // consultant (userId), captured at the time the service is invoiced.
+  @@unique([leadId, department])
+  @@index([userId])
 }
 
 model Permission {
@@ -432,12 +431,37 @@ model Workspace {
   users      User[]
 }
 
-model Department {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  users     User[]
+// Multi-department model — a user can belong to one or more departments.
+// Replaces the single User.departmentId for the new multi-department CRM.
+model UserDepartment {
+  id         String         @id @default(uuid())
+  userId     String
+  department DepartmentType
+  createdAt  DateTime       @default(now())
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, department])
+  @@index([department])
+}
+
+// One department's service on a lead. A lead (customer) can have many of these,
+// one per department, each with its own consultant and workflow stage.
+model LeadDepartment {
+  id                 String         @id @default(uuid())
+  leadId             String
+  department         DepartmentType
+  assignedEmployeeId String?
+  stage              String
+  assignedAt         DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  lead               Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignedEmployee   User?          @relation(fields: [assignedEmployeeId], references: [id])
+
+  @@unique([leadId, department])
+  @@index([department])
+  @@index([assignedEmployeeId])
+  @@index([stage])
 }
 
 model Attendance {
@@ -523,13 +547,13 @@ enum EnquiryType {
   SERVICES
 }
 
-enum LeadStatus {
-  NEW
-  CONTACTED
-  FOLLOW_UP
-  CONVERTED
-  LOST
-  MERGED
+enum DepartmentType {
+  SALES
+  APPLICATION_VISA
+  LOAN
+  ACCOMMODATION_TICKETS
+  FOREX
+  MISCELLANEOUS
 }
 
 enum AttendanceStatus {

@@ -33,8 +33,9 @@ const IntegrationHub         = lazy(() => import("./pages/IntegrationHub"));
 const Settings               = lazy(() => import("./pages/Settings"));
 const Reports                = lazy(() => import("./pages/Reports"));
 const AssistantUsage         = lazy(() => import("./pages/AssistantUsage"));
-const Departments            = lazy(() => import("./pages/Departments"));
-const DepartmentDetails      = lazy(() => import("./pages/DepartmentDetails"));
+const DepartmentQueue        = lazy(() => import("./pages/DepartmentQueue"));
+const DepartmentBoard        = lazy(() => import("./pages/DepartmentBoard"));
+const DepartmentStaffing     = lazy(() => import("./pages/DepartmentStaffing"));
 const Messages               = lazy(() => import("./pages/Messages"));
 const Attendance             = lazy(() => import("./pages/Attendance"));
 const Leave                  = lazy(() => import("./pages/Leave"));
@@ -48,7 +49,6 @@ const WhatsAppCampaignDetail = lazy(() => import("./pages/WhatsAppCampaignDetail
 const WhatsAppAutoReplies    = lazy(() => import("./pages/WhatsAppAutoReplies"));
 const Duplicates             = lazy(() => import("./pages/Duplicates"));
 const TeamManagement         = lazy(() => import("./pages/TeamManagement"));
-const UnassignedLeads        = lazy(() => import("./pages/UnassignedLeads"));
 const TeamPerformance        = lazy(() => import("./pages/TeamPerformance"));
 const EmployeeReport         = lazy(() => import("./pages/EmployeeReport"));
 const RevenueReport          = lazy(() => import("./pages/RevenueReport"));
@@ -106,8 +106,9 @@ function App() {
               <Route path="/integrations"             element={<IntegrationHub />} />
               <Route path="/reports"                  element={<Reports />} />
               <Route path="/ai-usage"                 element={<AssistantUsage />} />
-              <Route path="/departments"              element={<Departments />} />
-              <Route path="/departments/:id"          element={<DepartmentDetails />} />
+              <Route path="/department-queue"         element={<DepartmentQueue />} />
+              <Route path="/department-board"         element={<DepartmentBoard />} />
+              <Route path="/department-staffing"      element={<DepartmentStaffing />} />
               <Route path="/messages"                 element={<Messages />} />
               <Route path="/attendance"               element={<Attendance />} />
               <Route path="/leave"                    element={<Leave />} />
@@ -121,7 +122,6 @@ function App() {
               <Route path="/whatsapp/auto-replies"    element={<WhatsAppAutoReplies />} />
               <Route path="/duplicates"               element={<Duplicates />} />
               <Route path="/team-management"          element={<TeamManagement />} />
-              <Route path="/unassigned-leads"         element={<UnassignedLeads />} />
               <Route path="/team-performance"         element={<TeamPerformance />} />
               <Route path="/employee-report/:id"      element={<EmployeeReport />} />
               <Route path="/revenue-report"           element={<RevenueReport />} />

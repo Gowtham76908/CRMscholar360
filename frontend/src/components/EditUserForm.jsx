@@ -34,11 +34,6 @@ const EditUserForm = ({ user, onClose }) => {
         }
     });
 
-    const { data: departmentsList } = useQuery({
-        queryKey: ["departments"],
-        queryFn: async () => (await api.get("/departments")).data,
-    });
-
     // Populate form if user prop changes (though generic modal unmounts usually)
     useEffect(() => {
         if (user) {
@@ -101,15 +96,12 @@ const EditUserForm = ({ user, onClose }) => {
 
             <div>
                 <label className="block text-sm font-medium text-gray-700">Department</label>
-                <select
+                <input
                     {...register("department")}
+                    placeholder="e.g. Sales"
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                >
-                    <option value="">Select Department</option>
-                    {departmentsList?.map((dept) => (
-                        <option key={dept.id} value={dept.name}>{dept.name}</option>
-                    ))}
-                </select>
+                />
+                <p className="mt-1 text-xs text-gray-400">Service departments are assigned in Dept. Staffing.</p>
             </div>
 
             <div>

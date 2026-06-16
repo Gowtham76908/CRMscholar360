@@ -41,9 +41,7 @@ const DEFAULT_RULES = [
         description: "When a lead has had no activity for 3 days, create a follow-up reminder for the owner and send an in-app notification.",
         triggerType: "NO_ACTIVITY",
         triggerConfig: { days: 3 },
-        conditions: [
-            { field: "status", operator: "not_equals", value: "CONVERTED" },
-        ],
+        conditions: [],
         actions: [
             {
                 type: "CREATE_REMINDER",

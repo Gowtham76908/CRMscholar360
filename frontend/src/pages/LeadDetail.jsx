@@ -18,6 +18,7 @@ import { getScoreLabel } from "../utils/leadScore";
 import AddTaskForm from "../components/AddTaskForm";
 import AddLeadForm from "../components/AddLeadForm";
 import LeadSidebar from "../components/lead/LeadSidebar";
+import LeadDepartmentsPanel from "../components/lead/LeadDepartmentsPanel";
 import SmartSuggestions from "../components/lead/SmartSuggestions";
 import WhatsAppModal from "../components/lead/WhatsAppModal";
 import PostCallPanel from "../components/lead/PostCallPanel";
@@ -25,21 +26,6 @@ import ComposeEmailModal from "../components/ComposeEmailModal";
 import { useLeadPresence } from "../hooks/useLeadPresence";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const STATUS_OPTIONS = ["NEW", "CONTACTED", "FOLLOW_UP", "CONVERTED", "LOST"];
-
-const STATUS_STYLE = {
-    NEW:       "bg-blue-100 text-blue-800 border-blue-200",
-    CONTACTED: "bg-indigo-100 text-indigo-800 border-indigo-200",
-    FOLLOW_UP: "bg-amber-100 text-amber-800 border-amber-200",
-    CONVERTED: "bg-green-100 text-green-800 border-green-200",
-    LOST:      "bg-red-100 text-red-800 border-red-200",
-};
-
-const STATUS_LABEL = {
-    NEW: "New", CONTACTED: "Contacted", FOLLOW_UP: "Follow Up",
-    CONVERTED: "Converted", LOST: "Lost",
-};
 
 const SOURCE_LABEL = {
     FACEBOOK: "Facebook", INSTAGRAM: "Instagram", GMAIL: "Gmail",
@@ -117,97 +103,8 @@ const initials = (name = "") =>
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function StatusDropdown({ leadId, currentStatus, lead }) {
-    const [open, setOpen] = useState(false);
-    const [gateWarning, setGateWarning] = useState(null); // status pending gate confirmation
-    const queryClient = useQueryClient();
-
-    const mutation = useMutation({
-        mutationFn: (status) => api.patch(`/leads/${leadId}`, { status }),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
-            setOpen(false);
-            setGateWarning(null);
-        },
-        onError: (err) => {
-            const msg = err.response?.data?.message || "Failed to update status";
-            setGateWarning({ status: null, error: msg });
-        },
-    });
-
-    const handleSelect = (s) => {
-        if (s === currentStatus) { setOpen(false); return; }
-        if (s === "CONVERTED" && !lead?.phone && !lead?.email) {
-            setGateWarning({ status: s });
-            setOpen(false);
-            return;
-        }
-        mutation.mutate(s);
-    };
-
-    return (
-        <div className="relative">
-            <button
-                onClick={() => setOpen(v => !v)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all hover:opacity-80 ${STATUS_STYLE[currentStatus]}`}
-            >
-                {STATUS_LABEL[currentStatus]}
-                <ChevronDown className="h-3 w-3" />
-            </button>
-
-            {/* Stage gate warning */}
-            {gateWarning && (
-                <div className="absolute top-full mt-1 left-0 z-30 bg-white border border-amber-200 rounded-xl shadow-lg p-3 w-64">
-                    <p className="text-xs font-semibold text-amber-800 mb-1">
-                        {gateWarning.error ?? "This lead has no phone or email. Add contact info before converting."}
-                    </p>
-                    {!gateWarning.error && (
-                        <div className="flex gap-2 mt-2">
-                            <button
-                                onClick={() => { mutation.mutate(gateWarning.status); }}
-                                disabled={mutation.isPending}
-                                className="flex-1 text-xs font-bold px-2 py-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50"
-                            >
-                                Convert anyway
-                            </button>
-                            <button
-                                onClick={() => setGateWarning(null)}
-                                className="flex-1 text-xs font-bold px-2 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    )}
-                    {gateWarning.error && (
-                        <button onClick={() => setGateWarning(null)} className="mt-1 text-xs text-gray-400 hover:text-gray-600">Dismiss</button>
-                    )}
-                </div>
-            )}
-
-            {open && (
-                <>
-                    <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-                    <div className="absolute top-full mt-1 left-0 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[140px]">
-                        {STATUS_OPTIONS.map(s => (
-                            <button
-                                key={s}
-                                onClick={() => handleSelect(s)}
-                                disabled={mutation.isPending}
-                                className={`w-full text-left px-3 py-2 text-xs font-semibold transition-colors hover:bg-gray-50
-                                    ${s === currentStatus ? "opacity-40 cursor-default" : ""}`}
-                            >
-                                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border ${STATUS_STYLE[s]}`}>
-                                    {STATUS_LABEL[s]}
-                                </span>
-                            </button>
-                        ))}
-                    </div>
-                </>
-            )}
-        </div>
-    );
-}
-
+// Legacy audit-log status pills (historical STATUS_CHANGED entries only — the live
+// workflow stage now lives per-department in LeadDepartmentsPanel).
 const STATUS_PILL = {
     NEW:       "bg-blue-100 text-blue-700",
     CONTACTED: "bg-indigo-100 text-indigo-700",
@@ -1203,7 +1100,6 @@ export default function LeadDetail() {
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2.5 flex-wrap mb-1">
                                         <h1 className="text-2xl font-black text-gray-900 truncate leading-tight">{lead.name}</h1>
-                                        <StatusDropdown leadId={id} currentStatus={lead.status} lead={lead} />
                                     </div>
                                     {(lead.company || lead.jobTitle) && (
                                         <p className="text-sm text-gray-600 truncate">
@@ -1243,16 +1139,11 @@ export default function LeadDetail() {
                                         {lead.category}
                                     </span>
                                 )}
-                                {lead.status === "FOLLOW_UP" && (
-                                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                                        <Clock className="h-3 w-3" /> Follow-up needed
-                                    </span>
-                                )}
                             </div>
                         </div>
                     </div>
 
-                    {/* Contact strip — phone / email / assigned-to */}
+                    {/* Contact strip — phone / email / services */}
                     <div className="mt-5 pt-5 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {lead.phone ? (
                             <a href={`tel:${lead.phone}`} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
@@ -1284,20 +1175,22 @@ export default function LeadDetail() {
                                 <p className="text-xs">No email</p>
                             </div>}
 
-                        {lead.assignedTo ? (
+                        {lead.leadDepartments?.length ? (
                             <div className="flex items-center gap-3 px-3 py-2 min-w-0">
                                 <div className="h-9 w-9 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                                    <span className="text-xs font-black text-indigo-700">{lead.assignedTo.name?.charAt(0).toUpperCase()}</span>
+                                    <Users className="h-4 w-4 text-indigo-700" />
                                 </div>
                                 <div className="min-w-0">
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none">Assigned to</p>
-                                    <p className="text-sm font-semibold text-gray-900 truncate">{lead.assignedTo.name}</p>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none">Services</p>
+                                    <p className="text-sm font-semibold text-gray-900 truncate">
+                                        {lead.leadDepartments.length} department{lead.leadDepartments.length === 1 ? "" : "s"}
+                                    </p>
                                 </div>
                             </div>
                         ) : (
                             <div className="flex items-center gap-3 px-3 py-2 text-gray-300">
-                                <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center"><User className="h-4 w-4" /></div>
-                                <p className="text-xs">Unassigned</p>
+                                <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center"><Users className="h-4 w-4" /></div>
+                                <p className="text-xs">No services</p>
                             </div>
                         )}
                     </div>
@@ -1551,6 +1444,9 @@ export default function LeadDetail() {
                         leadId={id}
                         hideContact
                     />
+
+                    {/* ── Departments (multi-department services) ──────────────── */}
+                    <LeadDepartmentsPanel leadId={id} />
 
                     {/* ── Custom Fields ───────────────────────────────────────── */}
                     <CustomFieldsPanel leadId={id} lead={lead} />

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-    Upload, FileSpreadsheet, X, Bot, Users, UserX,
+    Upload, FileSpreadsheet, X, Users, UserX,
     ChevronRight, AlertCircle, CheckCircle2, Loader2, Plus,
 } from "lucide-react";
 import api from "../api/axios";
@@ -15,15 +15,6 @@ const STEP_CONFIRM = "confirm";
 const STEP_RUNNING = "running";
 
 const ALLOC_OPTIONS = [
-    {
-        id: "smart",
-        icon: Bot,
-        title: "Smart Allocation",
-        desc: "Automatically assign using the distribution engine — workload, performance, and availability balanced.",
-        color: "text-indigo-600",
-        border: "border-indigo-200",
-        bg: "bg-indigo-50",
-    },
     {
         id: "keep",
         icon: Users,
@@ -49,7 +40,7 @@ const STAGE_LABELS = {
     parsing:   "Parsing file…",
     deduping:  "Checking duplicates…",
     inserting: "Inserting leads…",
-    assigning: "Running smart allocation…",
+    assigning: "Assigning consultants…",
     complete:  "Done!",
     failed:    "Failed",
 };
@@ -159,7 +150,7 @@ export default function ImportLeadsModal({ onClose }) {
     const [step, setStep]               = useState(STEP_PICK);
     const [file, setFile]               = useState(null);
     const [preview, setPreview]         = useState(null);
-    const [allocMode, setAllocMode]     = useState("smart");
+    const [allocMode, setAllocMode]     = useState("keep");
     const [dragging, setDragging]       = useState(false);
     const [columnMap, setColumnMap]     = useState([]);       // [{ index, header, field, confidence, conflict }]
     const [newFieldNames, setNewFieldNames] = useState({});   // { colIndex: "custom field name" }
@@ -502,7 +493,7 @@ export default function ImportLeadsModal({ onClose }) {
                                 </div>
                                 <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 text-center">
                                     <p className="text-sm font-bold text-gray-700 capitalize">
-                                        {allocMode === "smart" ? "Smart" : allocMode === "keep" ? "From file" : "Unassigned"}
+                                        {allocMode === "keep" ? "From file" : "Unassigned"}
                                     </p>
                                     <p className="text-xs text-gray-500 font-medium mt-0.5">Allocation mode</p>
                                 </div>

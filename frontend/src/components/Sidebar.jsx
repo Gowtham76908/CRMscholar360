@@ -4,6 +4,7 @@
     Linkedin, Receipt, PhoneCall, Bot, Send, Search,
     Inbox, ChevronLeft, ChevronRight, GitMerge, Trophy,
     UserCheck, AlertCircle, TrendingUp, Zap, UserCog, Puzzle, HandCoins, LayoutGrid, IndianRupee, Sparkles,
+    ClipboardList, Network,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../lib/utils";
@@ -22,6 +23,7 @@ const NAV = [
     { group: "Workspace", icon: Users,           label: "Leads",       path: "/leads" },
     { group: "Workspace", icon: HandCoins,       label: "Deals",       path: "/deals" },
     { group: "Workspace", icon: LayoutGrid,      label: "Pipeline",    path: "/deals/pipeline" },
+    { group: "Workspace", icon: Building,        label: "Dept. Board", path: "/department-board" },
     { group: "Activity",  icon: Inbox,           label: "Inbox",       path: "/inbox" },
     { group: "Activity",  icon: CheckSquare,     label: "Tasks",       path: "/tasks" },
     { group: "Activity",  icon: MessageSquare,   label: "Messages",    path: "/messages" },
@@ -30,7 +32,7 @@ const NAV = [
     { group: "Account",   icon: Settings,        label: "Settings",    path: "/settings" },
 
     // ── Manager + Super Admin ─────────────────────────────────────────────────
-    { group: "Team",      icon: AlertCircle,   label: "Unassigned Leads",   path: "/unassigned-leads",  managerOnly: true },
+    { group: "Team",      icon: ClipboardList, label: "Department Queue",   path: "/department-queue",  managerOnly: true },
     { group: "Team",      icon: TrendingUp,    label: "Team Performance",   path: "/team-performance",  managerOnly: true },
     { group: "Team",      icon: IndianRupee,   label: "Revenue Report",     path: "/revenue-report",    managerOnly: true },
     { group: "Team",      icon: Trophy,        label: "Leaderboard",        path: "/leaderboard",       managerOnly: true },
@@ -44,7 +46,7 @@ const NAV = [
     { group: "Intelligence", icon: Zap,         label: "WA Auto Reply",    path: "/whatsapp/auto-replies",  superAdminOnly: true },
     { group: "Admin",        icon: UserCog,     label: "Team",             path: "/team",                   superAdminOnly: true },
     { group: "Admin",        icon: UserCheck,   label: "Team Management",  path: "/team-management",        superAdminOnly: true },
-    { group: "Admin",        icon: Building,    label: "Departments",      path: "/departments",            superAdminOnly: true },
+    { group: "Admin",        icon: Network,     label: "Dept. Staffing",   path: "/department-staffing",    superAdminOnly: true },
     { group: "Admin",        icon: GitMerge,    label: "Duplicates",       path: "/duplicates",             superAdminOnly: true },
     { group: "Admin",        icon: Receipt,     label: "Invoices",         path: "/invoices",               superAdminOnly: true },
     { group: "Admin",        icon: SearchCheck, label: "Search Leads",     path: "/search-leads",           superAdminOnly: true },

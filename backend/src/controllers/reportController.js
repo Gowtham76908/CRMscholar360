@@ -1,4 +1,9 @@
 const prisma = require("../utils/prisma");
+const { wonStageFilter } = require("../config/departmentWorkflows");
+
+// "Converted" is now a per-department outcome: a lead counts as converted if any
+// of its department services has reached a won stage. There is no global status.
+const WON_OR = wonStageFilter();
 
 const getDateFilter = (from, to) => {
     if (!from && !to) return {};
@@ -12,68 +17,31 @@ const getLeadsBySource = async (req, res, next) => {
     try {
         const { from, to } = req.query;
         const dateFilter = getDateFilter(from, to);
-        const rows = await prisma.lead.groupBy({
-            by: ["source", "status"],
-            where: dateFilter,
-            _count: { id: true },
-        });
-        const map = {};
-        rows.forEach(r => {
-            if (!map[r.source]) map[r.source] = { source: r.source, total: 0, converted: 0 };
-            map[r.source].total += r._count.id;
-            if (r.status === "CONVERTED") map[r.source].converted += r._count.id;
-        });
-        const result = Object.values(map).map(s => ({
-            ...s,
-            conversionRate: s.total > 0 ? +((s.converted / s.total) * 100).toFixed(1) : 0,
-        })).sort((a, b) => b.total - a.total);
-        res.json(result);
-    } catch (error) { return next(error); }
-};
 
-const getLeadsByEmployee = async (req, res, next) => {
-    try {
-        const { from, to } = req.query;
-        const dateFilter = getDateFilter(from, to);
-        const rows = await prisma.lead.groupBy({
-            by: ["assignedToId", "status"],
-            where: { assignedToId: { not: null }, ...dateFilter },
-            _count: { id: true },
-        });
-        const userIds = [...new Set(rows.map(r => r.assignedToId))];
-        const users = await prisma.user.findMany({
-            where: { id: { in: userIds } },
-            select: { id: true, name: true },
-        });
-        const nameMap = Object.fromEntries(users.map(u => [u.id, u.name]));
-        const map = {};
-        rows.forEach(r => {
-            const key = r.assignedToId;
-            if (!map[key]) map[key] = { name: nameMap[key] || "Unknown", total: 0, converted: 0, lost: 0, active: 0 };
-            map[key].total += r._count.id;
-            if (r.status === "CONVERTED")      map[key].converted += r._count.id;
-            else if (r.status === "LOST")      map[key].lost      += r._count.id;
-            else                               map[key].active    += r._count.id;
-        });
-        const result = Object.values(map).map(e => ({
-            ...e,
-            conversionRate: e.total > 0 ? +((e.converted / e.total) * 100).toFixed(1) : 0,
-        })).sort((a, b) => b.total - a.total);
-        res.json(result);
-    } catch (error) { return next(error); }
-};
-
-const getConversionRate = async (req, res, next) => {
-    try {
-        const { from, to } = req.query;
-        const dateFilter = getDateFilter(from, to);
-        const [totalLeads, convertedLeads, lostLeads] = await Promise.all([
-            prisma.lead.count({ where: dateFilter }),
-            prisma.lead.count({ where: { ...dateFilter, status: "CONVERTED" } }),
-            prisma.lead.count({ where: { ...dateFilter, status: "LOST" } }),
+        const [totals, convertedLeads] = await Promise.all([
+            prisma.lead.groupBy({ by: ["source"], where: dateFilter, _count: { id: true } }),
+            // Leads with at least one won service — counted once per lead, per source.
+            prisma.lead.findMany({
+                where: { ...dateFilter, leadDepartments: { some: { OR: WON_OR } } },
+                select: { source: true },
+            }),
         ]);
-        const rate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : 0;
-        res.json({ totalLeads, convertedLeads, lostLeads, conversionRate: `${rate}%` });
+
+        const convBySource = {};
+        for (const l of convertedLeads) convBySource[l.source] = (convBySource[l.source] || 0) + 1;
+
+        const result = totals.map(r => {
+            const total = r._count.id;
+            const converted = convBySource[r.source] || 0;
+            return {
+                source: r.source,
+                total,
+                converted,
+                conversionRate: total > 0 ? +((converted / total) * 100).toFixed(1) : 0,
+            };
+        }).sort((a, b) => b.total - a.total);
+
+        res.json(result);
     } catch (error) { return next(error); }
 };
 
@@ -87,23 +55,13 @@ const getMonthlyGrowth = async (req, res, next) => {
         });
         const [counts, converted] = await Promise.all([
             Promise.all(ranges.map(r => prisma.lead.count({ where: { createdAt: { gte: r.start, lt: r.end } } }))),
-            Promise.all(ranges.map(r => prisma.lead.count({ where: { createdAt: { gte: r.start, lt: r.end }, status: "CONVERTED" } }))),
+            // Won services reached in the month (by service updatedAt).
+            Promise.all(ranges.map(r => prisma.leadDepartment.count({
+                where: { updatedAt: { gte: r.start, lt: r.end }, OR: WON_OR },
+            }))),
         ]);
         res.json(ranges.map((r, i) => ({ month: r.label, leads: counts[i], converted: converted[i] })));
     } catch (error) { return next(error); }
 };
 
-const getLeadsByStatus = async (req, res, next) => {
-    try {
-        const { from, to } = req.query;
-        const dateFilter = getDateFilter(from, to);
-        const rows = await prisma.lead.groupBy({
-            by: ["status"],
-            where: dateFilter,
-            _count: { id: true },
-        });
-        res.json(rows);
-    } catch (error) { return next(error); }
-};
-
-module.exports = { getLeadsBySource, getLeadsByEmployee, getConversionRate, getMonthlyGrowth, getLeadsByStatus };
+module.exports = { getLeadsBySource, getMonthlyGrowth };

@@ -1,20 +1,18 @@
 ﻿const prisma = require("../utils/prisma");
 const paginate = require("../utils/paginate");
 const calculateLeadScore = require("../utils/leadScorer");
-const { recomputeLeadScore } = require("../services/leadScoringService");
 const logActivity = require("../utils/activityLogger");
-const { createCommission } = require("../services/commissionService");
 const leadService = require("../services/leadService");
 const { getLeadsSchema } = require("../validations/lead.validation");
 const normalizePhone = require("../utils/normalizePhone");
 const { runRulesForLead } = require("../services/automationEngine");
 const { getSuggestionsForLead, dismissSuggestion } = require("../services/followUpSuggestionService");
-const { adjustLeadLoad, assignLeads: smartAssignLeads, batchAssignLeads, assignLeadOrAlert: autoAssignLead } = require("../services/leadDistributionEngine");
 const XLSX = require("xlsx");
 const { ApiError, ERROR_CODES } = require("../utils/apiError");
-const { canAccessLead, canReassignLeadTo } = require("../services/permissionService");
-const { getTeamMemberIds } = require("../services/organizationService");
+const { canAccessLead } = require("../services/permissionService");
+const { getUserDepartments } = require("../services/leadDepartmentService");
 const { csvField } = require("../utils/csv");
+const { getInitialStage } = require("../config/departmentWorkflows");
 
 // Get Leads
 const getLeads = async (req, res, next) => {
@@ -32,10 +30,9 @@ const getLeads = async (req, res, next) => {
             });
         }
 
-        const { page, limit, status, assignedTo, startDate, endDate, search, sortBy, sortOrder, isSearchLead, score_min, score_max, mine, source, category, enquiryType, sla } = validationResult.data;
+        const { page, limit, assignedTo, startDate, endDate, search, sortBy, sortOrder, isSearchLead, score_min, score_max, mine, source, category, enquiryType, sla, department, stage } = validationResult.data;
 
         const rawFilters = {
-            status,
             assignedTo,
             startDate,
             endDate,
@@ -47,6 +44,8 @@ const getLeads = async (req, res, next) => {
             category,
             enquiryType,
             sla,
+            department,
+            stage,
         };
 
         const filters = Object.fromEntries(
@@ -86,8 +85,10 @@ const createLead = async (req, res, next) => {
         // Scoring
         const { score, category } = calculateLeadScore({ source, phone, email });
 
-        const newLead = await prisma.lead.create({
-            data: {
+        // Centralized creation: atomically creates the Lead + its SALES LeadDepartment.
+        // Never call prisma.lead.create directly (would orphan the lead).
+        const newLead = await leadService.createLead(
+            {
                 name,
                 email,
                 phone,
@@ -96,8 +97,9 @@ const createLead = async (req, res, next) => {
                 enquiryType,
                 score,
                 category
-            }
-        });
+            },
+            { createdByUserId: userId }
+        );
 
         // Log Activity
         await logActivity({
@@ -107,10 +109,10 @@ const createLead = async (req, res, next) => {
             metadata: { source, score, category }
         });
 
-        // Fire automation rules + auto-assign async — don't block the response
+        // Fire automation rules async — don't block the response. Auto-distribution
+        // is retired; the SALES service is assigned by leadService.createLead (the
+        // creator if a Sales member) or left for a manager to allocate.
         runRulesForLead("LEAD_CREATED", newLead).catch(console.error);
-        autoAssignLead(newLead.id, { actorId: userId, reason: "AUTO_ASSIGNMENT" })
-            .catch(err => console.error(`[AutoAssign] createLead ${newLead.id}:`, err.message || err));
 
         res.status(201).json({ message: "Lead created successfully", lead: newLead });
     } catch (error) {
@@ -118,12 +120,14 @@ const createLead = async (req, res, next) => {
     }
 };
 
-// Update Lead Status (and other details)
+// Update Lead — customer details only. Workflow stage and consultant assignment
+// are per-department now and live behind /lead-departments (updateStage /
+// assignConsultant). This endpoint no longer touches status or assignedToId.
 const updateLead = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { id } = req.params;
-        const { status, name, email, phone, source, enquiryType, assignedToId, nextFollowUpAt } = req.body;
+        const { name, email, phone, source, enquiryType, nextFollowUpAt } = req.body;
 
         const currentLead = await prisma.lead.findUnique({ where: { id } });
         if (!currentLead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
@@ -134,154 +138,32 @@ const updateLead = async (req, res, next) => {
             throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You do not have access to this lead");
         }
 
-        // Only managers/admins may change the assignee.
-        if (
-            assignedToId !== undefined &&
-            assignedToId !== currentLead.assignedToId &&
-            !(await canReassignLeadTo(userId, role, assignedToId))
-        ) {
-            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You cannot reassign this lead");
-        }
-
-        // Stage gate: CONVERTED requires at least phone or email
-        if (status === "CONVERTED" && currentLead.status !== "CONVERTED") {
-            const phone = req.body.phone ?? currentLead.phone;
-            const email = req.body.email ?? currentLead.email;
-            if (!phone && !email) {
-                return res.status(422).json({
-                    code: "STAGE_GATE",
-                    message: "Cannot convert a lead without a phone number or email address.",
-                });
-            }
-        }
-
-        // Build clean update object, explicitly ignoring undefined to support partial PATCH
-        // Auto-set nextFollowUpAt to 3 days out when transitioning to FOLLOW_UP and no date given
-        let resolvedFollowUpAt = nextFollowUpAt !== undefined
+        const resolvedFollowUpAt = nextFollowUpAt !== undefined
             ? (nextFollowUpAt ? new Date(nextFollowUpAt) : null)
             : undefined;
-        if (
-            status === "FOLLOW_UP" &&
-            currentLead.status !== "FOLLOW_UP" &&
-            resolvedFollowUpAt === undefined &&
-            !currentLead.nextFollowUpAt
-        ) {
-            resolvedFollowUpAt = new Date(Date.now() + 3 * 86_400_000);
-        }
 
         const updateData = {
-            ...(status !== undefined && { status }),
             ...(name !== undefined && { name }),
             ...(email !== undefined && { email }),
             ...(phone !== undefined && { phone, phoneNormalized: normalizePhone(phone) }),
             ...(source !== undefined && { source }),
             ...(enquiryType !== undefined && { enquiryType }),
-            ...(assignedToId !== undefined && { assignedToId }),
             ...(resolvedFollowUpAt !== undefined && { nextFollowUpAt: resolvedFollowUpAt }),
         };
 
         const updatedLead = await prisma.lead.update({
             where: { id },
-            data: updateData
+            data: updateData,
         });
 
-        // Recompute the temperature from interaction history (folds in the new
-        // status/contact info). Keeps engagement points intact instead of resetting
-        // the score to the intake value on every edit.
-        const rescored = await recomputeLeadScore(id);
-        if (rescored) { updatedLead.score = rescored.score; updatedLead.category = rescored.category; }
-
-        // Log Activity
         await logActivity({
             leadId: updatedLead.id,
             userId,
             action: "LEAD_UPDATED",
-            metadata: {
-                prevStatus: currentLead.status,
-                newStatus: status,
-                changes: req.body
-            }
+            metadata: { changes: req.body },
         });
-
-        // Fire automation rules async — don't block the response
-        if (status && status !== currentLead.status) {
-            runRulesForLead("STATUS_CHANGED", updatedLead, { prevStatus: currentLead.status, newStatus: status }).catch(console.error);
-        }
-        // Only fire LEAD_ASSIGNED when the assignee actually changed
-        const incomingAssignee = req.body.assignedToId;
-        if (incomingAssignee && incomingAssignee !== currentLead.assignedToId) {
-            runRulesForLead("LEAD_ASSIGNED", updatedLead).catch(console.error);
-        }
-
-        // Decrement load when lead leaves the active pool. "CLOSED" was a dead
-        // string (not in the LeadStatus enum); MERGED was missing.
-        const terminalStatuses = ["CONVERTED", "LOST", "MERGED"];
-        const wasActive = !terminalStatuses.includes(currentLead.status);
-        const isNowTerminal = terminalStatuses.includes(status);
-        if (status && wasActive && isNowTerminal && updatedLead.assignedToId) {
-            adjustLeadLoad(updatedLead.assignedToId, -1).catch(console.error);
-        }
-
-        // Trigger Commission if status changed to CONVERTED — idempotency guarded
-        if (status === "CONVERTED" && currentLead.status !== "CONVERTED") {
-            const targetUserId = updatedLead.assignedToId || userId;
-            // Check-then-create inside a transaction to prevent duplicate commissions
-            // on concurrent requests (e.g. double-click, retry). Schema-level unique
-            // constraint on (userId, leadId) should also be added as a migration.
-            await prisma.$transaction(async (tx) => {
-                const existing = await tx.commission.findFirst({
-                    where: { leadId: updatedLead.id, userId: targetUserId },
-                    select: { id: true },
-                });
-                if (!existing) {
-                    await createCommission(updatedLead.id, targetUserId);
-                }
-            }, { isolationLevel: "Serializable" });
-        }
 
         res.json({ message: "Lead updated successfully", lead: updatedLead });
-    } catch (error) {
-        return next(error);
-    }
-};
-
-// Assign Lead
-const assignLead = async (req, res, next) => {
-    try {
-        const { userId, role } = req.user;
-        const { id } = req.params;
-        const { assignedToId } = req.body;
-
-        if (!assignedToId) {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "assignedToId is required");
-        }
-
-        if (!(await canReassignLeadTo(userId, role, assignedToId))) {
-            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You cannot assign leads to this user");
-        }
-
-        const user = await prisma.user.findUnique({ where: { id: assignedToId } });
-        if (!user) {
-            throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Target user not found");
-        }
-
-        const updatedLead = await prisma.$transaction(async (tx) => {
-            const lead = await tx.lead.update({
-                where: { id },
-                data: { assignedToId }
-            });
-            await tx.activity.create({
-                data: {
-                    leadId: lead.id,
-                    userId,
-                    action: "LEAD_ASSIGNED",
-                    metadata: { assignedTo: user.name },
-                }
-            });
-            return lead;
-        });
-
-        res.json({ message: "Lead assigned successfully", lead: updatedLead });
     } catch (error) {
         return next(error);
     }
@@ -368,11 +250,13 @@ const mergeLeads = async (req, res, next) => {
                 data: { leadId: primaryLeadId }
             });
 
-            // Stamp secondary as MERGED so it is excluded from conversion analytics
-            // while remaining auditable. MERGED is a terminal status — not LOST.
+            // Stamp the secondary with mergedIntoId so it is excluded from all
+            // normal views (filtered in leadService.getLeads) while remaining
+            // auditable, and drop its department services so it leaves every queue.
+            await prisma.leadDepartment.deleteMany({ where: { leadId: secondaryLeadId } });
             await prisma.lead.update({
                 where: { id: secondaryLeadId },
-                data: { status: "MERGED", assignedToId: null }
+                data: { mergedIntoId: primaryLeadId }
             });
 
             // Log Merge on Primary
@@ -402,8 +286,8 @@ const getLead = async (req, res, next) => {
         const lead = await prisma.lead.findUnique({
             where: { id },
             include: {
-                assignedTo: {
-                    select: { id: true, name: true, email: true, phone: true, profilePhoto: true }
+                leadDepartments: {
+                    include: { assignedEmployee: { select: { id: true, name: true, email: true } } },
                 },
             },
         });
@@ -423,7 +307,7 @@ const getLeadActivities = async (req, res, next) => {
         const { id } = req.params;
         const { userId, role } = req.user;
         if (role !== "SUPER_ADMIN") {
-            const lead = await prisma.lead.findUnique({ where: { id }, select: { assignedToId: true } });
+            const lead = await prisma.lead.findUnique({ where: { id }, select: { id: true } });
             if (!lead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
             if (!(await canAccessLead(userId, role, lead))) {
                 throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Access denied");
@@ -466,18 +350,22 @@ const exportLeads = async (req, res, next) => {
         try {
             // Apply the same role-based scoping used in getLeads — prevents a non-admin
             // from exfiltrating the entire lead database via a single export request.
-            // EMPLOYEE → own leads, ADMIN → team (+ unassigned), SUPER_ADMIN → all.
+            // Multi-department model: visible via LeadDepartment / UserDepartment.
+            // EMPLOYEE → own assignments, ADMIN → their departments (+ own), SUPER_ADMIN → all.
             const where = {};
             if (role === "EMPLOYEE") {
-                where.assignedToId = userId;
+                where.leadDepartments = { some: { assignedEmployeeId: userId } };
             } else if (role === "ADMIN") {
-                const teamIds = await getTeamMemberIds(userId);
-                if (teamIds.length > 0) {
-                    where.OR = [{ assignedToId: { in: teamIds } }, { assignedToId: null }];
-                }
+                const managed = await getUserDepartments(userId);
+                where.leadDepartments = {
+                    some: managed.length
+                        ? { OR: [{ department: { in: managed } }, { assignedEmployeeId: userId }] }
+                        : { assignedEmployeeId: userId },
+                };
             }
 
-            const headers = ["Name", "Email", "Phone", "Source", "Type", "Status", "Score", "Category", "Assigned To", "Created At"];
+            // Departments/stages live on LeadDepartment; summarised per row below.
+            const headers = ["Name", "Email", "Phone", "Source", "Type", "Score", "Category", "Departments", "Created At"];
 
             res.header("Content-Type", "text/csv; charset=utf-8");
             res.attachment("leads.csv");
@@ -490,23 +378,25 @@ const exportLeads = async (req, res, next) => {
             while (!done) {
                 const page = await prisma.lead.findMany({
                     where,
-                    include: { assignedTo: { select: { name: true } } },
+                    include: { leadDepartments: { select: { department: true, stage: true } } },
                     orderBy: { createdAt: "desc" },
                     take: PAGE,
                     ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
                 });
 
                 for (const lead of page) {
+                    const services = (lead.leadDepartments || [])
+                        .map(d => `${d.department}:${d.stage}`)
+                        .join(" | ");
                     res.write([
                         lead.name,
                         lead.email || "",
                         lead.phone || "",
                         lead.source,
                         lead.enquiryType,
-                        lead.status,
                         lead.score,
                         lead.category || "",
-                        lead.assignedTo?.name || "Unassigned",
+                        services,
                         new Date(lead.createdAt).toLocaleDateString("en-IN"),
                     ].map(csvField).join(",") + "\r\n");
                 }
@@ -788,6 +678,7 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
 
         const INSERT_CHUNK = 500; // rows per createMany batch
         const insertedAt = new Date();
+        const salesInitialStage = getInitialStage("SALES");
         let createdLeadIds = [];
 
         // Chunk inserts so a single giant createMany never risks a statement
@@ -795,33 +686,37 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
         for (let i = 0; i < newRows.length; i += INSERT_CHUNK) {
             const chunk = newRows.slice(i, i + INSERT_CHUNK);
 
+            // In "keep" mode the named consultant carries over onto the SALES
+            // service (not a global lead owner). Map normalized phone → consultantId.
+            const consultantByNormalized = new Map();
+            if (allocationMode === "keep") {
+                for (const r of chunk) {
+                    if (!r.normalized || !r.assignedToRaw) continue;
+                    const cid =
+                        employeeByName.get(r.assignedToRaw.toLowerCase()) ||
+                        employeeByEmail.get(r.assignedToRaw.toLowerCase()) ||
+                        null;
+                    if (cid) consultantByNormalized.set(r.normalized, cid);
+                }
+            }
+
             await prisma.$transaction(async (tx) => {
                 const { count } = await tx.lead.createMany({
-                    data: chunk.map(r => {
-                        let assignedToId = null;
-                        if (allocationMode === "keep" && r.assignedToRaw) {
-                            assignedToId =
-                                employeeByName.get(r.assignedToRaw.toLowerCase()) ||
-                                employeeByEmail.get(r.assignedToRaw.toLowerCase()) ||
-                                null;
-                        }
-                        return {
-                            name: r.name,
-                            email: r.email || null,
-                            phone: r.phone,
-                            phoneNormalized: r.normalized,
-                            company: r.company || null,
-                            biodata: r.biodata || null,
-                            jobTitle: r.jobTitle || null,
-                            linkedinUrl: r.linkedinUrl || null,
-                            source: r.source,
-                            enquiryType: r.enquiryType,
-                            score: r.score,
-                            category: r.category,
-                            ...(r.customFields && Object.keys(r.customFields).length > 0 ? { customFields: r.customFields } : {}),
-                            ...(assignedToId ? { assignedToId, assignedAt: new Date() } : {}),
-                        };
-                    }),
+                    data: chunk.map(r => ({
+                        name: r.name,
+                        email: r.email || null,
+                        phone: r.phone,
+                        phoneNormalized: r.normalized,
+                        company: r.company || null,
+                        biodata: r.biodata || null,
+                        jobTitle: r.jobTitle || null,
+                        linkedinUrl: r.linkedinUrl || null,
+                        source: r.source,
+                        enquiryType: r.enquiryType,
+                        score: r.score,
+                        category: r.category,
+                        ...(r.customFields && Object.keys(r.customFields).length > 0 ? { customFields: r.customFields } : {}),
+                    })),
                     skipDuplicates: true,
                 });
 
@@ -836,7 +731,7 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
                             phoneNormalized: { in: chunk.map(r => r.normalized).filter(Boolean) },
                             createdAt: { gte: insertedAt },
                         },
-                        select: { id: true },
+                        select: { id: true, phoneNormalized: true },
                     });
                     const ids = created.map(l => l.id);
                     createdLeadIds.push(...ids);
@@ -850,6 +745,24 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
                                 metadata: { source: "FILE_IMPORT" },
                             })),
                         });
+
+                        // Every imported lead enters through Sales — create its SALES
+                        // LeadDepartment so it is never orphaned under the new model.
+                        // In "keep" mode the consultant carries onto the SALES service;
+                        // otherwise it stays unassigned for a manager to allocate.
+                        await tx.leadDepartment.createMany({
+                            data: created.map(l => {
+                                const cid = consultantByNormalized.get(l.phoneNormalized) || null;
+                                return {
+                                    leadId: l.id,
+                                    department: "SALES",
+                                    stage: salesInitialStage,
+                                    assignedEmployeeId: cid,
+                                    assignedAt: cid ? insertedAt : null,
+                                };
+                            }),
+                            skipDuplicates: true,
+                        });
                     }
                 }
             });
@@ -859,24 +772,8 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
             await updateJob({ stage: "inserting", progress: Math.min(70, insertProgress), imported: counts.imported });
         }
 
-        // ── Stage: smart batch assignment ─────────────────────────────────
-        let assignedCount = 0;
-        if (allocationMode === "smart" && createdLeadIds.length > 0) {
-            await updateJob({ stage: "assigning", progress: 75 });
-            try {
-                const assignOpts = role === "ADMIN"
-                    ? { managerId: userId, actorId: userId }
-                    : { actorId: userId };
-                const result = await batchAssignLeads(createdLeadIds, assignOpts);
-                assignedCount = result.assigned;
-                if (result.failed > 0 && errors.length < IMPORT_ERROR_CAP) {
-                    errors.push(`Smart allocation: ${result.failed} lead(s) could not be assigned (no available capacity)`);
-                }
-            } catch (err) {
-                if (errors.length < IMPORT_ERROR_CAP)
-                    errors.push(`Smart allocation warning: ${err.message}`);
-            }
-        }
+        // Auto lead-distribution is retired. "smart" mode now behaves like
+        // "unassigned": leads land in the SALES queue for a manager to allocate.
 
         // ── Done ──────────────────────────────────────────────────────────
         const raceLine = counts.duplicatesFromRace > 0
@@ -885,7 +782,7 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
             status: "done", stage: "complete", progress: 100,
             imported: counts.imported, duplicates: counts.duplicates,
             skipped: counts.skipped, failed: counts.failed,
-            assigned: assignedCount, errors,
+            assigned: 0, errors,
             message: `Import complete: ${counts.imported} imported, ${counts.duplicates} duplicate(s) skipped${raceLine}, ${counts.failed} failed`,
         });
     } catch (err) {
@@ -957,61 +854,26 @@ const getImportStatus = async (req, res, next) => {
 const getOverdueFollowUps = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
-        const leadWhere = role === "EMPLOYEE" ? { assignedToId: userId } : {};
+        // Consultants see only leads where they hold a department service.
+        const where = {
+            mergedIntoId: null,
+            nextFollowUpAt: { lt: new Date() },
+        };
+        if (role === "EMPLOYEE") {
+            where.leadDepartments = { some: { assignedEmployeeId: userId } };
+        }
         const leads = await prisma.lead.findMany({
-            where: {
-                ...leadWhere,
-                nextFollowUpAt: { lt: new Date() },
-                status: { notIn: ["CONVERTED", "LOST", "MERGED"] },
-            },
+            where,
             select: {
-                id: true, name: true, phone: true, email: true,
-                status: true, nextFollowUpAt: true,
-                assignedTo: { select: { id: true, name: true } },
+                id: true, name: true, phone: true, email: true, nextFollowUpAt: true,
+                leadDepartments: {
+                    select: { department: true, stage: true, assignedEmployee: { select: { id: true, name: true } } },
+                },
             },
             orderBy: { nextFollowUpAt: "asc" },
             take: 15,
         });
         res.json(leads);
-    } catch (error) {
-        return next(error);
-    }
-};
-
-const getDashboardStats = async (req, res, next) => {
-    try {
-        const { userId, role } = req.user;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const leadWhere = role === "EMPLOYEE" ? { assignedToId: userId } : {};
-        const taskWhere = role === "EMPLOYEE" ? { assignedToId: userId, status: "PENDING" } : { status: "PENDING" };
-
-        const now = new Date();
-        const overdueWhere = {
-            ...leadWhere,
-            nextFollowUpAt: { lt: now },
-            status: { notIn: ["CONVERTED", "LOST", "MERGED"] },
-        };
-
-        const [total, newLeadsToday, converted, followUp, pendingTasks, overdueFollowUps] = await prisma.$transaction([
-            prisma.lead.count({ where: leadWhere }),
-            prisma.lead.count({ where: { ...leadWhere, createdAt: { gte: today } } }),
-            prisma.lead.count({ where: { ...leadWhere, status: "CONVERTED" } }),
-            prisma.lead.count({ where: { ...leadWhere, status: "FOLLOW_UP" } }),
-            prisma.task.count({ where: taskWhere }),
-            prisma.lead.count({ where: overdueWhere }),
-        ]);
-
-        res.json({
-            total,
-            newLeadsToday,
-            converted,
-            followUp,
-            pendingTasks,
-            overdueFollowUps,
-            conversionRate: total > 0 ? Math.round((converted / total) * 1000) / 10 : 0
-        });
     } catch (error) {
         return next(error);
     }
@@ -1051,7 +913,6 @@ const getDuplicates = async (req, res, next) => {
                     ...(dupeEmails.length ? [{ email: { in: dupeEmails } }] : []),
                 ],
             },
-            include: { assignedTo: { select: { id: true, name: true } } },
             orderBy: { createdAt: "asc" },
             take: 1000, // safety cap — UI can't usefully display more
         });
@@ -1093,60 +954,6 @@ const getDuplicates = async (req, res, next) => {
     }
 };
 
-// GET /leads/team-stats — per-member conversion stats (admin / team lead only)
-const getTeamStats = async (req, res, next) => {
-    try {
-        const { role } = req.user;
-        if (!["SUPER_ADMIN", "ADMIN"].includes(role)) {
-            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Forbidden");
-        }
-
-        const [users, grouped] = await Promise.all([
-            prisma.user.findMany({
-                where: { isActive: true },
-                select: { id: true, name: true, role: true },
-            }),
-            prisma.lead.groupBy({
-                by: ["assignedToId", "status"],
-                where: { assignedToId: { not: null } },
-                _count: { id: true },
-            }),
-        ]);
-
-        const statsMap = new Map();
-        for (const row of grouped) {
-            if (!row.assignedToId) continue;
-            if (!statsMap.has(row.assignedToId)) {
-                statsMap.set(row.assignedToId, { total: 0, converted: 0, followUp: 0, contacted: 0, lost: 0 });
-            }
-            const s = statsMap.get(row.assignedToId);
-            s.total      += row._count.id;
-            if (row.status === "CONVERTED")  s.converted  = row._count.id;
-            if (row.status === "FOLLOW_UP")  s.followUp   = row._count.id;
-            if (row.status === "CONTACTED")  s.contacted  = row._count.id;
-            if (row.status === "LOST")       s.lost       = row._count.id;
-        }
-
-        const result = users
-            .filter(u => statsMap.has(u.id))
-            .map(u => {
-                const s = statsMap.get(u.id);
-                return {
-                    userId: u.id,
-                    name:   u.name,
-                    role:   u.role,
-                    ...s,
-                    conversionRate: s.total > 0 ? Math.round((s.converted / s.total) * 100) : 0,
-                };
-            })
-            .sort((a, b) => b.converted - a.converted || b.total - a.total);
-
-        res.json(result);
-    } catch (error) {
-        return next(error);
-    }
-};
-
 const getLeadSuggestions = async (req, res, next) => {
     try {
         const suggestions = await getSuggestionsForLead(req.params.id);
@@ -1169,59 +976,6 @@ const dismissLeadSuggestion = async (req, res, next) => {
     }
 };
 
-// Reassign Lead with history tracking
-const reassignLead = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const { employeeId, reason } = req.body;
-        const { userId, role } = req.user;
-
-        if (!employeeId) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "employeeId is required");
-
-        const { canReassignLeadTo } = require("../services/permissionService");
-        const allowed = await canReassignLeadTo(userId, role, employeeId);
-        if (!allowed) {
-            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You can only assign leads to members of your team");
-        }
-
-        const lead = await prisma.lead.findUnique({ where: { id } });
-        if (!lead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
-
-        const employee = await prisma.user.findUnique({ where: { id: employeeId } });
-        if (!employee) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Employee not found");
-
-        const previousEmployeeId = lead.assignedToId || null;
-
-        const [updatedLead] = await prisma.$transaction([
-            prisma.lead.update({
-                where: { id },
-                data: { assignedToId: employeeId, assignedAt: new Date() },
-                include: { assignedTo: { select: { id: true, name: true, email: true } } },
-            }),
-            prisma.assignmentHistory.create({
-                data: { leadId: id, employeeId, previousEmployeeId, reason: reason || null },
-            }),
-            prisma.activity.create({
-                data: {
-                    leadId: id,
-                    userId,
-                    action: previousEmployeeId ? "LEAD_REASSIGNED" : "LEAD_ASSIGNED",
-                    metadata: {
-                        newEmployeeId: employeeId,
-                        newEmployeeName: employee.name,
-                        previousEmployeeId,
-                        reason: reason || null,
-                    },
-                },
-            }),
-        ]);
-
-        res.json({ message: "Lead reassigned successfully", lead: updatedLead });
-    } catch (error) {
-        return next(error);
-    }
-};
-
 const getSLAAlerts = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
@@ -1229,14 +983,19 @@ const getSLAAlerts = async (req, res, next) => {
         const breachDays = settings?.slaBreachDays ?? 7;
         const cutoff = new Date(Date.now() - breachDays * 86_400_000);
 
+        // Active = the lead still has at least one non-terminal department service.
+        // Idle is measured by lastActivityAt / updatedAt as before.
         const where = {
-            status: { in: ["NEW", "CONTACTED", "FOLLOW_UP"] },
+            mergedIntoId: null,
+            leadDepartments: { some: {} },
             OR: [
                 { lastActivityAt: { lt: cutoff } },
                 { lastActivityAt: null, updatedAt: { lt: cutoff } },
             ],
         };
-        if (role === "EMPLOYEE") where.assignedToId = userId;
+        if (role === "EMPLOYEE") {
+            where.leadDepartments = { some: { assignedEmployeeId: userId } };
+        }
 
         const leads = await prisma.lead.findMany({
             where,
@@ -1244,8 +1003,10 @@ const getSLAAlerts = async (req, res, next) => {
             take: 20,
             select: {
                 id: true, name: true, phone: true, email: true,
-                status: true, lastActivityAt: true, updatedAt: true,
-                assignedTo: { select: { id: true, name: true } },
+                lastActivityAt: true, updatedAt: true,
+                leadDepartments: {
+                    select: { department: true, stage: true, assignedEmployee: { select: { id: true, name: true } } },
+                },
             },
         });
         res.json({ data: leads, breachDays });
@@ -1259,8 +1020,6 @@ module.exports = {
     getLead,
     createLead,
     updateLead,
-    assignLead,
-    reassignLead,
     exportLeads,
     previewImport,
     importLeads,
@@ -1268,10 +1027,8 @@ module.exports = {
     checkDuplicate,
     mergeLeads,
     getLeadActivities,
-    getDashboardStats,
     getOverdueFollowUps,
     getDuplicates,
-    getTeamStats,
     getLeadSuggestions,
     dismissLeadSuggestion,
     getSLAAlerts,

@@ -1,5 +1,6 @@
 const axios = require("axios");
 const prisma = require("../utils/prisma");
+const leadService = require("../services/leadService");
 const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
 const { ApiError } = require("../utils/apiError");
@@ -163,8 +164,9 @@ const importSearchedLeads = async (req, res, next) => {
 
             const { score, category } = calculateLeadScore({ source, phone, email });
 
-            const newLead = await prisma.lead.create({
-                data: {
+            // Centralized creation: Lead + SALES LeadDepartment, claimed by the searcher.
+            const newLead = await leadService.createLead(
+                {
                     name,
                     email: email || null,
                     phone,
@@ -173,10 +175,10 @@ const importSearchedLeads = async (req, res, next) => {
                     score,
                     category,
                     isSearchLead: true,
-                    assignedToId: userId,
                     workspaceId: user?.workspaceId || null
-                }
-            });
+                },
+                { salesAssigneeId: userId }
+            );
 
             await logActivity({
                 leadId: newLead.id,

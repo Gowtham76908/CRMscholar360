@@ -1,5 +1,6 @@
 const axios = require("axios");
 const prisma = require("../utils/prisma");
+const leadService = require("../services/leadService");
 const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
 
@@ -283,8 +284,10 @@ const importLinkedInLeads = async (req, res, next) => {
                 email: email || null
             });
 
-            const newLead = await prisma.lead.create({
-                data: {
+            // Centralized creation: Lead + SALES LeadDepartment. The scraper claims
+            // the lead (salesAssigneeId), so its SALES service is assigned to them.
+            const newLead = await leadService.createLead(
+                {
                     name,
                     email: email || null,
                     phone: phone || null,
@@ -297,10 +300,10 @@ const importLinkedInLeads = async (req, res, next) => {
                     jobTitle: jobTitle || null,
                     company: company || null,
                     biodata: biodata || null,
-                    assignedToId: userId,
                     workspaceId: user?.workspaceId || null
-                }
-            });
+                },
+                { salesAssigneeId: userId }
+            );
 
             await logActivity({
                 leadId: newLead.id,

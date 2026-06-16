@@ -1,5 +1,6 @@
 const prisma = require("../utils/prisma");
 const { ApiError } = require("../utils/apiError");
+const { canAccessLead } = require("../services/permissionService");
 
 const SYSTEM_KEYS = new Set([
     "name", "phone", "email", "company", "source", "enquiryType",
@@ -103,9 +104,9 @@ const saveLeadCustomFields = async (req, res, next) => {
             return res.status(400).json({ message: `Unknown field key(s): ${invalidKeys.join(", ")}` });
         }
 
-        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { customFields: true, assignedToId: true } });
+        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, customFields: true } });
         if (!lead) return res.status(404).json({ message: "Lead not found" });
-        if (role === "EMPLOYEE" && lead.assignedToId !== userId) {
+        if (!(await canAccessLead(userId, role, lead))) {
             return res.status(403).json({ message: "Access denied" });
         }
 

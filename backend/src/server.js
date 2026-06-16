@@ -8,7 +8,6 @@ const app = require("./app");
 const logger = require("./utils/logger");
 const { initSocket } = require("./socket");
 const startScheduler = require("./scheduler");
-const { startScheduler: startLeadLoadScheduler } = require("./services/leadLoadScheduler");
 const { ensureIntegrationDefaults } = require("./controllers/integrationHubController");
 const { ensureSystemFields } = require("./controllers/customFieldController");
 
@@ -21,7 +20,6 @@ initSocket(server);
 // Set SCHEDULER_ENABLED=false on all replica instances; leave unset (defaults true) on the primary.
 if (process.env.SCHEDULER_ENABLED !== "false") {
     startScheduler();
-    startLeadLoadScheduler();
     logger.info("[Scheduler] Background jobs active on this instance.");
 } else {
     logger.info("[Scheduler] Disabled on this instance (SCHEDULER_ENABLED=false).");

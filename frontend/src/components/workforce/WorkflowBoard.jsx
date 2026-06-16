@@ -73,9 +73,9 @@ const LeadCard = ({ lead, navigate }) => (
                 className="flex-1 flex items-center justify-center gap-1 py-1 text-[10px] font-medium rounded-lg bg-[#FFF7ED] text-[#F97316] hover:bg-[#FED7AA] transition-colors border border-[#FED7AA]">
                 <ExternalLink className="h-2.5 w-2.5" /> Open
             </button>
-            <button onClick={() => navigate("/unassigned-leads")}
+            <button onClick={() => navigate("/department-queue")}
                 className="p-1.5 rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-100 border border-blue-100 transition-colors"
-                title="Reassign">
+                title="Department queue">
                 <UserCheck className="h-2.5 w-2.5" />
             </button>
             <button onClick={() => navigate("/messages")}
@@ -124,8 +124,8 @@ const DrawerRow = ({ lead, navigate }) => (
                 className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-lg bg-[#FFF7ED] text-[#F97316] hover:bg-[#FED7AA] border border-[#FED7AA] transition-colors">
                 <ExternalLink className="h-2.5 w-2.5" /> Open
             </button>
-            <button onClick={() => navigate("/unassigned-leads")}
-                className="p-1.5 rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-100 border border-blue-100 transition-colors" title="Reassign">
+            <button onClick={() => navigate("/department-queue")}
+                className="p-1.5 rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-100 border border-blue-100 transition-colors" title="Department queue">
                 <UserCheck className="h-2.5 w-2.5" />
             </button>
             <button onClick={() => navigate("/messages")}

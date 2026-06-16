@@ -32,13 +32,6 @@ const timeUntil = (date) => {
     return `in ${Math.floor(hrs / 24)}d`;
 };
 
-const STATUS_STYLE = {
-    NEW:       "bg-blue-100 text-blue-700",
-    CONTACTED: "bg-indigo-100 text-indigo-700",
-    FOLLOW_UP: "bg-amber-100 text-amber-700",
-    CONVERTED: "bg-green-100 text-green-700",
-    LOST:      "bg-red-100 text-red-700",
-};
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
@@ -75,9 +68,11 @@ function FollowUpItem({ lead }) {
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-gray-900 truncate">{lead.name}</p>
-                    <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full", STATUS_STYLE[lead.status] ?? "bg-gray-100 text-gray-600")}>
-                        {lead.status?.replace("_", " ")}
-                    </span>
+                    {lead.leadDepartments?.[0] && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
+                            {lead.leadDepartments[0].stage?.replace(/_/g, " ")}
+                        </span>
+                    )}
                 </div>
                 <p className="text-xs text-gray-500 truncate">
                     {lead.phone || lead.email || "No contact"} · Updated {relTime(lead.updatedAt)}
@@ -200,8 +195,8 @@ function SLAItem({ lead, breachDays }) {
                     </span>
                 </div>
                 <p className="text-xs text-gray-500 truncate">
-                    {lead.phone || lead.email || "No contact"} · {lead.status?.replace("_", " ")}
-                    {lead.assignedTo && ` · ${lead.assignedTo.name}`}
+                    {lead.phone || lead.email || "No contact"}
+                    {lead.leadDepartments?.[0] && ` · ${lead.leadDepartments[0].stage?.replace(/_/g, " ")}`}
                 </p>
             </div>
             <Link

@@ -14,7 +14,7 @@ const createNote = async (req, res, next) => {
 
         // Verify lead exists and the requester is allowed to see it — notes are
         // customer interaction history, scoped the same way leads are.
-        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true } });
+        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true } });
         if (!lead) {
             throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
         }
@@ -40,7 +40,7 @@ const getNotes = async (req, res, next) => {
     try {
         const { leadId } = req.params;
 
-        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true } });
+        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true } });
         if (!lead) {
             throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
         }

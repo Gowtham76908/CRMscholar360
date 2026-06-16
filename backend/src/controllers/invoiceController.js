@@ -17,7 +17,7 @@ async function invoiceScope(user) {
             { createdById: { in: ids } },
             { deal: { createdById: { in: ids } } },
             { deal: { assignedEmployeeId: { in: ids } } },
-            { deal: { lead: { assignedToId: { in: ids } } } },
+            { deal: { lead: { leadDepartments: { some: { assignedEmployeeId: { in: ids } } } } } },
         ],
     };
 }

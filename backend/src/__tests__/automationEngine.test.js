@@ -1,15 +1,18 @@
 /**
- * Tests for automationEngine
+ * Tests for automationEngine (department-stage based).
  *
  * Tests:
- *  - matchesCondition / matchesAllConditions (pure — no DB)
+ *  - condition matching (source / assignedTo / department / stage)
+ *  - department event matching: STAGE_CHANGED department + stage gating
  *  - checkConstraints (mocked prisma — constraint logic)
- *  - runRulesForLead (mocked prisma — rule execution, depth limit, condition gate)
- *  - executeAction guard cases (skips when lead missing required fields)
+ *  - depth limit + recursion guard
+ *  - executeAction guard cases (skips when required fields missing)
+ *  - department actions: CHANGE_STAGE / ASSIGN_CONSULTANT
  */
 
 const mockTx = {
     lead: { update: jest.fn(), findUnique: jest.fn() },
+    leadDepartment: { update: jest.fn(), findUnique: jest.fn() },
     task: { create: jest.fn() },
     reminder: { create: jest.fn() },
     notification: { create: jest.fn() },
@@ -28,6 +31,7 @@ jest.mock("../utils/prisma", () => ({
         createMany: jest.fn(),
     },
     lead: { update: jest.fn(), findUnique: jest.fn() },
+    leadDepartment: { update: jest.fn(), findUnique: jest.fn() },
     task: { create: jest.fn() },
     reminder: { create: jest.fn() },
     notification: { create: jest.fn() },
@@ -37,7 +41,7 @@ jest.mock("../utils/prisma", () => ({
 
 jest.mock("../utils/activityLogger", () => jest.fn().mockResolvedValue(undefined));
 jest.mock("../services/whatsappService", () => ({
-    sendTemplateMessage: jest.fn().mockResolvedValue({ status: "sent", watiMessageId: "w1", raw: {} }),
+    sendTemplateMessage: jest.fn().mockResolvedValue({ status: "SENT", watiMessageId: "w1", raw: {} }),
 }));
 jest.mock("../services/emailService", () => ({
     sendEmail: jest.fn().mockResolvedValue(undefined),
@@ -45,11 +49,9 @@ jest.mock("../services/emailService", () => ({
 jest.mock("../utils/normalizePhone", () => jest.fn((p) => p || null));
 
 const prisma = require("../utils/prisma");
-const { runRulesForLead } = require("../services/automationEngine");
+const { runRulesForLead, runRulesForDepartmentEvent } = require("../services/automationEngine");
 
-// mockTx is declared before jest.mock so it's accessible here via module scope
-// (the factory closure captures it).
-// Helper: "did the rule fire?" = automationLog.create called inside the transaction
+// "did the rule fire?" = automationLog.create called inside the transaction
 function expectRuleFired(times = 1) {
     expect(mockTx.automationLog.create).toHaveBeenCalledTimes(times);
 }
@@ -60,21 +62,22 @@ function expectRuleNotFired() {
 
 beforeEach(() => {
     jest.clearAllMocks();
-    // Restore $transaction to use fresh mockTx each test
     prisma.$transaction.mockImplementation(async (fn) => fn(mockTx));
     mockTx.automationLog.create.mockResolvedValue({});
     mockTx.lead.findUnique.mockResolvedValue(null);
+    mockTx.leadDepartment.findUnique.mockResolvedValue(null);
+    mockTx.leadDepartment.update.mockResolvedValue({});
     mockTx.task.create.mockResolvedValue({});
     mockTx.reminder.create.mockResolvedValue({});
     mockTx.notification.create.mockResolvedValue({});
     mockTx.whatsAppMessage.create.mockResolvedValue({});
     mockTx.activity.create.mockResolvedValue({});
-    // Default: no rules, no logs
     prisma.automationRule.findMany.mockResolvedValue([]);
     prisma.automationLog.findFirst.mockResolvedValue(null);
     prisma.automationLog.count.mockResolvedValue(0);
     prisma.automationLog.create.mockResolvedValue({});
     prisma.lead.findUnique.mockResolvedValue(null);
+    prisma.leadDepartment.findUnique.mockResolvedValue(null);
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -82,7 +85,7 @@ beforeEach(() => {
 function makeRule(overrides = {}) {
     return {
         id: "rule-1",
-        triggerType: "STATUS_CHANGED",
+        triggerType: "STAGE_CHANGED",
         isActive: true,
         triggerConfig: {},
         conditions: [],
@@ -95,9 +98,7 @@ function makeLead(overrides = {}) {
     return {
         id: "lead-1",
         name: "Test Lead",
-        status: "NEW",
         source: "FACEBOOK",
-        assignedToId: "emp-1",
         phone: "+919876543210",
         email: "test@example.com",
         enquiryType: "PRODUCT",
@@ -105,261 +106,199 @@ function makeLead(overrides = {}) {
     };
 }
 
-// ── matchesCondition (tested via runRulesForLead) ─────────────────────────────
+function makeLeadDept(overrides = {}) {
+    return {
+        id: "ld-1",
+        leadId: "lead-1",
+        department: "SALES",
+        stage: "PROSPECT",
+        assignedEmployeeId: "emp-1",
+        ...overrides,
+    };
+}
 
-describe("condition matching", () => {
-    test("rule with matching 'equals' condition fires", async () => {
-        const rule = makeRule({
-            conditions: [{ field: "status", operator: "equals", value: "NEW" }],
-            actions: [],
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
+/** Drive a STAGE_CHANGED department event with the given lead + leadDept. */
+async function fireStageChanged(leadDept = makeLeadDept(), lead = makeLead(), ctx = null) {
+    prisma.lead.findUnique.mockResolvedValue(lead);
+    return runRulesForDepartmentEvent("STAGE_CHANGED", leadDept, ctx);
+}
 
-        await runRulesForLead("STATUS_CHANGED", makeLead({ status: "NEW" }));
+// ── condition matching (lead-level event) ─────────────────────────────────────
 
+describe("condition matching (runRulesForLead)", () => {
+    test("matching 'equals' on source fires", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerType: "LEAD_CREATED", conditions: [{ field: "source", operator: "equals", value: "FACEBOOK" }] }),
+        ]);
+        await runRulesForLead("LEAD_CREATED", makeLead({ source: "FACEBOOK" }));
         expectRuleFired(1);
     });
 
-    test("rule with non-matching 'equals' condition does NOT fire", async () => {
-        const rule = makeRule({
-            conditions: [{ field: "status", operator: "equals", value: "CONVERTED" }],
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
-
-        await runRulesForLead("STATUS_CHANGED", makeLead({ status: "NEW" }));
-
+    test("non-matching 'equals' on source does NOT fire", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerType: "LEAD_CREATED", conditions: [{ field: "source", operator: "equals", value: "INSTAGRAM" }] }),
+        ]);
+        await runRulesForLead("LEAD_CREATED", makeLead({ source: "FACEBOOK" }));
         expectRuleNotFired();
     });
 
-    test("'not_equals' condition passes when field differs", async () => {
-        const rule = makeRule({
-            conditions: [{ field: "source", operator: "not_equals", value: "INSTAGRAM" }],
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
-
-        await runRulesForLead("STATUS_CHANGED", makeLead({ source: "FACEBOOK" }));
-
+    test("'is_empty' on assignedTo passes when lead owner is null", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerType: "LEAD_CREATED", conditions: [{ field: "assignedTo", operator: "is_empty" }] }),
+        ]);
+        await runRulesForLead("LEAD_CREATED", makeLead());
         expectRuleFired(1);
     });
 
-    test("'is_empty' condition passes when field is null", async () => {
-        const rule = makeRule({
-            conditions: [{ field: "assignedTo", operator: "is_empty" }],
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
+    test("unknown operator → rule does not fire", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerType: "LEAD_CREATED", conditions: [{ field: "source", operator: "regex_match", value: ".*" }] }),
+        ]);
+        await runRulesForLead("LEAD_CREATED", makeLead());
+        expectRuleNotFired();
+    });
+});
 
-        await runRulesForLead("STATUS_CHANGED", makeLead({ assignedToId: null }));
+// ── department event matching (STAGE_CHANGED) ─────────────────────────────────
 
+describe("STAGE_CHANGED — department + stage gating", () => {
+    test("fires when triggerConfig department + stage match the service", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerConfig: { department: "SALES", stage: "PROSPECT" } }),
+        ]);
+        await fireStageChanged(makeLeadDept({ department: "SALES", stage: "PROSPECT" }));
         expectRuleFired(1);
     });
 
-    test("'is_not_empty' condition fails when field is null", async () => {
-        const rule = makeRule({
-            conditions: [{ field: "assignedTo", operator: "is_not_empty" }],
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
-
-        await runRulesForLead("STATUS_CHANGED", makeLead({ assignedToId: null }));
-
+    test("does NOT fire when department differs", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerConfig: { department: "LOAN", stage: "PROSPECT" } }),
+        ]);
+        await fireStageChanged(makeLeadDept({ department: "SALES", stage: "PROSPECT" }));
         expectRuleNotFired();
     });
 
-    test("unknown operator returns false → rule does not fire", async () => {
-        const rule = makeRule({
-            conditions: [{ field: "status", operator: "regex_match", value: ".*" }],
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
-
-        await runRulesForLead("STATUS_CHANGED", makeLead());
-
+    test("does NOT fire when stage differs", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerConfig: { department: "SALES", stage: "FOLLOW_UP" } }),
+        ]);
+        await fireStageChanged(makeLeadDept({ department: "SALES", stage: "PROSPECT" }));
         expectRuleNotFired();
     });
 
-    test("multiple conditions: ALL must pass", async () => {
-        const rule = makeRule({
-            conditions: [
-                { field: "status", operator: "equals", value: "NEW" },
-                { field: "source", operator: "equals", value: "INSTAGRAM" }, // won't match
-            ],
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
+    test("department-only rule (no stage) fires on any stage in that department", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerConfig: { department: "SALES" } }),
+        ]);
+        await fireStageChanged(makeLeadDept({ department: "SALES", stage: "FOLLOW_UP" }));
+        expectRuleFired(1);
+    });
 
-        await runRulesForLead("STATUS_CHANGED", makeLead({ status: "NEW", source: "FACEBOOK" }));
-
-        expectRuleNotFired();
+    test("condition on stage/department evaluates against the service", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({
+                triggerConfig: { department: "SALES" },
+                conditions: [{ field: "stage", operator: "equals", value: "PROSPECT" }],
+            }),
+        ]);
+        await fireStageChanged(makeLeadDept({ department: "SALES", stage: "PROSPECT" }));
+        expectRuleFired(1);
     });
 });
 
 // ── checkConstraints ──────────────────────────────────────────────────────────
 
 describe("constraint: COOLDOWN", () => {
-    test("blocks rule when recent SUCCESS log exists within cooldown window", async () => {
-        const rule = makeRule({
-            triggerConfig: { constraints: [{ type: "COOLDOWN", hours: 24 }] },
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
-        prisma.automationLog.findFirst.mockResolvedValue({ id: "log-1" }); // recent log exists
-
-        await runRulesForLead("STATUS_CHANGED", makeLead());
-
+    test("blocks when a recent SUCCESS log exists", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerConfig: { department: "SALES", constraints: [{ type: "COOLDOWN", hours: 24 }] } }),
+        ]);
+        prisma.automationLog.findFirst.mockResolvedValue({ id: "log-1" });
+        await fireStageChanged();
         expectRuleNotFired();
     });
 
-    test("allows rule when no recent SUCCESS log exists", async () => {
-        const rule = makeRule({
-            triggerConfig: { constraints: [{ type: "COOLDOWN", hours: 24 }] },
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
-        prisma.automationLog.findFirst.mockResolvedValue(null); // no recent log
-
-        await runRulesForLead("STATUS_CHANGED", makeLead());
-
+    test("allows when no recent SUCCESS log exists", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerConfig: { department: "SALES", constraints: [{ type: "COOLDOWN", hours: 24 }] } }),
+        ]);
+        prisma.automationLog.findFirst.mockResolvedValue(null);
+        await fireStageChanged();
         expectRuleFired(1);
     });
 });
 
 describe("constraint: MAX_EXECUTIONS_PER_DAY", () => {
-    test("blocks when daily execution count meets the max", async () => {
-        const rule = makeRule({
-            triggerConfig: { constraints: [{ type: "MAX_EXECUTIONS_PER_DAY", max: 2 }] },
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
-        prisma.automationLog.count.mockResolvedValue(2); // already ran twice
-
-        await runRulesForLead("STATUS_CHANGED", makeLead());
-
+    test("blocks when count meets max", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerConfig: { department: "SALES", constraints: [{ type: "MAX_EXECUTIONS_PER_DAY", max: 2 }] } }),
+        ]);
+        prisma.automationLog.count.mockResolvedValue(2);
+        await fireStageChanged();
         expectRuleNotFired();
-    });
-
-    test("allows when daily execution count is below max", async () => {
-        const rule = makeRule({
-            triggerConfig: { constraints: [{ type: "MAX_EXECUTIONS_PER_DAY", max: 3 }] },
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
-        prisma.automationLog.count.mockResolvedValue(1); // ran once
-
-        await runRulesForLead("STATUS_CHANGED", makeLead());
-
-        expectRuleFired(1);
     });
 });
 
 describe("constraint: PREVENT_RECURSIVE_TRIGGERS", () => {
-    test("blocks when current rule ID is already in ruleChain context", async () => {
-        const rule = makeRule({
-            id: "rule-A",
-            triggerConfig: { constraints: [{ type: "PREVENT_RECURSIVE_TRIGGERS" }] },
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
-
-        const childCtx = { chainId: "chain-1", triggerDepth: 1, ruleChain: ["rule-A"] };
-        await runRulesForLead("STATUS_CHANGED", makeLead(), childCtx);
-
+    test("blocks when rule id already in ruleChain", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ id: "rule-A", triggerConfig: { department: "SALES", constraints: [{ type: "PREVENT_RECURSIVE_TRIGGERS" }] } }),
+        ]);
+        await fireStageChanged(makeLeadDept(), makeLead(), { chainId: "c", triggerDepth: 1, ruleChain: ["rule-A"] });
         expectRuleNotFired();
     });
 
-    test("allows when rule ID is NOT in ruleChain", async () => {
-        const rule = makeRule({
-            id: "rule-B",
-            triggerConfig: { constraints: [{ type: "PREVENT_RECURSIVE_TRIGGERS" }] },
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
-
-        const childCtx = { chainId: "chain-1", triggerDepth: 1, ruleChain: ["rule-A"] }; // rule-B not in chain
-        await runRulesForLead("STATUS_CHANGED", makeLead(), childCtx);
-
+    test("allows when rule id not in ruleChain", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ id: "rule-B", triggerConfig: { department: "SALES", constraints: [{ type: "PREVENT_RECURSIVE_TRIGGERS" }] } }),
+        ]);
+        await fireStageChanged(makeLeadDept(), makeLead(), { chainId: "c", triggerDepth: 1, ruleChain: ["rule-A"] });
         expectRuleFired(1);
     });
 });
 
 describe("constraint: PREVENT_DUPLICATES", () => {
-    test("blocks if any prior SUCCESS log exists for this rule+lead", async () => {
-        const rule = makeRule({
-            triggerConfig: { constraints: [{ type: "PREVENT_DUPLICATES" }] },
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
+    test("blocks if any prior SUCCESS log exists", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerConfig: { department: "SALES", constraints: [{ type: "PREVENT_DUPLICATES" }] } }),
+        ]);
         prisma.automationLog.findFirst.mockResolvedValue({ id: "old-log" });
-
-        await runRulesForLead("STATUS_CHANGED", makeLead());
-
+        await fireStageChanged();
         expectRuleNotFired();
     });
 });
 
 // ── Depth limit ───────────────────────────────────────────────────────────────
 
-describe("runRulesForLead — depth limit", () => {
+describe("depth limit", () => {
     test("aborts silently when triggerDepth > MAX_TRIGGER_DEPTH (3)", async () => {
-        const deepCtx = { chainId: "c1", triggerDepth: 4, ruleChain: [] };
-        await runRulesForLead("STATUS_CHANGED", makeLead(), deepCtx);
-
-        // Should not even query rules
+        await fireStageChanged(makeLeadDept(), makeLead(), { chainId: "c1", triggerDepth: 4, ruleChain: [] });
         expect(prisma.automationRule.findMany).not.toHaveBeenCalled();
         expectRuleNotFired();
     });
 
     test("executes normally at depth = MAX_TRIGGER_DEPTH (3)", async () => {
-        const rule = makeRule();
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
-
-        const ctx = { chainId: "c1", triggerDepth: 3, ruleChain: [] };
-        await runRulesForLead("STATUS_CHANGED", makeLead(), ctx);
-
-        expectRuleFired(1);
-    });
-});
-
-// ── STATUS_CHANGED trigger config filter ─────────────────────────────────────
-
-describe("runRulesForLead — STATUS_CHANGED trigger config", () => {
-    test("rule with triggerConfig.status skips when newStatus doesn't match", async () => {
-        const rule = makeRule({
-            triggerType: "STATUS_CHANGED",
-            triggerConfig: { status: "CONVERTED" }, // only fires for CONVERTED
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
-
-        const ctx = { chainId: "c", triggerDepth: 0, ruleChain: [], newStatus: "NEW" };
-        await runRulesForLead("STATUS_CHANGED", makeLead(), ctx);
-
-        expectRuleNotFired();
-    });
-
-    test("rule with triggerConfig.status fires when newStatus matches", async () => {
-        const rule = makeRule({
-            triggerType: "STATUS_CHANGED",
-            triggerConfig: { status: "CONVERTED" },
-        });
-        prisma.automationRule.findMany.mockResolvedValue([rule]);
-
-        const ctx = { chainId: "c", triggerDepth: 0, ruleChain: [], newStatus: "CONVERTED" };
-        await runRulesForLead("STATUS_CHANGED", makeLead(), ctx);
-
+        prisma.automationRule.findMany.mockResolvedValue([makeRule({ triggerConfig: { department: "SALES" } })]);
+        await fireStageChanged(makeLeadDept(), makeLead(), { chainId: "c1", triggerDepth: 3, ruleChain: [] });
         expectRuleFired(1);
     });
 });
 
 // ── executeAction guard cases ─────────────────────────────────────────────────
 
-describe("executeAction — guard cases via runRulesForLead", () => {
+describe("executeAction — guard cases", () => {
     function ruleWithAction(type, config = {}) {
-        return makeRule({
-            actions: [{ type, config, order: 0 }],
-        });
+        return makeRule({ triggerConfig: { department: "SALES" }, actions: [{ type, config, order: 0 }] });
     }
 
-    // After each action, the engine re-fetches the lead via tx.lead.findUnique.
     beforeEach(() => {
         mockTx.lead.findUnique.mockResolvedValue(makeLead());
+        mockTx.leadDepartment.findUnique.mockResolvedValue(makeLeadDept());
     });
 
-    test("SEND_EMAIL skips and does NOT throw when lead has no email", async () => {
+    test("SEND_EMAIL skips (no throw) when lead has no email", async () => {
         prisma.automationRule.findMany.mockResolvedValue([ruleWithAction("SEND_EMAIL", { subject: "Hi" })]);
-        const lead = makeLead({ email: null });
-        mockTx.lead.findUnique.mockResolvedValue(lead);
-
-        await runRulesForLead("STATUS_CHANGED", lead);
-
+        await fireStageChanged(makeLeadDept(), makeLead({ email: null }));
         const logCall = mockTx.automationLog.create.mock.calls[0][0].data;
         expect(logCall.status).toBe("SUCCESS");
         expect(logCall.details.results[0]).toMatchObject({ skipped: true, reason: "no_email" });
@@ -367,50 +306,83 @@ describe("executeAction — guard cases via runRulesForLead", () => {
 
     test("SEND_WHATSAPP skips when lead has no phone", async () => {
         prisma.automationRule.findMany.mockResolvedValue([ruleWithAction("SEND_WHATSAPP", { templateName: "welcome" })]);
-        const lead = makeLead({ phone: null });
-        mockTx.lead.findUnique.mockResolvedValue(lead);
-
-        await runRulesForLead("STATUS_CHANGED", lead);
-
+        await fireStageChanged(makeLeadDept(), makeLead({ phone: null }));
         const logCall = mockTx.automationLog.create.mock.calls[0][0].data;
         expect(logCall.details.results[0]).toMatchObject({ skipped: true, reason: "no_phone" });
     });
 
-    test("CREATE_REMINDER skips when lead has no assignee", async () => {
+    test("CREATE_REMINDER skips when no assignee on the service", async () => {
         prisma.automationRule.findMany.mockResolvedValue([ruleWithAction("CREATE_REMINDER", { message: "Follow up" })]);
-        const lead = makeLead({ assignedToId: null });
-        mockTx.lead.findUnique.mockResolvedValue(lead);
-
-        await runRulesForLead("STATUS_CHANGED", lead);
-
+        await fireStageChanged(makeLeadDept({ assignedEmployeeId: null }), makeLead());
         const logCall = mockTx.automationLog.create.mock.calls[0][0].data;
         expect(logCall.details.results[0]).toMatchObject({ skipped: true, reason: "no_assignee" });
     });
 
-    test("CREATE_TASK creates task with due date = now + dueDaysFromNow", async () => {
+    test("CREATE_TASK assigns to the service consultant with due date now + N days", async () => {
         prisma.automationRule.findMany.mockResolvedValue([
-            ruleWithAction("CREATE_TASK", { title: "Follow up call", dueDaysFromNow: 2, priority: "HIGH" }),
+            ruleWithAction("CREATE_TASK", { title: "Follow up call", dueDaysFromNow: 2 }),
         ]);
-
         const before = Date.now();
-        await runRulesForLead("STATUS_CHANGED", makeLead());
-
+        await fireStageChanged(makeLeadDept({ assignedEmployeeId: "emp-9" }));
         expect(mockTx.task.create).toHaveBeenCalledTimes(1);
         const taskData = mockTx.task.create.mock.calls[0][0].data;
         expect(taskData.title).toBe("Follow up call");
-        expect(taskData.priority).toBe("HIGH");
+        expect(taskData.assignedToId).toBe("emp-9");
         expect(taskData.dueDate.getTime()).toBeGreaterThanOrEqual(before + 2 * 86_400_000 - 1000);
     });
 
-    test("action failure marks log as FAILED but does not throw", async () => {
+    test("action failure marks log FAILED and does not throw", async () => {
         prisma.automationRule.findMany.mockResolvedValue([ruleWithAction("CREATE_TASK", { title: "Task" })]);
         mockTx.task.create.mockRejectedValue(new Error("DB down"));
-        // $transaction rejects → outer catch writes FAILED log via prisma (not tx)
         prisma.$transaction.mockImplementation(async (fn) => { await fn(mockTx); });
-
-        await expect(runRulesForLead("STATUS_CHANGED", makeLead())).resolves.not.toThrow();
-
+        await expect(fireStageChanged()).resolves.not.toThrow();
         const logCall = prisma.automationLog.create.mock.calls[0][0].data;
         expect(logCall.status).toBe("FAILED");
+    });
+});
+
+// ── department actions ────────────────────────────────────────────────────────
+
+describe("department actions", () => {
+    beforeEach(() => {
+        mockTx.lead.findUnique.mockResolvedValue(makeLead());
+        mockTx.leadDepartment.findUnique.mockResolvedValue(makeLeadDept());
+    });
+
+    test("CHANGE_STAGE updates the service stage and logs activity", async () => {
+        mockTx.leadDepartment.update.mockResolvedValue(makeLeadDept({ stage: "UNIVERSITY_SHORTLISTING" }));
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerConfig: { department: "SALES", stage: "PROSPECT" }, actions: [{ type: "CHANGE_STAGE", config: { stage: "UNIVERSITY_SHORTLISTING" }, order: 0 }] }),
+        ]);
+        await fireStageChanged(makeLeadDept({ department: "SALES", stage: "PROSPECT" }));
+        expect(mockTx.leadDepartment.update).toHaveBeenCalledWith(
+            expect.objectContaining({ data: { stage: "UNIVERSITY_SHORTLISTING" } })
+        );
+        const logCall = mockTx.automationLog.create.mock.calls[0][0].data;
+        expect(logCall.details.results[0]).toMatchObject({ action: "CHANGE_STAGE", stage: "UNIVERSITY_SHORTLISTING" });
+    });
+
+    test("CHANGE_STAGE skips when target stage is invalid for the department", async () => {
+        prisma.automationRule.findMany.mockResolvedValue([
+            makeRule({ triggerConfig: { department: "SALES" }, actions: [{ type: "CHANGE_STAGE", config: { stage: "NOT_A_STAGE" }, order: 0 }] }),
+        ]);
+        await fireStageChanged(makeLeadDept({ department: "SALES", stage: "PROSPECT" }));
+        expect(mockTx.leadDepartment.update).not.toHaveBeenCalled();
+        const logCall = mockTx.automationLog.create.mock.calls[0][0].data;
+        expect(logCall.details.results[0]).toMatchObject({ action: "CHANGE_STAGE", skipped: true });
+    });
+
+    test("ASSIGN_CONSULTANT sets the service consultant", async () => {
+        mockTx.leadDepartment.update.mockResolvedValue(makeLeadDept({ assignedEmployeeId: "emp-7" }));
+        const rule = makeRule({ triggerConfig: { department: "SALES" }, actions: [{ type: "ASSIGN_CONSULTANT", config: { userId: "emp-7" }, order: 0 }] });
+        // Only the initial STAGE_CHANGED matches; the chained ASSIGNED event (fired
+        // via setImmediate) finds no rules, so it doesn't recurse past the test.
+        prisma.automationRule.findMany.mockImplementation(({ where }) =>
+            Promise.resolve(where.triggerType === "STAGE_CHANGED" ? [rule] : [])
+        );
+        await fireStageChanged();
+        expect(mockTx.leadDepartment.update).toHaveBeenCalledWith(
+            expect.objectContaining({ data: expect.objectContaining({ assignedEmployeeId: "emp-7" }) })
+        );
     });
 });

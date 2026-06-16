@@ -1,4 +1,7 @@
 ﻿const prisma = require("../utils/prisma");
+const { terminalStageFilter } = require("../config/departmentWorkflows");
+
+const TERMINAL_OR = terminalStageFilter();
 
 /**
  * Returns all employee IDs directly managed by managerId.
@@ -32,7 +35,6 @@ async function getTeamWithStats(managerId) {
             manager: { select: { id: true, name: true } },
             _count: {
                 select: {
-                    leads: true,
                     tasks: true,
                 },
             },
@@ -61,7 +63,6 @@ async function getFullOrgWithStats() {
             manager: { select: { id: true, name: true } },
             _count: {
                 select: {
-                    leads: true,
                     tasks: true,
                 },
             },
@@ -112,8 +113,8 @@ async function getOrgStats(userId, role) {
             await prisma.$transaction([
                 prisma.user.count({ where: { role: "EMPLOYEE" } }),
                 prisma.user.count({ where: { role: "EMPLOYEE", isActive: true } }),
-                prisma.lead.count({ where: { assignedToId: { not: null } } }),
-                prisma.lead.count({ where: { status: { in: ["NEW", "FOLLOW_UP"] } } }),
+                prisma.leadDepartment.count({ where: { assignedEmployeeId: { not: null } } }),
+                prisma.leadDepartment.count({ where: { NOT: { OR: TERMINAL_OR } } }),
             ]);
         return { totalEmployees, activeEmployees, assignedLeads, pendingLeads };
     }
@@ -124,9 +125,9 @@ async function getOrgStats(userId, role) {
         await prisma.$transaction([
             prisma.user.count({ where: { managerId: userId } }),
             prisma.user.count({ where: { managerId: userId, isActive: true } }),
-            prisma.lead.count({ where: { assignedToId: { in: teamIds } } }),
-            prisma.lead.count({
-                where: { assignedToId: { in: teamIds }, status: { in: ["NEW", "FOLLOW_UP"] } },
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: { in: teamIds } } }),
+            prisma.leadDepartment.count({
+                where: { assignedEmployeeId: { in: teamIds }, NOT: { OR: TERMINAL_OR } },
             }),
         ]);
     return { totalEmployees, activeEmployees, assignedLeads, pendingLeads };

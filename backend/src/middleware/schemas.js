@@ -34,7 +34,6 @@ const updatePreferencesSchema = z.object({
 // ── Lead ──────────────────────────────────────────────────────────────────────
 const leadSources = ["FACEBOOK", "INSTAGRAM", "GMAIL", "WEBSITE", "PHONE_CALL", "LINKEDIN"];
 const enquiryTypes = ["PRODUCT", "WHITE_LABEL", "LMS", "SERVICES"];
-const leadStatuses = ["NEW", "CONTACTED", "FOLLOW_UP", "CONVERTED", "LOST"];
 
 const createLeadSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -49,13 +48,9 @@ const updateLeadSchema = z.object({
     email: z.string().email("Invalid email").optional().or(z.literal("")),
     phone: z.string().optional(),
     source: z.enum(leadSources).optional(),
-    status: z.enum(leadStatuses).optional(),
     enquiryType: z.enum(enquiryTypes).optional(),
+    nextFollowUpAt: z.string().datetime().optional().or(z.literal("")).or(z.null()),
 }).refine(data => Object.keys(data).length > 0, { message: "At least one field is required" });
-
-const assignLeadSchema = z.object({
-    assignedToId: z.string().uuid("Invalid user ID"),
-});
 
 const mergeLeadsSchema = z.object({
     primaryLeadId: z.string().uuid("Invalid primary lead ID"),
@@ -65,16 +60,6 @@ const mergeLeadsSchema = z.object({
 const checkDuplicateSchema = z.object({
     email: z.string().email().optional().or(z.literal("")),
     phone: z.string().optional(),
-});
-
-const bulkUpdateSchema = z.object({
-    leadIds: z.array(z.string().uuid()).min(1, "At least one lead ID required"),
-    status: z.enum(leadStatuses),
-});
-
-const bulkAssignSchema = z.object({
-    leadIds: z.array(z.string().uuid()).min(1, "At least one lead ID required"),
-    assignedToId: z.string().uuid("Invalid user ID"),
 });
 
 // ── Task ──────────────────────────────────────────────────────────────────────
@@ -214,25 +199,6 @@ const createAutoReplySchema = z.object({
     replyParams: z.array(z.any()).max(50).optional(),
 });
 
-// ── Lead distribution ─────────────────────────────────────────────────────────
-const updateDistributionProfileSchema = z.object({
-    isAcceptingLeads: z.boolean().optional(),
-    availabilityStatus: z.enum(["ONLINE", "OFFLINE", "ON_LEAVE"]).optional(),
-    maxDailyLeads: z.number().int().positive().max(10000).optional(),
-}).refine(d => Object.keys(d).length > 0, { message: "At least one field is required" });
-
-const manualAssignSchema = z.object({
-    leadId: z.string().min(1, "leadId is required"),
-    employeeId: z.string().min(1, "employeeId is required"),
-});
-
-const bulkAssignDistSchema = z.object({
-    leadIds: z.array(z.string().min(1)).max(5000).optional(),
-    all: z.boolean().optional(),
-}).refine(d => d.all || (d.leadIds && d.leadIds.length > 0), {
-    message: "Provide leadIds[] or all:true",
-});
-
 module.exports = {
     loginSchema,
     registerUserSchema,
@@ -241,11 +207,8 @@ module.exports = {
     updatePreferencesSchema,
     createLeadSchema,
     updateLeadSchema,
-    assignLeadSchema,
     mergeLeadsSchema,
     checkDuplicateSchema,
-    bulkUpdateSchema,
-    bulkAssignSchema,
     createTaskSchema,
     updateTaskSchema,
     updateTaskStatusSchema,
@@ -260,7 +223,4 @@ module.exports = {
     addPaymentSchema,
     createCampaignSchema,
     createAutoReplySchema,
-    updateDistributionProfileSchema,
-    manualAssignSchema,
-    bulkAssignDistSchema,
 };

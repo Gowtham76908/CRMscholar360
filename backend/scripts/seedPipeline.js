@@ -37,8 +37,10 @@ const DEAL_TEMPLATES = [
     "Chatbot Development","WhatsApp Automation","Marketing Automation","Product Photography",
 ];
 
+const { getStages } = require("../src/config/departmentWorkflows");
+
 const SOURCES   = ["WEBSITE","FACEBOOK","INSTAGRAM","GMAIL","PHONE_CALL","LINKEDIN"];
-const STATUSES  = ["NEW","CONTACTED","FOLLOW_UP","CONVERTED","LOST"];
+const SALES_STAGES = getStages("SALES");
 const STAGES    = ["NEW","NEGOTIATION","WON","LOST"];
 const CURRENCIES = ["INR","INR","INR","INR","USD","USD","EUR"];
 
@@ -78,10 +80,18 @@ async function main() {
                     phone: `+91${rand(7000000000, 9999999999)}`,
                     company,
                     source: pick(SOURCES),
-                    status: pick(STATUSES),
-                    assignedToId: pick(users).id,
                     createdAt,
                     updatedAt: new Date(createdAt.getTime() + rand(0, daysAgo) * 86_400_000),
+                    // Every lead carries a SALES department service with its own
+                    // consultant + workflow stage (replaces status/assignedToId).
+                    leadDepartments: {
+                        create: [{
+                            department: "SALES",
+                            stage: pick(SALES_STAGES),
+                            assignedEmployeeId: pick(users).id,
+                            assignedAt: createdAt,
+                        }],
+                    },
                 });
             }
             await prisma.$transaction(batch.map(d => prisma.lead.create({ data: d })));

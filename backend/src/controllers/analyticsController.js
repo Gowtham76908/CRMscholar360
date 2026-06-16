@@ -1,45 +1,53 @@
 ﻿const prisma = require("../utils/prisma");
+const { isWonStage } = require("../config/departmentWorkflows");
 
-// Team Performance Metrics
+// Team Performance Metrics — a user's "leads" are their department services now.
 const getTeamPerformance = async (req, res, next) => {
     try {
         const users = await prisma.user.findMany({
             where: { role: { in: ["EMPLOYEE", "ADMIN"] } },
             include: {
-                leads: { select: { status: true, firstResponseAt: true, createdAt: true } },
-                tasks: { select: { status: true, dueDate: true } }
-            }
+                tasks: { select: { status: true, dueDate: true } },
+            },
         });
 
-        const performance = users.map(user => {
-            const totalLeads = user.leads.length;
-            const convertedLeads = user.leads.filter(l => l.status === "CONVERTED").length;
-            const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : 0;
+        // Department services assigned to these users, with the lead's response timing.
+        const services = await prisma.leadDepartment.findMany({
+            where: { assignedEmployeeId: { in: users.map(u => u.id) } },
+            select: {
+                assignedEmployeeId: true, department: true, stage: true,
+                lead: { select: { firstResponseAt: true, createdAt: true } },
+            },
+        });
 
+        const byUser = new Map();
+        for (const s of services) {
+            const u = byUser.get(s.assignedEmployeeId) || { total: 0, won: 0, respMs: 0, respCount: 0 };
+            u.total += 1;
+            if (isWonStage(s.department, s.stage)) u.won += 1;
+            if (s.lead?.firstResponseAt) {
+                u.respMs += new Date(s.lead.firstResponseAt) - new Date(s.lead.createdAt);
+                u.respCount += 1;
+            }
+            byUser.set(s.assignedEmployeeId, u);
+        }
+
+        const performance = users.map(user => {
+            const u = byUser.get(user.id) || { total: 0, won: 0, respMs: 0, respCount: 0 };
+            const conversionRate = u.total > 0 ? ((u.won / u.total) * 100).toFixed(1) : 0;
             const pendingTasks = user.tasks.filter(t => t.status === "PENDING").length;
             const overdueTasks = user.tasks.filter(t => t.status === "PENDING" && new Date(t.dueDate) < new Date()).length;
-
-            // Avg Response Time (in hours)
-            // Simplified: average of (firstResponseAt - createdAt)
-            let totalResponseTimeMs = 0;
-            let responseCount = 0;
-            user.leads.forEach(l => {
-                if (l.firstResponseAt) {
-                    totalResponseTimeMs += (new Date(l.firstResponseAt) - new Date(l.createdAt));
-                    responseCount++;
-                }
-            });
-            const avgResponseTimeHours = responseCount > 0 ? (totalResponseTimeMs / (1000 * 60 * 60) / responseCount).toFixed(1) : 0;
+            const avgResponseTimeHours = u.respCount > 0 ? (u.respMs / (1000 * 60 * 60) / u.respCount).toFixed(1) : 0;
 
             return {
                 userId: user.id,
                 name: user.name,
-                totalLeads,
-                convertedLeads,
+                totalLeads: u.total,
+                convertedLeads: u.won,
                 conversionRate: `${conversionRate}%`,
                 pendingTasks,
                 overdueTasks,
-                avgResponseTimeHours
+                avgResponseTimeHours,
             };
         });
 

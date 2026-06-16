@@ -269,7 +269,7 @@ export default function NewCampaignModal({ onClose, onCreated }) {
                                                     <p className="text-sm font-medium text-gray-800 truncate">{lead.name}</p>
                                                     <p className="text-xs text-gray-400">{lead.phone}</p>
                                                 </div>
-                                                <span className="text-xs text-gray-400 flex-shrink-0">{lead.status}</span>
+                                                <span className="text-xs text-gray-400 flex-shrink-0">{lead.leadDepartments?.[0]?.stage?.replace(/_/g, " ")}</span>
                                             </div>
                                         ))
                                     )}

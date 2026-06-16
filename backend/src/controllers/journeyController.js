@@ -2,23 +2,12 @@
 const { ApiError } = require("../utils/apiError");
 const { istDateKey } = require("../utils/istTime");
 const { signUploadUrl } = require("../utils/signedUpload");
+const { canAccessLead } = require("../services/permissionService");
+const { isWonStage } = require("../config/departmentWorkflows");
 
 // ── Access guard ──────────────────────────────────────────────────────────────
-
-async function canViewLead(userId, role, lead) {
-    if (role === "SUPER_ADMIN") return true;
-    if (role === "ADMIN") {
-        // manager sees their own + their team's leads
-        const employees = await prisma.user.findMany({
-            where: { managerId: userId },
-            select: { id: true },
-        });
-        const teamIds = new Set([userId, ...employees.map(e => e.id)]);
-        return teamIds.has(lead.assignedToId);
-    }
-    // EMPLOYEE — own leads only
-    return lead.assignedToId === userId;
-}
+// Department-scoped visibility (LeadDepartment / UserDepartment).
+const canViewLead = (userId, role, lead) => canAccessLead(userId, role, lead);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -416,8 +405,8 @@ function buildInsights(events, stats, lead) {
         insights.push({ level: "info", text: "Communication frequency increasing in the last 7 days" });
     }
 
-    // 4. High interaction but no conversion
-    if (stats.totalInteractions >= 5 && lead.status !== "CONVERTED") {
+    // 4. High interaction but no conversion (no service has reached a won stage)
+    if (stats.totalInteractions >= 5 && !lead.hasWon) {
         insights.push({ level: "warning", text: "High interaction count but lead not yet converted" });
     }
 
@@ -442,12 +431,19 @@ const getJourney = async (req, res, next) => {
     try {
         const lead = await prisma.lead.findUnique({
             where: { id },
-            include: { assignedTo: { select: { id: true, name: true } } },
+            include: {
+                leadDepartments: {
+                    include: { assignedEmployee: { select: { id: true, name: true } } },
+                },
+            },
         });
         if (!lead) return res.status(404).json({ message: "Lead not found" });
 
         const allowed = await canViewLead(userId, role, lead);
         if (!allowed) return res.status(403).json({ message: "Access denied" });
+
+        // Derived: has any department service reached a won stage?
+        lead.hasWon = (lead.leadDepartments || []).some(d => isWonStage(d.department, d.stage));
 
         const allEvents = await buildJourneyEvents(id);
         const stats = buildStats(allEvents, lead);
@@ -499,9 +495,12 @@ const getJourney = async (req, res, next) => {
                 id: lead.id,
                 name: lead.name,
                 score: lead.score,
-                status: lead.status,
                 source: lead.source,
-                assignedTo: lead.assignedTo,
+                departments: (lead.leadDepartments || []).map(d => ({
+                    department: d.department,
+                    stage: d.stage,
+                    assignedEmployee: d.assignedEmployee,
+                })),
                 createdAt: lead.createdAt,
             },
             stats,

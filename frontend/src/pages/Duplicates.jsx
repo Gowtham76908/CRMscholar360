@@ -3,15 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import api from "../api/axios";
-import { GitMerge, Phone, Mail, Loader2, ChevronDown, ChevronUp, User, AlertCircle } from "lucide-react";
-
-const STATUS_COLOR = {
-    NEW: "bg-blue-100 text-blue-700",
-    CONTACTED: "bg-indigo-100 text-indigo-700",
-    FOLLOW_UP: "bg-amber-100 text-amber-700",
-    CONVERTED: "bg-green-100 text-green-700",
-    LOST: "bg-red-100 text-red-700",
-};
+import { GitMerge, Phone, Mail, Loader2, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 
 function DuplicateGroup({ group, index }) {
     const navigate = useNavigate();
@@ -87,14 +79,11 @@ function DuplicateGroup({ group, index }) {
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                    {lead.assignedTo && (
-                                        <span className="text-xs text-gray-400 flex items-center gap-1">
-                                            <User className="h-3 w-3" />{lead.assignedTo.name}
+                                    {lead.leadDepartments?.[0] && (
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
+                                            {lead.leadDepartments[0].stage?.replace(/_/g, " ")}
                                         </span>
                                     )}
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_COLOR[lead.status] ?? "bg-gray-100 text-gray-600"}`}>
-                                        {lead.status.replace("_", " ")}
-                                    </span>
                                     <button
                                         onClick={e => { e.stopPropagation(); navigate(`/leads/${lead.id}`); }}
                                         className="text-xs text-indigo-500 hover:underline"

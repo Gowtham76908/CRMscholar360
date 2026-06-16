@@ -16,7 +16,7 @@ const DEAL_SELECT = {
     leadId: true,
     createdById: true,
     assignedEmployeeId: true,
-    lead: { select: { id: true, name: true, email: true, phone: true, company: true, assignedToId: true } },
+    lead: { select: { id: true, name: true, email: true, phone: true, company: true } },
     createdBy:        { select: { id: true, name: true } },
     assignedEmployee: { select: { id: true, name: true } },
     invoices: {
@@ -49,7 +49,7 @@ function rbacWhere(userId, role) {
             deletedAt: null,
             OR: [
                 { createdById: userId },
-                { lead: { assignedTo: { managerId: userId } } },
+                { createdBy: { managerId: userId } },
             ],
         };
     }
@@ -60,7 +60,7 @@ function rbacWhere(userId, role) {
 const createDeal = async ({ leadId, title, amount, stage, currency, notes, createdById, createdByRole, assignedEmployeeId }) => {
     const lead = await prisma.lead.findUnique({
         where: { id: leadId },
-        select: { id: true, assignedToId: true },
+        select: { id: true },
     });
     if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
 
@@ -163,7 +163,7 @@ const getPipelineDeals = async (userId, role, { search, ownerId, managerId, date
     if (ownerId) andClauses.push({ createdById: ownerId });
 
     if (managerId && role === "SUPER_ADMIN") {
-        andClauses.push({ lead: { assignedTo: { managerId } } });
+        andClauses.push({ createdBy: { managerId } });
     }
 
     if (dateFrom || dateTo) {
@@ -269,7 +269,7 @@ const getTopLeadsByRevenue = async (userId, role, { stage = "WON", limit = 5 } =
 
     const leads = await prisma.lead.findMany({
         where:  { id: { in: leadIds } },
-        select: { id: true, name: true, status: true, email: true, phone: true, company: true },
+        select: { id: true, name: true, email: true, phone: true, company: true },
     });
     const leadMap = new Map(leads.map(l => [l.id, l]));
 
@@ -281,7 +281,6 @@ const getTopLeadsByRevenue = async (userId, role, { stage = "WON", limit = 5 } =
             return {
                 leadId:      g.leadId,
                 leadName:    l?.name    ?? "(unknown lead)",
-                leadStatus:  l?.status  ?? null,
                 email:       l?.email   ?? null,
                 phone:       l?.phone   ?? null,
                 company:     l?.company ?? null,

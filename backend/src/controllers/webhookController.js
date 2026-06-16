@@ -1,8 +1,8 @@
 const prisma = require("../utils/prisma");
+const leadService = require("../services/leadService");
 const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
 const emailService = require("../services/emailService");
-const { assignLeadOrAlert: autoAssignLead } = require("../services/leadDistributionEngine");
 const { runRulesForLead } = require("../services/automationEngine");
 
 // Handle Incoming Webhook for Lead Creation
@@ -43,17 +43,15 @@ const handleLeadWebhook = async (req, res, next) => {
             return res.status(200).json({ message: "Lead already exists", leadId: existingLead.id });
         }
 
-        // Create Lead
-        const newLead = await prisma.lead.create({
-            data: {
-                name,
-                email,
-                phone,
-                source: leadSource,
-                enquiryType: enquiryType || "SERVICES",
-                score,
-                category
-            }
+        // Create Lead (centralized: Lead + SALES LeadDepartment, unassigned)
+        const newLead = await leadService.createLead({
+            name,
+            email,
+            phone,
+            source: leadSource,
+            enquiryType: enquiryType || "SERVICES",
+            score,
+            category
         });
 
         // Log Activity
@@ -69,10 +67,9 @@ const handleLeadWebhook = async (req, res, next) => {
             console.log(`[Webhook] Auto-reply triggered for ${newLead.email}`);
         }
 
-        // Fire automation rules + auto-assign async so inbound webhook leads get routed
+        // Fire automation rules async. SALES service created unassigned for a
+        // manager to allocate (auto-distribution retired).
         runRulesForLead("LEAD_CREATED", newLead).catch(console.error);
-        autoAssignLead(newLead.id, { reason: "AUTO_ASSIGNMENT" })
-            .catch(err => console.error(`[AutoAssign] webhook ${newLead.id}:`, err.message || err));
 
         res.status(201).json({ message: "Lead processed successfully", leadId: newLead.id });
     } catch (error) {

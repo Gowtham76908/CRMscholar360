@@ -1,25 +1,57 @@
 const crypto = require("crypto");
 const prisma = require("../utils/prisma");
-const logActivity = require("../utils/activityLogger");
 const { sendTemplateMessage } = require("./whatsappService");
 const { sendEmail } = require("./emailService");
 const normalizePhone = require("../utils/normalizePhone");
 const { nowIST } = require("../utils/istTime");
+const { isValidStage } = require("../config/departmentWorkflows");
+
+/**
+ * Automation engine — department-stage based.
+ *
+ * The unit of work is a LeadDepartment (one department's service on a customer),
+ * not the customer (Lead). There is no global Lead.status workflow any more, so the
+ * source of truth for automation is "a LeadDepartment's stage changed".
+ *
+ * Generic trigger structure (so new department events can be added without a
+ * redesign):
+ *
+ *   Department events  — runRulesForDepartmentEvent(triggerType, leadDept, ctx)
+ *     STAGE_CHANGED          a service moved to a new workflow stage   (implemented)
+ *     ASSIGNED               a consultant was assigned to a service    (implemented)
+ *     UNASSIGNED             a service's consultant was removed        (wired, no seed yet)
+ *     DEPARTMENT_ALLOCATED   a customer was allocated to a department  (implemented)
+ *
+ *   Lead-level events  — runRulesForLead(triggerType, lead, ctx)
+ *     LEAD_CREATED           a new customer entered the CRM
+ *     MISSED_CALL            an inbound call was missed
+ *     NO_ACTIVITY            time-based, fired by the scheduler (runNoActivityRules)
+ *
+ * A department rule carries its department + stage in triggerConfig, e.g.
+ *   { "department": "LOAN", "stage": "APPROVED" }
+ * STAGE_CHANGED execution originates from leadDepartmentService.updateStage(),
+ * the single place stage transitions happen (and from chained CHANGE_STAGE actions).
+ */
 
 // ─── Condition Evaluator ──────────────────────────────────────────────────────
+// A "target" is { lead, leadDept }. leadDept is null for lead-level events.
 
-function getLeadField(lead, field) {
+function getField(field, target) {
+    const lead = target.lead || {};
+    const leadDept = target.leadDept || null;
     const map = {
-        source:     lead.source,
-        status:     lead.status,
-        assignedTo: lead.assignedToId,
+        source:      lead.source,
         enquiryType: lead.enquiryType,
+        department:  leadDept?.department,
+        stage:       leadDept?.stage,
+        // Assignment is per-department now; lead-level events have no assignee.
+        assignedTo:  leadDept ? leadDept.assignedEmployeeId : null,
     };
     return map[field] ?? null;
 }
 
-function matchesCondition(lead, cond) {
-    const val = getLeadField(lead, cond.field);
+function matchesCondition(target, cond) {
+    const val = getField(cond.field, target);
     switch (cond.operator) {
         case "equals":        return val === cond.value;
         case "not_equals":    return val !== cond.value;
@@ -29,54 +61,72 @@ function matchesCondition(lead, cond) {
     }
 }
 
-function matchesAllConditions(lead, conditions) {
-    return conditions.every(c => matchesCondition(lead, c));
+function matchesAllConditions(target, conditions) {
+    return conditions.every(c => matchesCondition(target, c));
+}
+
+/** The user a task/reminder/notification should go to for this target. */
+function assigneeOf(target) {
+    return target.leadDept ? target.leadDept.assignedEmployeeId : null;
 }
 
 // ─── Action Executor ──────────────────────────────────────────────────────────
+// Mutating actions return a fresh { lead, leadDept } so the runner can re-seed the
+// target for subsequent actions. Chained department events are fired after commit.
 
-async function executeAction(action, lead, childContext = {}, tx = prisma) {
-    const cfg = action.config;
+async function executeAction(action, target, childContext, tx) {
+    const cfg = action.config || {};
+    const lead = target.lead;
+    const leadDept = target.leadDept;
+    const assignee = assigneeOf(target);
 
     switch (action.type) {
-        case "CHANGE_STATUS": {
-            const updatedLead = await tx.lead.update({
-                where: { id: lead.id },
-                data: { status: cfg.status }
+        case "CHANGE_STAGE": {
+            if (!leadDept) return { action: "CHANGE_STAGE", skipped: true, reason: "no_department_context" };
+            if (!isValidStage(leadDept.department, cfg.stage)) {
+                return { action: "CHANGE_STAGE", skipped: true, reason: `invalid_stage:${cfg.stage}` };
+            }
+            if (cfg.stage === leadDept.stage) return { action: "CHANGE_STAGE", skipped: true, reason: "same_stage" };
+
+            const updatedDept = await tx.leadDepartment.update({
+                where: { id: leadDept.id },
+                data: { stage: cfg.stage },
             });
             await tx.activity.create({
                 data: {
                     leadId: lead.id,
                     userId: null,
-                    action: "STATUS_CHANGED",
-                    metadata: { prevStatus: lead.status, newStatus: cfg.status, source: "automation" },
-                }
+                    action: "STAGE_UPDATED",
+                    metadata: { department: leadDept.department, from: leadDept.stage, to: cfg.stage, source: "automation" },
+                },
             });
-            // Fire chained STATUS_CHANGED rules after the transaction commits
-            setImmediate(() => runRulesForLead("STATUS_CHANGED", updatedLead, {
+            // Chain a STAGE_CHANGED event after the tx commits.
+            setImmediate(() => runRulesForDepartmentEvent("STAGE_CHANGED", updatedDept, {
                 ...childContext,
-                prevStatus: lead.status,
-                newStatus: cfg.status,
+                prevStage: leadDept.stage,
+                newStage: cfg.stage,
             }).catch(console.error));
-            return { action: "CHANGE_STATUS", status: cfg.status };
+            return { action: "CHANGE_STAGE", department: leadDept.department, stage: cfg.stage, _refetch: true };
         }
 
-        case "ASSIGN_LEAD": {
-            const updatedLead = await tx.lead.update({
-                where: { id: lead.id },
-                data: { assignedToId: cfg.userId }
+        case "ASSIGN_CONSULTANT": {
+            if (!leadDept) return { action: "ASSIGN_CONSULTANT", skipped: true, reason: "no_department_context" };
+            if (!cfg.userId) return { action: "ASSIGN_CONSULTANT", skipped: true, reason: "no_user" };
+
+            const updatedDept = await tx.leadDepartment.update({
+                where: { id: leadDept.id },
+                data: { assignedEmployeeId: cfg.userId, assignedAt: new Date() },
             });
             await tx.activity.create({
                 data: {
                     leadId: lead.id,
                     userId: cfg.userId,
-                    action: "ASSIGNED",
-                    metadata: { assignedToId: cfg.userId, source: "automation" },
-                }
+                    action: "CONSULTANT_ASSIGNED",
+                    metadata: { department: leadDept.department, consultantId: cfg.userId, source: "automation" },
+                },
             });
-            // Fire chained LEAD_ASSIGNED rules after the transaction commits
-            setImmediate(() => runRulesForLead("LEAD_ASSIGNED", updatedLead, childContext).catch(console.error));
-            return { action: "ASSIGN_LEAD", userId: cfg.userId };
+            setImmediate(() => runRulesForDepartmentEvent("ASSIGNED", updatedDept, childContext).catch(console.error));
+            return { action: "ASSIGN_CONSULTANT", department: leadDept.department, userId: cfg.userId, _refetch: true };
         }
 
         case "CREATE_TASK": {
@@ -87,49 +137,49 @@ async function executeAction(action, lead, childContext = {}, tx = prisma) {
                     title: cfg.title,
                     description: cfg.description,
                     leadId: lead.id,
-                    assignedToId: lead.assignedToId ?? null,
+                    assignedToId: assignee ?? null,
                     dueDate,
                     status: "PENDING",
-                }
+                },
             });
             await tx.activity.create({
                 data: {
                     leadId: lead.id,
                     userId: null,
                     action: "TASK_CREATED",
-                    metadata: { title: cfg.title, source: "automation" },
-                }
+                    metadata: { title: cfg.title, department: leadDept?.department ?? null, source: "automation" },
+                },
             });
             return { action: "CREATE_TASK", title: cfg.title };
         }
 
         case "CREATE_REMINDER": {
-            if (!lead.assignedToId) return { action: "CREATE_REMINDER", skipped: true, reason: "no_assignee" };
+            if (!assignee) return { action: "CREATE_REMINDER", skipped: true, reason: "no_assignee" };
             const remindAt = new Date();
             remindAt.setHours(remindAt.getHours() + (cfg.dueHoursFromNow ?? 24));
             await tx.reminder.create({
                 data: {
                     leadId: lead.id,
-                    userId: lead.assignedToId,
+                    userId: assignee,
                     message: cfg.message,
                     remindAt,
-                }
+                },
             });
             return { action: "CREATE_REMINDER", message: cfg.message };
         }
 
         case "SEND_NOTIFICATION": {
-            if (!lead.assignedToId) return { action: "SEND_NOTIFICATION", skipped: true, reason: "no_assignee" };
+            if (!assignee) return { action: "SEND_NOTIFICATION", skipped: true, reason: "no_assignee" };
             await tx.notification.create({
                 data: {
-                    userId: lead.assignedToId,
+                    userId: assignee,
                     title: cfg.title ?? "Automation Alert",
                     message: cfg.message ?? `Action required on lead: ${lead.name}`,
                     type: cfg.type ?? "AUTOMATION",
                     link: `/leads/${lead.id}`,
-                }
+                },
             });
-            return { action: "SEND_NOTIFICATION", userId: lead.assignedToId };
+            return { action: "SEND_NOTIFICATION", userId: assignee };
         }
 
         case "SEND_WHATSAPP": {
@@ -138,10 +188,8 @@ async function executeAction(action, lead, childContext = {}, tx = prisma) {
             const normalized = normalizePhone(lead.phone);
             if (!normalized) return { action: "SEND_WHATSAPP", skipped: true, reason: "invalid_phone" };
 
-            // Pending side-effect: HTTP call runs OUTSIDE the Prisma transaction (in
-            // runRulesForLead, after commit). We just record the intent here so the
-            // tx stays short — the DB row + activity log are written after the send
-            // returns. See SIDE_EFFECTS handling below.
+            // Pending side-effect: HTTP call runs OUTSIDE the Prisma transaction
+            // (after commit). We only record intent here to keep the tx short.
             const params = (cfg.parameters || []).map(p =>
                 p === "{{lead.name}}" ? lead.name : p
             );
@@ -160,7 +208,6 @@ async function executeAction(action, lead, childContext = {}, tx = prisma) {
 
         case "SEND_EMAIL": {
             if (!lead.email) return { action: "SEND_EMAIL", skipped: true, reason: "no_email" };
-            // Same pattern as SEND_WHATSAPP — defer the HTTP call to after-commit.
             const body = (cfg.body || "Hi {{lead.name}}, thank you for your enquiry.").replace(/\{\{lead\.name\}\}/g, lead.name);
             return {
                 action: "SEND_EMAIL",
@@ -176,7 +223,7 @@ async function executeAction(action, lead, childContext = {}, tx = prisma) {
         }
 
         default:
-            return { action: action.type, skipped: true };
+            return { action: action.type, skipped: true, reason: "unknown_action" };
     }
 }
 
@@ -184,9 +231,9 @@ async function executeAction(action, lead, childContext = {}, tx = prisma) {
 // Constraints live in rule.triggerConfig.constraints as an array, e.g.:
 //   [{ type: "COOLDOWN", hours: 24 }, { type: "MAX_EXECUTIONS_PER_DAY", max: 1 }]
 //
-// Returns { allowed: false, reason: string } if any constraint blocks the rule,
-// or { allowed: true } if all pass.
-// executionCtx carries { triggerDepth, ruleChain, chainId } for chain-aware constraints.
+// Constraint history is keyed by ruleId + leadId. Because a department rule only
+// matches one department (triggerConfig.department) and a lead has at most one
+// LeadDepartment per department, ruleId + leadId already scopes to that service.
 
 async function checkConstraints(rule, lead, executionCtx = {}) {
     const constraints = rule.triggerConfig?.constraints;
@@ -196,7 +243,6 @@ async function checkConstraints(rule, lead, executionCtx = {}) {
         switch (c.type) {
 
             case "COOLDOWN": {
-                // Block if a SUCCESS log for this rule+lead exists within the last N hours
                 const hours = c.hours ?? 24;
                 const since = new Date(Date.now() - hours * 60 * 60 * 1000);
                 const recent = await prisma.automationLog.findFirst({
@@ -219,7 +265,6 @@ async function checkConstraints(rule, lead, executionCtx = {}) {
             }
 
             case "BUSINESS_HOURS_ONLY": {
-                // Default 9–18 IST (server runs UTC); customise with startHour/endHour
                 const hour = nowIST().getUTCHours();
                 const start = c.startHour ?? 9;
                 const end   = c.endHour   ?? 18;
@@ -236,7 +281,6 @@ async function checkConstraints(rule, lead, executionCtx = {}) {
             }
 
             case "PREVENT_DUPLICATES": {
-                // Never fire this rule for this lead more than once ever
                 const ever = await prisma.automationLog.findFirst({
                     where: { ruleId: rule.id, leadId: lead.id, status: "SUCCESS" },
                     select: { id: true }
@@ -246,8 +290,6 @@ async function checkConstraints(rule, lead, executionCtx = {}) {
             }
 
             case "PREVENT_RECURSIVE_TRIGGERS": {
-                // Block if this exact rule already appears earlier in the current execution chain.
-                // This stops: Rule A fires → mutates lead → triggers Rule A again → repeat.
                 const chain = executionCtx.ruleChain ?? [];
                 if (chain.includes(rule.id))
                     return { allowed: false, reason: `PREVENT_RECURSIVE_TRIGGERS: rule ${rule.id} already in chain [${chain.join(" → ")}]` };
@@ -255,7 +297,6 @@ async function checkConstraints(rule, lead, executionCtx = {}) {
             }
 
             default:
-                // Unknown constraint type — log warning and allow
                 console.warn(`[AutomationEngine] Unknown constraint type "${c.type}" on rule ${rule.id} — skipped`);
         }
     }
@@ -263,17 +304,15 @@ async function checkConstraints(rule, lead, executionCtx = {}) {
 }
 
 // ─── Execution Context ────────────────────────────────────────────────────────
-// Every top-level call to runRulesForLead() creates a fresh ExecutionContext.
-// Child calls (triggered by actions like CHANGE_STATUS) inherit the same chainId
-// and carry an extended ruleChain so we can detect cycles.
+// Every top-level run creates a fresh ExecutionContext. Chained calls (from
+// CHANGE_STAGE / ASSIGN_CONSULTANT actions) inherit the chainId and extend the
+// ruleChain so cycles can be detected.
 //
-// Fields:
-//   chainId      — UUID for the whole chain (links all logs from one trigger event)
+//   chainId      — UUID linking all logs from one trigger event
 //   triggerDepth — 0 = user action, 1 = automation-triggered, etc.
-//   ruleChain    — ordered list of ruleIds that ran so far in this chain
+//   ruleChain    — ordered ruleIds that ran so far in this chain
 //
 // Hard cap: triggerDepth > MAX_TRIGGER_DEPTH aborts regardless of constraints.
-// This is a safety net for bugs; PREVENT_RECURSIVE_TRIGGERS is the semantic guard.
 
 const MAX_TRIGGER_DEPTH = 3;
 
@@ -294,16 +333,17 @@ function childContext(parent, ruleId) {
     };
 }
 
-// ─── Rule Runner ──────────────────────────────────────────────────────────────
+// ─── Generic Rule Runner ──────────────────────────────────────────────────────
+// Shared by every trigger type. `target` is { lead, leadDept }; `matchTrigger`
+// is an optional per-rule gate (department/stage matching for dept events).
+// `refetchTarget` re-reads lead (+ leadDept) after a mutating action.
 
-async function runRulesForLead(triggerType, lead, context = null) {
-    // Merge caller-provided context with a fresh root so chainId/triggerDepth/ruleChain
-    // are always present even when callers only pass { prevStatus, newStatus }.
+async function runRules({ triggerType, target, context, matchTrigger, refetchTarget }) {
     const ctx = context ? { ...makeRootContext(), ...context } : makeRootContext();
 
     if (ctx.triggerDepth > MAX_TRIGGER_DEPTH) {
         console.warn(
-            `[AutomationEngine] Hard depth limit hit: ${triggerType} on lead ${lead.id} ` +
+            `[AutomationEngine] Hard depth limit hit: ${triggerType} on lead ${target.lead?.id} ` +
             `chain=[${ctx.ruleChain.join(" → ")}] chainId=${ctx.chainId} — aborted`
         );
         return;
@@ -311,49 +351,44 @@ async function runRulesForLead(triggerType, lead, context = null) {
 
     const rules = await prisma.automationRule.findMany({
         where: { triggerType, isActive: true },
-        include: {
-            conditions: true,
-            actions: { orderBy: { order: "asc" } }
-        }
+        include: { conditions: true, actions: { orderBy: { order: "asc" } } },
     });
 
     for (const rule of rules) {
-        // For STATUS_CHANGED trigger, check if the config status matches
-        if (triggerType === "STATUS_CHANGED" && rule.triggerConfig?.status) {
-            if (rule.triggerConfig.status !== ctx.newStatus) continue;
-        }
+        if (matchTrigger && !matchTrigger(rule, target, ctx)) continue;
+        if (!matchesAllConditions(target, rule.conditions)) continue;
 
-        const conditionsMet = matchesAllConditions(lead, rule.conditions);
-        if (!conditionsMet) continue;
-
-        const constraintCheck = await checkConstraints(rule, lead, ctx);
+        const constraintCheck = await checkConstraints(rule, target.lead, ctx);
         if (!constraintCheck.allowed) continue;
 
         const results = [];
         let failed = false;
-        // Build child context — this rule is now part of the chain
+        let working = target;
         const child = childContext(ctx, rule.id);
 
         try {
             await prisma.$transaction(async (tx) => {
                 for (const action of rule.actions) {
-                    const result = await executeAction(action, lead, child, tx);
+                    const result = await executeAction(action, working, child, tx);
                     results.push(result);
-                    // Re-fetch lead so subsequent actions see the updated state
-                    lead = await tx.lead.findUnique({ where: { id: lead.id } });
+                    if (result?._refetch && refetchTarget) {
+                        working = await refetchTarget(working, tx);
+                    }
                 }
                 await tx.automationLog.create({
                     data: {
                         ruleId: rule.id,
-                        leadId: lead.id,
+                        leadId: working.lead.id,
                         status: "SUCCESS",
                         details: {
+                            department: working.leadDept?.department ?? null,
+                            stage:      working.leadDept?.stage ?? null,
                             results,
                             chainId:      ctx.chainId,
                             triggerDepth: ctx.triggerDepth,
                             ruleChain:    ctx.ruleChain,
-                        }
-                    }
+                        },
+                    },
                 });
             });
         } catch (err) {
@@ -362,21 +397,21 @@ async function runRulesForLead(triggerType, lead, context = null) {
             await prisma.automationLog.create({
                 data: {
                     ruleId: rule.id,
-                    leadId: lead.id,
+                    leadId: target.lead.id,
                     status: "FAILED",
                     details: {
+                        department: target.leadDept?.department ?? null,
                         results,
                         chainId:      ctx.chainId,
                         triggerDepth: ctx.triggerDepth,
                         ruleChain:    ctx.ruleChain,
-                    }
-                }
-            });
+                    },
+                },
+            }).catch(console.error);
         }
 
-        // ── Execute deferred side-effects (HTTP calls) AFTER the tx commits ──
-        // Keeping these outside the transaction prevents the DB connection from
-        // being held open for up to 15 seconds per external send.
+        // Deferred side-effects (HTTP calls) run AFTER the tx commits so the DB
+        // connection isn't held open for external sends.
         if (!failed) {
             for (const result of results) {
                 if (result?._sideEffect) {
@@ -389,10 +424,54 @@ async function runRulesForLead(triggerType, lead, context = null) {
     }
 }
 
+// ─── Public entry points ──────────────────────────────────────────────────────
+
+/**
+ * Run automation for a department event (STAGE_CHANGED, ASSIGNED, UNASSIGNED,
+ * DEPARTMENT_ALLOCATED). `leadDept` is a LeadDepartment row; the lead is fetched
+ * for contact fields. Department rules match on triggerConfig.department and, for
+ * STAGE_CHANGED, triggerConfig.stage (the new stage).
+ */
+async function runRulesForDepartmentEvent(triggerType, leadDept, context = null) {
+    if (!leadDept) return;
+    const lead = await prisma.lead.findUnique({ where: { id: leadDept.leadId } });
+    if (!lead) return;
+
+    const target = { lead, leadDept };
+
+    const matchTrigger = (rule) => {
+        const tc = rule.triggerConfig || {};
+        if (tc.department && tc.department !== leadDept.department) return false;
+        if (triggerType === "STAGE_CHANGED" && tc.stage && tc.stage !== leadDept.stage) return false;
+        return true;
+    };
+
+    const refetchTarget = async (working, tx) => {
+        const freshDept = await tx.leadDepartment.findUnique({ where: { id: working.leadDept.id } });
+        const freshLead = await tx.lead.findUnique({ where: { id: working.lead.id } });
+        return { lead: freshLead, leadDept: freshDept };
+    };
+
+    await runRules({ triggerType, target, context, matchTrigger, refetchTarget });
+}
+
+/**
+ * Run automation for a lead-level event (LEAD_CREATED, MISSED_CALL). These have no
+ * department context; conditions on department/stage will simply not match.
+ */
+async function runRulesForLead(triggerType, lead, context = null) {
+    if (!lead) return;
+    const target = { lead, leadDept: null };
+    const refetchTarget = async (working, tx) => ({
+        lead: await tx.lead.findUnique({ where: { id: working.lead.id } }),
+        leadDept: null,
+    });
+    await runRules({ triggerType, target, context, matchTrigger: null, refetchTarget });
+}
+
 /**
  * Execute a side-effect (external HTTP call) AFTER the rule transaction commits.
- * Writes its own DB record + activity log on success/failure. Failures are logged
- * but do not roll back the rule.
+ * Writes its own DB record + activity log; failures are logged, not rolled back.
  */
 async function runSideEffect(side) {
     if (side.kind === "whatsapp") {
@@ -447,7 +526,8 @@ async function runSideEffect(side) {
 }
 
 // ─── Time-based: No Activity trigger ─────────────────────────────────────────
-// Called by a daily cron or scheduler
+// Lead-level, fired by a daily cron. A LeadDepartment-aware "stale service" sweep
+// can be added later as a department event; this keeps the existing nudge working.
 const NO_ACTIVITY_CHUNK = 100;
 
 async function runNoActivityRules() {
@@ -461,11 +541,10 @@ async function runNoActivityRules() {
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - days);
 
-        // Fetch qualifying leads in pages to avoid loading all leads into memory
         let cursor = undefined;
         while (true) {
             const leads = await prisma.lead.findMany({
-                where: { updatedAt: { lt: cutoff }, status: { notIn: ["CONVERTED", "LOST"] } },
+                where: { updatedAt: { lt: cutoff } },
                 take: NO_ACTIVITY_CHUNK,
                 ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
                 orderBy: { id: "asc" },
@@ -474,7 +553,6 @@ async function runNoActivityRules() {
             if (leads.length === 0) break;
             cursor = leads[leads.length - 1].id;
 
-            // Bulk-fetch recent SUCCESS logs for this rule + this batch of leads in one query
             const leadIds = leads.map(l => l.id);
             const recentLogs = await prisma.automationLog.findMany({
                 where: { ruleId: rule.id, leadId: { in: leadIds }, status: "SUCCESS", createdAt: { gt: cutoff } },
@@ -485,10 +563,10 @@ async function runNoActivityRules() {
             for (const lead of leads) {
                 if (alreadyFired.has(lead.id)) continue;
 
+                const target = { lead, leadDept: null };
                 const constraintCheck = await checkConstraints(rule, lead);
                 if (!constraintCheck.allowed) continue;
-
-                if (!matchesAllConditions(lead, rule.conditions)) continue;
+                if (!matchesAllConditions(target, rule.conditions)) continue;
 
                 const results = [];
                 const ruleCtx = childContext(makeRootContext(), rule.id);
@@ -496,11 +574,13 @@ async function runNoActivityRules() {
 
                 try {
                     await prisma.$transaction(async (tx) => {
-                        let currentLead = lead;
+                        let working = target;
                         for (const action of rule.actions) {
-                            const result = await executeAction(action, currentLead, ruleCtx, tx);
+                            const result = await executeAction(action, working, ruleCtx, tx);
                             results.push(result);
-                            currentLead = await tx.lead.findUnique({ where: { id: currentLead.id } });
+                            if (result?._refetch) {
+                                working = { lead: await tx.lead.findUnique({ where: { id: working.lead.id } }), leadDept: null };
+                            }
                         }
                         await tx.automationLog.create({
                             data: { ruleId: rule.id, leadId: lead.id, status: "SUCCESS", details: { trigger: "NO_ACTIVITY", days, results } },
@@ -529,4 +609,4 @@ async function runNoActivityRules() {
     }
 }
 
-module.exports = { runRulesForLead, runNoActivityRules };
+module.exports = { runRulesForDepartmentEvent, runRulesForLead, runNoActivityRules };

@@ -1,11 +1,22 @@
-﻿/**
- * DCRM - Comprehensive System Seed Script
+/**
+ * DCRM - Comprehensive System Seed Script (multi-department model)
  * Creates realistic operational data for end-to-end QA testing.
+ *
+ * Model notes:
+ *  - There is no global Lead.status / Lead.assignedToId any more. Each lead
+ *    (customer) carries one or more LeadDepartment "services", each with its own
+ *    consultant (assignedEmployeeId) and workflow stage.
+ *  - Department membership is via UserDepartment (M2M) against the DepartmentType
+ *    enum — there is no Department model.
+ *  - Commission is earned per department-service when it reaches its
+ *    COMMISSION_INVOICING stage, awarded to that service's consultant.
+ *
  * Run: node seed.js
  */
 
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcrypt");
+const { getStages, isCommissionStage } = require("./src/config/departmentWorkflows");
 
 const prisma = new PrismaClient();
 
@@ -67,7 +78,24 @@ const CITIES = [
 
 const SOURCES = ["FACEBOOK", "INSTAGRAM", "GMAIL", "WEBSITE", "PHONE_CALL", "LINKEDIN"];
 const ENQUIRY_TYPES = ["PRODUCT", "WHITE_LABEL", "LMS", "SERVICES"];
-const STATUSES = ["NEW", "CONTACTED", "FOLLOW_UP", "CONVERTED", "LOST"];
+
+// Departments a customer can additionally be serviced by, beyond the base SALES
+// service every lead starts with. APPLICATION_VISA is excluded (no workflow yet).
+const EXTRA_DEPARTMENTS = ["LOAN", "FOREX", "ACCOMMODATION_TICKETS", "MISCELLANEOUS"];
+
+// Weighted SALES stage distribution so the funnel looks realistic.
+const SALES_STAGE_DIST = [
+    ...Array(40).fill("ENQUIRY"),
+    ...Array(30).fill("FOLLOW_UP"),
+    ...Array(25).fill("PROSPECT"),
+    ...Array(15).fill("UNIVERSITY_SHORTLISTING"),
+    ...Array(15).fill("APPLICATION"),
+    ...Array(10).fill("AWAITING_STATUS"),
+    ...Array(10).fill("VISA_DOCUMENTATION"),
+    ...Array(10).fill("VISA_APPROVAL"),
+    ...Array(25).fill("COMMISSION_INVOICING"),
+    ...Array(10).fill("ARCHIVE"),
+];
 
 const CALL_STATUSES = ["COMPLETED", "MISSED", "BUSY", "NO_ANSWER", "FAILED"];
 const CALL_TONES = ["positive", "neutral", "negative", "frustrated", "interested"];
@@ -82,7 +110,7 @@ const TASK_TITLES = [
     "Verify client requirements",
     "Conduct product demo",
     "Send WhatsApp follow-up",
-    "Update lead status after call",
+    "Update service stage after call",
     "Research client company",
     "Prepare contract documents",
     "Collect feedback after demo",
@@ -101,7 +129,7 @@ const NOTE_TEMPLATES = [
     "Follow-up needed. They are in approval stage internally.",
     "Lead went cold after initial contact. Try different approach.",
     "Referred by existing client Sunrise Enterprises. High priority.",
-    "Client budget is 2-5 lakhs. Product fits. Move to negotiation.",
+    "Client budget is 2-5 lakhs. Product fits. Move to prospect.",
     "Technical team evaluation pending. Decision expected next week.",
     "Client requested 3-month free trial. Not possible. Counter-offered 1 month.",
     "Competitor mentioned: Salesforce. Need to highlight our pricing advantage.",
@@ -147,11 +175,100 @@ const WA_REPLIES = [
     "Can you give us a demo this week?",
 ];
 
-const DEPARTMENTS_DATA = [
-    "Sales", "Marketing", "Technical", "Customer Support", "Management"
+// ─── Users ─────────────────────────────────────────────────────────────────
+// Each user declares which DepartmentType(s) they belong to (UserDepartment) and
+// who their manager is (for hierarchy-based reporting/visibility).
+const USER_DEFS = [
+    // Director — member of every department, sees everything.
+    {
+        name: "System Director", email: "admin@dcrm.io", phone: "+91 9999999999",
+        role: "SUPER_ADMIN", jobTitle: "Director", department: "Management",
+        departments: ["SALES", "LOAN", "ACCOMMODATION_TICKETS", "FOREX", "MISCELLANEOUS"],
+        managerEmail: null,
+    },
+
+    // Managers (ADMIN)
+    {
+        name: "Priya Sharma", email: "priya.sharma@dcrm.io", phone: "+91 9876543210",
+        role: "ADMIN", jobTitle: "Sales Manager", department: "Sales",
+        departments: ["SALES"], managerEmail: "admin@dcrm.io",
+    },
+    {
+        name: "Vikram Patel", email: "vikram.patel@dcrm.io", phone: "+91 9988776655",
+        role: "ADMIN", jobTitle: "Loan & Forex Manager", department: "Loan",
+        departments: ["LOAN", "FOREX"], managerEmail: "admin@dcrm.io",
+    },
+    {
+        name: "Ananya Nair", email: "ananya.nair@dcrm.io", phone: "+91 9765432109",
+        role: "ADMIN", jobTitle: "Services Manager", department: "Services",
+        departments: ["ACCOMMODATION_TICKETS", "MISCELLANEOUS"], managerEmail: "admin@dcrm.io",
+    },
+
+    // SALES consultants
+    {
+        name: "Karthik Reddy", email: "karthik.reddy@dcrm.io", phone: "+91 9876512345",
+        role: "EMPLOYEE", jobTitle: "Senior Sales Consultant", department: "Sales",
+        departments: ["SALES"], managerEmail: "priya.sharma@dcrm.io",
+    },
+    {
+        name: "Rahul Krishnan", email: "rahul.krishnan@dcrm.io", phone: "+91 9654321098",
+        role: "EMPLOYEE", jobTitle: "Sales Consultant", department: "Sales",
+        departments: ["SALES"], managerEmail: "priya.sharma@dcrm.io",
+    },
+    {
+        name: "Sneha Iyer", email: "sneha.iyer@dcrm.io", phone: "+91 9543210987",
+        role: "EMPLOYEE", jobTitle: "Business Development Consultant", department: "Sales",
+        departments: ["SALES"], managerEmail: "priya.sharma@dcrm.io",
+    },
+    {
+        name: "Arun Venkataraman", email: "arun.venkat@dcrm.io", phone: "+91 9210987654",
+        role: "EMPLOYEE", jobTitle: "Sales Consultant", department: "Sales",
+        departments: ["SALES"], managerEmail: "priya.sharma@dcrm.io",
+    },
+    {
+        name: "Bala Chandrasekaran", email: "bala.agent@dcrm.io", phone: "+91 8776543210",
+        role: "EMPLOYEE", jobTitle: "Sales Consultant", department: "Sales",
+        departments: ["SALES"], managerEmail: "priya.sharma@dcrm.io",
+    },
+
+    // LOAN consultants
+    {
+        name: "Deepak Rao", email: "deepak.rao@dcrm.io", phone: "+91 9432109876",
+        role: "EMPLOYEE", jobTitle: "Loan Consultant", department: "Loan",
+        departments: ["LOAN"], managerEmail: "vikram.patel@dcrm.io",
+    },
+    {
+        name: "Kavya Annamalai", email: "kavya.agent@dcrm.io", phone: "+91 9009876543",
+        role: "EMPLOYEE", jobTitle: "Loan Consultant", department: "Loan",
+        departments: ["LOAN"], managerEmail: "vikram.patel@dcrm.io",
+    },
+
+    // FOREX (+ ACCOMMODATION) consultants
+    {
+        name: "Meera Pillai", email: "meera.pillai@dcrm.io", phone: "+91 9321098765",
+        role: "EMPLOYEE", jobTitle: "Forex Consultant", department: "Forex",
+        departments: ["FOREX"], managerEmail: "vikram.patel@dcrm.io",
+    },
+    {
+        name: "Nikhil Natarajan", email: "nikhil.agent@dcrm.io", phone: "+91 8998765432",
+        role: "EMPLOYEE", jobTitle: "Multi-service Consultant", department: "Forex",
+        departments: ["FOREX", "ACCOMMODATION_TICKETS"], managerEmail: "vikram.patel@dcrm.io",
+    },
+
+    // ACCOMMODATION + MISCELLANEOUS consultants
+    {
+        name: "Suresh Murugesan", email: "suresh.agent@dcrm.io", phone: "+91 9109876543",
+        role: "EMPLOYEE", jobTitle: "Accommodation Consultant", department: "Accommodation",
+        departments: ["ACCOMMODATION_TICKETS"], managerEmail: "ananya.nair@dcrm.io",
+    },
+    {
+        name: "Divya Selvaraj", email: "divya.agent@dcrm.io", phone: "+91 8887654321",
+        role: "EMPLOYEE", jobTitle: "Services Consultant", department: "Misc",
+        departments: ["MISCELLANEOUS"], managerEmail: "ananya.nair@dcrm.io",
+    },
 ];
 
-// ─── Main Seed ────────────────────────────────────────────────────────────────
+// ─── Cleanup ─────────────────────────────────────────────────────────────────
 
 async function cleanup() {
     console.log("🧹 Cleaning up previous seed data...");
@@ -172,168 +289,33 @@ async function cleanup() {
     await prisma.note.deleteMany({});
     await prisma.activity.deleteMany({});
     await prisma.commission.deleteMany({});
+    await prisma.assignmentHistory.deleteMany({});
     await prisma.notification.deleteMany({});
     await prisma.invoice.deleteMany({});
     await prisma.session.deleteMany({});
+    // LeadDepartment cascades on lead delete, but clear explicitly to be safe.
+    await prisma.leadDepartment.deleteMany({});
     await prisma.lead.deleteMany({});
+    await prisma.userDepartment.deleteMany({});
     await prisma.userStatusLog.deleteMany({});
     await prisma.customFieldDef.deleteMany({});
     console.log("  ✓ Cleanup done\n");
 }
 
 async function main() {
-    console.log("🌱 Starting DCRM seed...\n");
+    console.log("🌱 Starting DCRM seed (multi-department model)...\n");
     await cleanup();
 
-    // ── Departments ──────────────────────────────────────────────────────────
-    console.log("Creating departments...");
-    const departments = [];
-    for (const name of DEPARTMENTS_DATA) {
-        const dept = await prisma.department.upsert({
-            where: { name },
-            create: { name },
-            update: {},
-        });
-        departments.push(dept);
-    }
-    console.log(`  ✓ ${departments.length} departments`);
-
-    // ── Users ────────────────────────────────────────────────────────────────
-    console.log("Creating users...");
+    // ── Users + department memberships ─────────────────────────────────────────
+    console.log("Creating users + department memberships...");
     const passwordHash = await bcrypt.hash("Password@123", 10);
+    const userByEmail = new Map();
 
-    const userDefs = [
-        // SUPER_ADMIN
-        {
-            name: "System Admin",
-            email: "admin@dcrm.io",
-            phone: "+91 9999999999",
-            role: "SUPER_ADMIN",
-            department: "Management",
-            jobTitle: "CEO & Founder",
-        },
-        // ADMINs
-        {
-            name: "Priya Sharma",
-            email: "priya.sharma@dcrm.io",
-            phone: "+91 9876543210",
-            role: "ADMIN",
-            department: "Sales",
-            jobTitle: "Sales Manager",
-        },
-        {
-            name: "Vikram Patel",
-            email: "vikram.patel@dcrm.io",
-            phone: "+91 9988776655",
-            role: "ADMIN",
-            department: "Marketing",
-            jobTitle: "Marketing Head",
-        },
-        // TEAM_LEADs
-        {
-            name: "Karthik Reddy",
-            email: "karthik.reddy@dcrm.io",
-            phone: "+91 9876512345",
-            role: "EMPLOYEE",
-            department: "Sales",
-            jobTitle: "Senior Sales Executive",
-        },
-        {
-            name: "Ananya Nair",
-            email: "ananya.nair@dcrm.io",
-            phone: "+91 9765432109",
-            role: "EMPLOYEE",
-            department: "Customer Support",
-            jobTitle: "Support Lead",
-        },
-        // EMPLOYEEs
-        {
-            name: "Rahul Krishnan",
-            email: "rahul.krishnan@dcrm.io",
-            phone: "+91 9654321098",
-            role: "EMPLOYEE",
-            department: "Sales",
-            jobTitle: "Sales Executive",
-        },
-        {
-            name: "Sneha Iyer",
-            email: "sneha.iyer@dcrm.io",
-            phone: "+91 9543210987",
-            role: "EMPLOYEE",
-            department: "Sales",
-            jobTitle: "Business Development Executive",
-        },
-        {
-            name: "Deepak Rao",
-            email: "deepak.rao@dcrm.io",
-            phone: "+91 9432109876",
-            role: "EMPLOYEE",
-            department: "Technical",
-            jobTitle: "Technical Support",
-        },
-        {
-            name: "Meera Pillai",
-            email: "meera.pillai@dcrm.io",
-            phone: "+91 9321098765",
-            role: "EMPLOYEE",
-            department: "Marketing",
-            jobTitle: "Content Executive",
-        },
-        {
-            name: "Arun Venkataraman",
-            email: "arun.venkat@dcrm.io",
-            phone: "+91 9210987654",
-            role: "EMPLOYEE",
-            department: "Sales",
-            jobTitle: "Sales Executive",
-        },
-        // AGENTs
-        {
-            name: "Suresh Murugesan",
-            email: "suresh.agent@dcrm.io",
-            phone: "+91 9109876543",
-            role: "EMPLOYEE",
-            department: "Customer Support",
-            jobTitle: "Support Agent",
-        },
-        {
-            name: "Kavya Annamalai",
-            email: "kavya.agent@dcrm.io",
-            phone: "+91 9009876543",
-            role: "EMPLOYEE",
-            department: "Sales",
-            jobTitle: "Sales Agent",
-        },
-        {
-            name: "Nikhil Natarajan",
-            email: "nikhil.agent@dcrm.io",
-            phone: "+91 8998765432",
-            role: "EMPLOYEE",
-            department: "Technical",
-            jobTitle: "Technical Agent",
-        },
-        {
-            name: "Divya Selvaraj",
-            email: "divya.agent@dcrm.io",
-            phone: "+91 8887654321",
-            role: "EMPLOYEE",
-            department: "Customer Support",
-            jobTitle: "Customer Agent",
-        },
-        {
-            name: "Bala Chandrasekaran",
-            email: "bala.agent@dcrm.io",
-            phone: "+91 8776543210",
-            role: "EMPLOYEE",
-            department: "Sales",
-            jobTitle: "Lead Generation Agent",
-        },
-    ];
-
-    const users = [];
-    for (const def of userDefs) {
-        const deptId = departments.find(d => d.name === def.department)?.id;
+    // Ordered pass: Director first, then managers, then consultants — so every
+    // managerEmail already resolves to a created user.
+    for (const def of USER_DEFS) {
         const phone = def.phone.replace(/\s/g, "");
+        const managerId = def.managerEmail ? userByEmail.get(def.managerEmail)?.id ?? null : null;
         const user = await prisma.user.upsert({
             where: { email: def.email },
             create: {
@@ -344,74 +326,102 @@ async function main() {
                 password: passwordHash,
                 role: def.role,
                 jobTitle: def.jobTitle,
-                departmentId: deptId,
+                department: def.department,
+                managerId,
                 isActive: true,
                 onlineStatus: randomFrom(["ONLINE", "OFFLINE", "BREAK"]),
                 lastSeen: hoursAgo(randomInt(0, 48)),
             },
-            update: { name: def.name, role: def.role, jobTitle: def.jobTitle },
+            update: { name: def.name, role: def.role, jobTitle: def.jobTitle, managerId, department: def.department },
         });
-        users.push(user);
+        userByEmail.set(def.email, user);
+
+        // Replace memberships
+        await prisma.userDepartment.deleteMany({ where: { userId: user.id } });
+        for (const dept of def.departments) {
+            await prisma.userDepartment.create({ data: { userId: user.id, department: dept } });
+        }
     }
-    console.log(`  ✓ ${users.length} users (1 SUPER_ADMIN, 2 ADMIN, 2 EMPLOYEE, 5 EMPLOYEE, 5 AGENT)`);
+    const users = [...userByEmail.values()];
+    const managerCount = USER_DEFS.filter(d => d.role === "ADMIN").length;
+    const consultantCount = USER_DEFS.filter(d => d.role === "EMPLOYEE").length;
+    console.log(`  ✓ ${users.length} users (1 Director, ${managerCount} managers, ${consultantCount} consultants)`);
 
-    const salesUsers = users.filter(u => ["EMPLOYEE", "EMPLOYEE", "EMPLOYEE"].includes(u.role));
-    const adminUsers = users.filter(u => ["SUPER_ADMIN", "ADMIN"].includes(u.role));
-    const allAssignableUsers = [...salesUsers, ...adminUsers.slice(0, 1)];
+    const director = userByEmail.get("admin@dcrm.io");
 
-    // ── Leads ────────────────────────────────────────────────────────────────
-    console.log("Creating 200 leads...");
+    // dept → consultants (EMPLOYEE members), falling back to any member.
+    const deptConsultants = {};
+    const deptMembers = {};
+    for (const def of USER_DEFS) {
+        for (const dept of def.departments) {
+            (deptMembers[dept] ||= []).push(userByEmail.get(def.email));
+            if (def.role === "EMPLOYEE") (deptConsultants[dept] ||= []).push(userByEmail.get(def.email));
+        }
+    }
+    const consultantsFor = (dept) => (deptConsultants[dept]?.length ? deptConsultants[dept] : deptMembers[dept] || []);
+
+    // ── Leads + LeadDepartment services ───────────────────────────────────────
+    console.log("Creating 200 leads with department services...");
     const leads = [];
-
-    const statusDistribution = [
-        ...Array(50).fill("NEW"),
-        ...Array(40).fill("CONTACTED"),
-        ...Array(35).fill("FOLLOW_UP"),
-        ...Array(40).fill("CONVERTED"),
-        ...Array(35).fill("LOST"),
-    ];
+    // Per-lead context used to attribute downstream records (calls/emails/tasks)
+    // to the SALES consultant rather than a removed global assignee.
+    const leadCtx = new Map(); // leadId → { salesAssigneeId, services: [{department, stage, assignedEmployeeId}] }
 
     for (let i = 0; i < 200; i++) {
         const firstName = randomFrom(FIRST_NAMES);
         const lastName = randomFrom(LAST_NAMES);
         const name = `${firstName} ${lastName}`;
-        const city = randomFrom(CITIES);
         const company = i % 3 === 0 ? randomFrom(COMPANIES) : null;
-        const status = statusDistribution[i % statusDistribution.length];
         const source = randomFrom(SOURCES);
         const enquiryType = randomFrom(ENQUIRY_TYPES);
-        const assignedTo = i % 5 === 0 ? null : randomFrom(allAssignableUsers);
         const createdAt = randomDate(daysAgo(180), new Date());
 
-        // Varied data quality: each phone is unique via index suffix
+        // Varied data quality: each phone is unique via index suffix.
         let phone = null;
         let email = null;
-        // Base phone: use index to guarantee uniqueness
         const basePhone = `9${String(700000000 + i).padStart(9, "0")}`;
-
         if (i % 7 === 0) {
-            // Missing phone — email only
-            phone = null;
             email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${i}@${randomFrom(["gmail.com", "yahoo.com", "outlook.com", "hotmail.com"])}`;
         } else if (i % 13 === 0) {
-            // Missing both — low quality
-            phone = null;
-            email = null;
+            // Missing both — low quality lead.
         } else {
             phone = basePhone;
             email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}@${company ? company.toLowerCase().replace(/\s+/g, "").slice(0, 10) + ".com" : randomFrom(["gmail.com", "yahoo.com", "company.in"])}`;
         }
 
-        const dealValue = status === "CONVERTED"
-            ? randomInt(50000, 500000)
-            : status === "NEGOTIATION"
-            ? randomInt(30000, 300000)
-            : status === "LOST" ? null
-            : randomInt(10000, 200000);
-
         const score = randomInt(10, 95);
         const category = score > 70 ? "HOT" : score > 40 ? "WARM" : "COLD";
         const whatsappOptIn = randomFrom([true, true, true, false]); // 75% opt-in
+
+        // SALES service — every lead has one. Self-assigned to a sales consultant.
+        const salesStage = SALES_STAGE_DIST[i % SALES_STAGE_DIST.length];
+        const salesConsultant = randomFrom(consultantsFor("SALES"));
+        const salesAssigneeId = i % 5 === 0 ? null : salesConsultant.id; // ~20% unassigned
+
+        const services = [{
+            department: "SALES",
+            stage: salesStage,
+            assignedEmployeeId: salesAssigneeId,
+        }];
+
+        // ~40% of leads get one extra department service, ~12% get two.
+        const extras = new Set();
+        if (i % 5 < 2) extras.add(randomFrom(EXTRA_DEPARTMENTS));
+        if (i % 8 === 0) extras.add(randomFrom(EXTRA_DEPARTMENTS));
+        for (const dept of extras) {
+            const stages = getStages(dept);
+            const stage = randomFrom(stages);
+            const pool = consultantsFor(dept);
+            const consultant = pool.length ? randomFrom(pool) : null;
+            services.push({
+                department: dept,
+                stage,
+                // Extra services are manager-assigned; leave ~25% awaiting assignment.
+                assignedEmployeeId: consultant && Math.random() > 0.25 ? consultant.id : null,
+            });
+        }
+
+        const firstResponseAt = salesStage !== "ENQUIRY" ? randomDate(createdAt, new Date()) : null;
 
         const lead = await prisma.lead.create({
             data: {
@@ -421,14 +431,13 @@ async function main() {
                 phoneNormalized: phone ? `91${phone}` : null,
                 source,
                 enquiryType,
-                status,
-                assignedToId: assignedTo?.id || null,
                 score,
                 category,
                 company: company || undefined,
                 whatsappOptIn,
                 whatsappOptInAt: whatsappOptIn ? randomDate(daysAgo(90), new Date()) : null,
-                firstResponseAt: status !== "NEW" ? randomDate(createdAt, new Date()) : null,
+                firstResponseAt,
+                lastActivityAt: randomDate(createdAt, new Date()),
                 customFields: randomFrom([
                     undefined,
                     { budget_range: randomFrom(["< 1 Lakh", "1-5 Lakhs", "5-10 Lakhs", "> 10 Lakhs"]) },
@@ -436,38 +445,79 @@ async function main() {
                     undefined,
                 ]),
                 createdAt,
+                leadDepartments: {
+                    create: services.map(s => ({
+                        department: s.department,
+                        stage: s.stage,
+                        assignedEmployeeId: s.assignedEmployeeId,
+                        assignedAt: s.assignedEmployeeId ? randomDate(createdAt, new Date()) : null,
+                    })),
+                },
             },
         });
 
         leads.push(lead);
+        leadCtx.set(lead.id, { salesAssigneeId, services });
     }
-    console.log(`  ✓ ${leads.length} leads created`);
+    const serviceCount = [...leadCtx.values()].reduce((s, c) => s + c.services.length, 0);
+    console.log(`  ✓ ${leads.length} leads, ${serviceCount} department services`);
+
+    // For downstream records, prefer the lead's SALES consultant; fall back to a
+    // random sales consultant when the lead is unassigned.
+    const ownerFor = (lead) => {
+        const ctx = leadCtx.get(lead.id);
+        return ctx?.salesAssigneeId ? { id: ctx.salesAssigneeId } : randomFrom(consultantsFor("SALES"));
+    };
+
+    // ── Commissions (per-department, at COMMISSION_INVOICING) ──────────────────
+    console.log("Creating commissions...");
+    let commissionCount = 0;
+    for (const lead of leads) {
+        for (const svc of leadCtx.get(lead.id).services) {
+            if (!svc.assignedEmployeeId) continue;
+            if (!isCommissionStage(svc.department, svc.stage)) continue;
+            await prisma.commission.create({
+                data: {
+                    leadId: lead.id,
+                    department: svc.department,
+                    userId: svc.assignedEmployeeId,
+                    amount: randomInt(2000, 25000),
+                    createdAt: randomDate(lead.createdAt, new Date()),
+                },
+            });
+            commissionCount++;
+        }
+    }
+    console.log(`  ✓ ${commissionCount} commissions`);
 
     // ── Activities / Timeline ────────────────────────────────────────────────
     console.log("Creating timeline activities...");
     let activityCount = 0;
-
+    const activityTypes = [
+        "STAGE_CHANGED", "NOTE_ADDED", "CALL_LOGGED", "EMAIL_SENT",
+        "WHATSAPP_SENT", "REMINDER_SET", "CONSULTANT_ASSIGNED",
+        "TASK_CREATED", "DEPARTMENT_ALLOCATED",
+    ];
     for (const lead of leads) {
         const numActivities = randomInt(1, 8);
-        const activityTypes = [
-            "LEAD_CREATED", "STATUS_CHANGED", "NOTE_ADDED", "CALL_LOGGED",
-            "EMAIL_SENT", "WHATSAPP_SENT", "REMINDER_SET", "LEAD_ASSIGNED",
-            "TASK_CREATED", "FOLLOW_UP_SCHEDULED",
-        ];
-
+        const salesSvc = leadCtx.get(lead.id).services[0];
         for (let j = 0; j < numActivities; j++) {
             const action = j === 0 ? "LEAD_CREATED" : randomFrom(activityTypes);
-            const user = randomFrom(allAssignableUsers);
+            const user = ownerFor(lead);
+            let metadata = null;
+            if (action === "STAGE_CHANGED") {
+                metadata = { department: salesSvc.department, from: "ENQUIRY", to: salesSvc.stage };
+            } else if (action === "CONSULTANT_ASSIGNED") {
+                metadata = { department: salesSvc.department, assignedTo: user.id };
+            } else if (action === "DEPARTMENT_ALLOCATED") {
+                metadata = { department: salesSvc.department };
+            }
             await prisma.activity.create({
                 data: {
                     lead: { connect: { id: lead.id } },
                     user: { connect: { id: user.id } },
                     action,
-                    metadata: action === "STATUS_CHANGED"
-                        ? { from: randomFrom(["NEW", "CONTACTED"]), to: lead.status }
-                        : action === "LEAD_ASSIGNED"
-                        ? { assignedTo: user.name }
-                        : null,
+                    metadata,
                     createdAt: randomDate(lead.createdAt, new Date()),
                 },
             });
@@ -499,12 +549,12 @@ async function main() {
     let reminderCount = 0;
     for (const lead of leads.slice(0, 120)) {
         if (Math.random() > 0.4) continue;
-        const user = lead.assignedToId ? { id: lead.assignedToId } : randomFrom(allAssignableUsers);
+        const user = ownerFor(lead);
         const isOverdue = Math.random() > 0.5;
         await prisma.reminder.create({
             data: {
                 leadId: lead.id,
-                userId: user.id, // Reminder has no relation defined, uses raw FK
+                userId: user.id,
                 remindAt: isOverdue ? hoursAgo(randomInt(1, 72)) : new Date(Date.now() + randomInt(1, 48) * 3600000),
                 message: randomFrom([
                     "Follow up on proposal sent",
@@ -529,7 +579,7 @@ async function main() {
         const numCalls = randomInt(1, 4);
         for (let j = 0; j < numCalls; j++) {
             const callStatus = randomFrom(CALL_STATUSES);
-            const user = lead.assignedToId ? { id: lead.assignedToId } : randomFrom(allAssignableUsers);
+            const user = ownerFor(lead);
             await prisma.callLog.create({
                 data: {
                     lead: { connect: { id: lead.id } },
@@ -566,7 +616,7 @@ async function main() {
         if (!lead.email || Math.random() > 0.55) continue;
         const numEmails = randomInt(1, 4);
         for (let j = 0; j < numEmails; j++) {
-            const user = lead.assignedToId ? { id: lead.assignedToId } : randomFrom(allAssignableUsers);
+            const user = ownerFor(lead);
             const wasOpened = Math.random() > 0.4;
             const wasClicked = wasOpened && Math.random() > 0.6;
             await prisma.emailLog.create({
@@ -594,7 +644,7 @@ async function main() {
         if (!lead.whatsappOptIn || !lead.phone || Math.random() > 0.6) continue;
         const numMessages = randomInt(1, 5);
         for (let j = 0; j < numMessages; j++) {
-            const user = lead.assignedToId ? { id: lead.assignedToId } : randomFrom(allAssignableUsers);
+            const user = ownerFor(lead);
             const isInbound = j > 0 && Math.random() > 0.6;
             const status = isInbound ? "REPLIED" : randomFrom(["SENT", "DELIVERED", "READ", "FAILED"]);
             await prisma.whatsAppMessage.create({
@@ -623,7 +673,7 @@ async function main() {
     let taskCount = 0;
     for (const lead of leads.slice(0, 100)) {
         if (Math.random() > 0.5) continue;
-        const user = lead.assignedToId ? { id: lead.assignedToId } : randomFrom(allAssignableUsers);
+        const user = ownerFor(lead);
         const isOverdue = Math.random() > 0.6;
         await prisma.task.create({
             data: {
@@ -643,7 +693,7 @@ async function main() {
 
     // Standalone tasks (not linked to leads)
     for (let i = 0; i < 30; i++) {
-        const user = randomFrom(allAssignableUsers);
+        const user = randomFrom(users);
         await prisma.task.create({
             data: {
                 title: randomFrom(TASK_TITLES),
@@ -664,13 +714,13 @@ async function main() {
     console.log("Creating notifications...");
     let notifCount = 0;
     const notifTemplates = [
-        { title: "New Lead Assigned", type: "LEAD_ASSIGNED" },
+        { title: "New Service Assigned", type: "CONSULTANT_ASSIGNED" },
         { title: "Reminder Due", type: "REMINDER" },
         { title: "Task Due Soon", type: "TASK_DUE" },
-        { title: "Lead Status Updated", type: "STATUS_CHANGED" },
+        { title: "Service Stage Updated", type: "STAGE_CHANGED" },
         { title: "New WhatsApp Reply", type: "WHATSAPP_REPLY" },
     ];
-    for (const user of allAssignableUsers) {
+    for (const user of users) {
         for (let i = 0; i < randomInt(3, 10); i++) {
             const tmpl = randomFrom(notifTemplates);
             await prisma.notification.create({
@@ -688,7 +738,7 @@ async function main() {
     }
     console.log(`  ✓ ${notifCount} notifications`);
 
-    // ── Company Settings (if not present) ───────────────────────────────────
+    // ── Company Settings ──────────────────────────────────────────────────────
     console.log("Seeding company settings...");
     const existingSettings = await prisma.companySettings.findFirst();
     if (!existingSettings) {
@@ -739,11 +789,9 @@ async function main() {
 
     // ── WhatsApp Campaign ────────────────────────────────────────────────────
     console.log("Creating WhatsApp campaigns...");
-    const adminUser = adminUsers[0];
     const optInLeads = leads.filter(l => l.whatsappOptIn && l.phone).slice(0, 20);
-
     if (optInLeads.length > 0) {
-        const campaign = await prisma.whatsAppCampaign.create({
+        await prisma.whatsAppCampaign.create({
             data: {
                 name: "Q3 Product Launch Campaign",
                 templateName: "dcrm_product_launch",
@@ -757,7 +805,7 @@ async function main() {
                 repliedCount: Math.floor(optInLeads.length * 0.2),
                 startedAt: daysAgo(7),
                 completedAt: daysAgo(6),
-                createdById: adminUser.id,
+                createdById: director.id,
                 recipients: {
                     create: optInLeads.map((lead, idx) => ({
                         leadId: lead.id,
@@ -772,7 +820,6 @@ async function main() {
             },
         });
 
-        // Draft campaign for testing start flow
         await prisma.whatsAppCampaign.create({
             data: {
                 name: "Follow-up October Campaign",
@@ -780,7 +827,7 @@ async function main() {
                 parameters: ["Special Offer"],
                 status: "DRAFT",
                 totalCount: 10,
-                createdById: adminUser.id,
+                createdById: director.id,
                 recipients: {
                     create: optInLeads.slice(0, 10).map(lead => ({
                         leadId: lead.id,
@@ -797,82 +844,59 @@ async function main() {
     console.log("Creating auto-reply rules...");
     await prisma.whatsAppAutoReply.createMany({
         data: [
-            {
-                name: "Price Enquiry Auto-Reply",
-                active: true,
-                triggerType: "KEYWORD",
-                keyword: "price",
-                replyTemplate: "dcrm_pricing_info",
-                replyParams: [],
-                createdById: adminUser.id,
-            },
-            {
-                name: "Demo Request Auto-Reply",
-                active: true,
-                triggerType: "KEYWORD",
-                keyword: "demo",
-                replyTemplate: "dcrm_demo_schedule",
-                replyParams: [],
-                createdById: adminUser.id,
-            },
-            {
-                name: "48h No-Reply Timeout",
-                active: true,
-                triggerType: "NO_REPLY_TIMEOUT",
-                timeoutHours: 48,
-                replyTemplate: "dcrm_follow_up",
-                replyParams: ["our team"],
-                createdById: adminUser.id,
-            },
+            { name: "Price Enquiry Auto-Reply", active: true, triggerType: "KEYWORD", keyword: "price", replyTemplate: "dcrm_pricing_info", replyParams: [], createdById: director.id },
+            { name: "Demo Request Auto-Reply", active: true, triggerType: "KEYWORD", keyword: "demo", replyTemplate: "dcrm_demo_schedule", replyParams: [], createdById: director.id },
+            { name: "48h No-Reply Timeout", active: true, triggerType: "NO_REPLY_TIMEOUT", timeoutHours: 48, replyTemplate: "dcrm_follow_up", replyParams: ["our team"], createdById: director.id },
         ],
         skipDuplicates: true,
     });
     console.log("  ✓ 3 auto-reply rules");
 
-    // ── Automation Rules ─────────────────────────────────────────────────────
+    // ── Automation Rules (department-stage based) ─────────────────────────────
     console.log("Creating automation rules...");
-    const employee1 = salesUsers[0];
-
     const autoRule1 = await prisma.automationRule.create({
         data: {
-            name: "Auto-assign new Facebook leads",
-            description: "Assigns every new Facebook lead to the first available sales executive",
+            name: "New Lead — Welcome Journey",
+            description: "When a new lead is created, send a welcome WhatsApp (if phone) and create a follow-up task for the SALES consultant.",
             isActive: true,
             triggerType: "LEAD_CREATED",
-            conditions: {
-                create: [{ field: "source", operator: "equals", value: "FACEBOOK" }],
-            },
+            triggerConfig: { constraints: [{ type: "PREVENT_DUPLICATES" }] },
+            conditions: { create: [] },
             actions: {
-                create: [{ type: "ASSIGN_LEAD", config: { userId: employee1.id, userName: employee1.name }, order: 1 }],
+                create: [
+                    { type: "SEND_WHATSAPP", order: 0, config: { templateName: "welcome_lead", parameters: ["{{lead.name}}"] } },
+                    { type: "CREATE_TASK", order: 1, config: { title: "Follow up with new lead", dueDaysFromNow: 1, priority: "HIGH" } },
+                ],
             },
         },
     });
 
     const autoRule2 = await prisma.automationRule.create({
         data: {
-            name: "Notify on conversion",
-            description: "Creates a task and notification when lead is converted",
+            name: "Loan Approved — Notify & Invoice Task",
+            description: "When a LOAN service reaches APPROVED, notify the consultant and create a commission-invoicing task.",
             isActive: true,
-            triggerType: "STATUS_CHANGED",
-            triggerConfig: { status: "CONVERTED" },
+            triggerType: "STAGE_CHANGED",
+            triggerConfig: { department: "LOAN", stage: "APPROVED" },
             conditions: { create: [] },
             actions: {
                 create: [
-                    { type: "CREATE_TASK", config: { title: "Send welcome email to new client", dueDays: 1 }, order: 1 },
-                    { type: "SEND_NOTIFICATION", config: { message: "Lead has been converted!" }, order: 2 },
+                    { type: "SEND_NOTIFICATION", order: 0, config: { title: "Loan approved", message: "A loan service was approved — proceed to invoicing." } },
+                    { type: "CREATE_TASK", order: 1, config: { title: "Raise loan commission invoice", dueDaysFromNow: 2, priority: "MEDIUM" } },
                 ],
             },
         },
     });
 
-    // Automation logs
+    // Automation logs (keyed by leadId; department/stage carried in details).
     for (let i = 0; i < 20; i++) {
+        const lead = randomFrom(leads);
         await prisma.automationLog.create({
             data: {
                 rule: { connect: { id: randomFrom([autoRule1.id, autoRule2.id]) } },
-                lead: { connect: { id: randomFrom(leads).id } },
+                lead: { connect: { id: lead.id } },
                 status: randomFrom(["SUCCESS", "SUCCESS", "SUCCESS", "FAILED", "SKIPPED"]),
-                details: { message: "Rule executed successfully" },
+                details: { message: "Rule executed", department: "SALES" },
                 createdAt: randomDate(daysAgo(30), new Date()),
             },
         });
@@ -900,7 +924,7 @@ async function main() {
                 total: subtotal + cgst + sgst,
                 status: randomFrom(invoiceStatuses),
                 dueDate: new Date(Date.now() + randomInt(7, 60) * 86400000),
-                createdBy: { connect: { id: adminUser.id } },
+                createdBy: { connect: { id: director.id } },
                 items: {
                     create: [
                         {
@@ -936,15 +960,15 @@ async function main() {
     console.log("═══════════════════════════════════════════");
     console.log("  Login credentials (all passwords: Password@123)");
     console.log("═══════════════════════════════════════════");
-    for (const u of userDefs) {
-        console.log(`  ${u.role.padEnd(12)} │ ${u.email}`);
+    for (const u of USER_DEFS) {
+        console.log(`  ${u.role.padEnd(12)} │ ${u.email.padEnd(26)} │ ${u.departments.join(", ")}`);
     }
     console.log("═══════════════════════════════════════════");
     console.log(`
   Data Summary:
-  • ${departments.length} departments
-  • ${users.length} users
-  • 200 leads (across all statuses)
+  • ${users.length} users with department memberships
+  • 200 leads / ${serviceCount} department services
+  • ${commissionCount} commissions (per-department)
   • ${activityCount} timeline activities
   • ${noteCount} notes
   • ${reminderCount} reminders (mix of overdue + upcoming)

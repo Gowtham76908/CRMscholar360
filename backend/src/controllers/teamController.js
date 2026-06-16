@@ -31,17 +31,6 @@ const createUser = async (req, res, next) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Find department ID if department name is provided
-        let departmentId = undefined;
-        if (department) {
-            const deptRecord = await prisma.department.findUnique({
-                where: { name: department }
-            });
-            if (deptRecord) {
-                departmentId = deptRecord.id;
-            }
-        }
-
         // Managers can only create employees, and the new hire joins their own team.
         let { managerId } = req.body;
         if (req.user.role === "ADMIN") {
@@ -61,7 +50,6 @@ const createUser = async (req, res, next) => {
                 password: hashedPassword,
                 role: role || "EMPLOYEE",
                 department,
-                departmentId,
                 jobTitle: req.body.jobTitle,
                 managerId: managerId || null,
                 isActive: true
@@ -168,17 +156,6 @@ const updateUser = async (req, res, next) => {
             if (!check.ok) return res.status(400).json({ message: check.message });
         }
 
-        // Find department ID if department name is provided
-        let departmentId = undefined;
-        if (department) {
-            const deptRecord = await prisma.department.findUnique({
-                where: { name: department }
-            });
-            if (deptRecord) {
-                departmentId = deptRecord.id;
-            }
-        }
-
         const updatedUser = await prisma.user.update({
             where: { id },
             data: {
@@ -186,7 +163,6 @@ const updateUser = async (req, res, next) => {
                 phone,
                 role,
                 department,
-                departmentId,
                 jobTitle,
                 ...(managerId !== undefined && { managerId: managerId || null }),
             },

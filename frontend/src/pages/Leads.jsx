@@ -1,8 +1,8 @@
 ﻿import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Search, Filter, Edit, Plus, Upload, Phone, PhoneCall, Play, Pause, SearchCheck, Users, History, Mail, ChevronLeft, ChevronRight as ChevronRightIcon, LayoutGrid, List, Zap, X, SlidersHorizontal, AlertTriangle, ChevronDown, User, Calendar, Star, Tag, Globe, CheckCircle2 } from "lucide-react";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { Search, Filter, Edit, Plus, Upload, Phone, PhoneCall, Play, Pause, SearchCheck, Users, History, Mail, ChevronLeft, ChevronRight as ChevronRightIcon, LayoutGrid, List, Kanban, X, SlidersHorizontal, AlertTriangle, ChevronDown, User, Calendar, Star, Tag, Globe, CheckCircle2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
 import { Loader2, Merge } from "lucide-react";
 import { Modal } from "../components/Modal";
@@ -14,17 +14,10 @@ import CallDetailModal from "../components/CallDetailModal";
 import ImportLeadsModal from "../components/ImportLeadsModal";
 import { useAuth } from "../context/AuthContext";
 import { LeadsSkeleton } from "../components/ui/Skeleton";
-import { getCategoryFromScore } from "../utils/leadScore";
-
-function getSLAStatus(lead, warningDays = 3, breachDays = 7) {
-    if (!["NEW", "CONTACTED", "FOLLOW_UP"].includes(lead.status)) return null;
-    const ref = lead.lastActivityAt ?? lead.updatedAt;
-    const days = (Date.now() - new Date(ref).getTime()) / 86_400_000;
-    const daysRounded = Math.floor(days);
-    if (days > breachDays) return { level: "breach", days: daysRounded };
-    if (days > warningDays) return { level: "warning", days: daysRounded };
-    return null;
-}
+import { getCategoryFromScore, getSLAStatus } from "../utils/leadScore";
+import { useWorkflows } from "../hooks/useDepartments";
+import { DEPARTMENT_ORDER, departmentLabel } from "../lib/departments";
+import LeadsBoard from "./LeadsBoard";
 
 
 const getPages = (current, total) => {
@@ -49,12 +42,32 @@ function FilterChip({ label, onRemove }) {
     );
 }
 
+// A lead now carries one service row per department (LeadDepartment), each with its
+// own workflow stage and consultant. This replaces the single status badge / assignee.
+function DeptChips({ leadDepartments = [], stageLabel, max = 2 }) {
+    if (!leadDepartments.length) {
+        return <span className="text-[10px] font-semibold text-gray-400">No service</span>;
+    }
+    const shown = leadDepartments.slice(0, max);
+    return (
+        <div className="flex flex-wrap items-center gap-1">
+            {shown.map(ld => (
+                <span key={ld.id} className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-indigo-50 text-indigo-700 border-indigo-100 whitespace-nowrap">
+                    {departmentLabel(ld.department)} · {stageLabel(ld.department, ld.stage)}
+                </span>
+            ))}
+            {leadDepartments.length > max && (
+                <span className="text-[10px] text-gray-400">+{leadDepartments.length - max}</span>
+            )}
+        </div>
+    );
+}
+
 const Leads = () => {
     const [searchParams, setSearchParams] = useSearchParams();
 
     const activeTab    = searchParams.get("tab")         || "leads";
     const searchTerm   = searchParams.get("search")      || "";
-    const statusFilter = searchParams.get("status")      || "ALL";
     const page         = parseInt(searchParams.get("page") || "1", 10);
     const sortBy       = searchParams.get("sortBy")      || "createdAt";
     const sortOrder    = searchParams.get("sortOrder")   || "desc";
@@ -67,12 +80,13 @@ const Leads = () => {
     const slaFilter      = searchParams.get("sla")       || "";
     const dateFrom       = searchParams.get("startDate") || "";
     const dateTo         = searchParams.get("endDate")   || "";
-    const assignedToFilter = searchParams.get("assignedTo") || "";
+    const departmentFilter = searchParams.get("department") || "";
+    const stageFilter      = searchParams.get("stage")      || "";
 
     const [filterOpen, setFilterOpen] = useState(false);
 
     // Count active filters (excluding status which has its own tab row)
-    const activeFilterCount = [sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, scoreMin, scoreMax, mineFilter, assignedToFilter].filter(Boolean).length;
+    const activeFilterCount = [sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, scoreMin, scoreMax, mineFilter, departmentFilter, stageFilter].filter(Boolean).length;
 
     const [localSearch, setLocalSearch] = useState(searchTerm);
 
@@ -100,30 +114,36 @@ const Leads = () => {
     const setParam  = (key, val) => setSearchParams(p => { const n = new URLSearchParams(p); if (val) n.set(key, val); else n.delete(key); n.set("page", "1"); return n; }, { replace: true });
     const setActiveTab    = (v) => setSearchParams(p => { const next = new URLSearchParams(p); next.set("tab", v); next.set("page", "1"); return next; }, { replace: true });
     const setSearchTerm   = (v) => setSearchParams(p => { const next = new URLSearchParams(p); if (v) next.set("search", v); else next.delete("search"); next.set("page", "1"); return next; }, { replace: true });
-    const setStatusFilter = (v) => setSearchParams(p => { const next = new URLSearchParams(p); next.set("status", v); next.set("page", "1"); return next; }, { replace: true });
     const setPage         = (v) => setSearchParams(p => { const next = new URLSearchParams(p); next.set("page", String(v)); return next; }, { replace: true });
     const clearAllFilters = () => setSearchParams(p => {
         const next = new URLSearchParams(p);
-        ["source","category","enquiryType","sla","startDate","endDate","score_min","score_max","mine","assignedTo","status"].forEach(k => next.delete(k));
+        ["source","category","enquiryType","sla","startDate","endDate","score_min","score_max","mine","department","stage"].forEach(k => next.delete(k));
         next.set("page", "1");
         return next;
     }, { replace: true });
+    // View mode lives in the URL (?view=) so links (e.g. the sidebar's "Board
+    // View" shortcut) can deep-link straight into the board.
+    const viewMode = searchParams.get("view") || "grid";
+    const setViewMode = (v) => setSearchParams(p => { const next = new URLSearchParams(p); next.set("view", v); return next; }, { replace: true });
+    const isBoardView = viewMode === "kanban";
+
     const limit = 20;
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingLead, setEditingLead] = useState(null);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const queryClient = useQueryClient();
     const { user } = useAuth();
-    const isManager = ["SUPER_ADMIN", "ADMIN"].includes(user?.role);
 
+    // Board view fetches its own paginated data per department (see LeadsBoard /
+    // useDepartmentBoard) instead of this list query — skip it entirely there so
+    // switching to the board doesn't also fire an unused /leads request.
     const { data: leadsData, isLoading, isFetching } = useQuery({
-        queryKey: ["leads", page, searchTerm, statusFilter, activeTab, sortBy, sortOrder, scoreMin, scoreMax, mineFilter, sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, assignedToFilter],
+        queryKey: ["leads", page, limit, searchTerm, activeTab, sortBy, sortOrder, scoreMin, scoreMax, mineFilter, sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, departmentFilter, stageFilter],
         queryFn: async () => {
             const params = {
                 page,
                 limit,
                 search: searchTerm || undefined,
-                status: statusFilter === "ALL" ? undefined : statusFilter,
                 isSearchLead: activeTab === "search-leads" ? true : activeTab === "leads" ? false : undefined,
                 sortBy,
                 sortOrder,
@@ -136,20 +156,15 @@ const Leads = () => {
                 sla: slaFilter || undefined,
                 startDate: dateFrom || undefined,
                 endDate: dateTo || undefined,
-                assignedTo: assignedToFilter || undefined,
+                department: departmentFilter || undefined,
+                stage: stageFilter || undefined,
             };
             const res = await api.get("/leads", { params });
             return res.data;
         },
+        enabled: !isBoardView,
         staleTime: 60_000,
         placeholderData: (prev) => prev,
-    });
-
-    const { data: teamMembers = [] } = useQuery({
-        queryKey: ["team-members-simple"],
-        queryFn: () => api.get("/users").then(r => Array.isArray(r.data) ? r.data : r.data?.users || []),
-        staleTime: 5 * 60_000,
-        enabled: isManager,
     });
 
     const { data: orgSettings } = useQuery({
@@ -159,6 +174,8 @@ const Leads = () => {
     });
     const slaWarningDays = orgSettings?.slaWarningDays ?? 3;
     const slaBreachDays  = orgSettings?.slaBreachDays  ?? 7;
+
+    const { getStages, stageLabel } = useWorkflows();
 
     const leads = leadsData?.data || [];
     const meta = { total: leadsData?.total ?? 0, totalPages: leadsData?.totalPages ?? 0 };
@@ -203,8 +220,6 @@ const Leads = () => {
         return () => window.removeEventListener("keydown", handler);
     }, [page, goTo]);
 
-    const [viewMode, setViewMode] = useState("grid");
-
     // Bulk Actions
     const [selectedLeads, setSelectedLeads] = useState([]);
 
@@ -221,27 +236,6 @@ const Leads = () => {
             setSelectedLeads(selectedLeads.filter(l => l !== id));
         } else {
             setSelectedLeads([...selectedLeads, id]);
-        }
-    };
-
-    const smartAssignMutation = useMutation({
-        mutationFn: (leadIds) => api.post("/leads/bulk-smart-assign", { leadIds }).then((r) => r.data),
-        onSuccess: (data) => {
-            toast.success(data.message || `Smart-assigned ${data.assigned} leads`);
-            queryClient.invalidateQueries({ queryKey: ["leads"] });
-            setSelectedLeads([]);
-        },
-        onError: (e) => toast.error(e.response?.data?.message || "Smart assign failed"),
-    });
-
-    const handleBulkUpdate = async (status) => {
-        if (!confirm(`Update ${selectedLeads.length} leads to ${status}?`)) return;
-        try {
-            await api.patch("/leads/bulk-update", { leadIds: selectedLeads, status });
-            queryClient.invalidateQueries({ queryKey: ["leads"] });
-            setSelectedLeads([]);
-        } catch (error) {
-            toast.error("Failed to update leads");
         }
     };
 
@@ -337,7 +331,7 @@ const Leads = () => {
             {/* Tabs */}
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
                 <button
-                    onClick={() => { setActiveTab("leads"); setSearchTerm(""); setStatusFilter("ALL"); setSelectedLeads([]); setPage(1); }}
+                    onClick={() => { setActiveTab("leads"); setSearchTerm(""); setSelectedLeads([]); setPage(1); }}
                     className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                         activeTab === "leads"
                             ? "bg-white text-indigo-700 shadow-sm"
@@ -353,7 +347,7 @@ const Leads = () => {
                     </span>
                 </button>
                 <button
-                    onClick={() => { setActiveTab("search-leads"); setSearchTerm(""); setStatusFilter("ALL"); setSelectedLeads([]); setPage(1); }}
+                    onClick={() => { setActiveTab("search-leads"); setSearchTerm(""); setSelectedLeads([]); setPage(1); }}
                     className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                         activeTab === "search-leads"
                             ? "bg-white text-indigo-700 shadow-sm"
@@ -390,20 +384,6 @@ const Leads = () => {
                         )}
                     </div>
 
-                    {/* Status pills */}
-                    <div className="hidden sm:flex items-center gap-1.5 shrink-0">
-                        {["ALL","NEW","CONTACTED","FOLLOW_UP","CONVERTED","LOST"].map(s => (
-                            <button key={s} onClick={() => setStatusFilter(s)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                                    statusFilter === s
-                                        ? "bg-indigo-600 text-white shadow-sm"
-                                        : "text-gray-500 hover:bg-gray-100"
-                                }`}>
-                                {s === "ALL" ? "All" : s === "FOLLOW_UP" ? "Follow Up" : s.charAt(0) + s.slice(1).toLowerCase()}
-                            </button>
-                        ))}
-                    </div>
-
                     {/* Filter toggle button */}
                     <button onClick={() => setFilterOpen(o => !o)}
                         className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-semibold border transition-all shrink-0 ${
@@ -428,7 +408,8 @@ const Leads = () => {
                         {enquiryFilter   && <FilterChip label={`Type: ${enquiryFilter}`}                    onRemove={() => setParam("enquiryType", "")} />}
                         {slaFilter       && <FilterChip label={`SLA: ${slaFilter}`}                         onRemove={() => setParam("sla", "")} />}
                         {mineFilter      && <FilterChip label="My Leads"                                     onRemove={() => setParam("mine", "")} />}
-                        {assignedToFilter && <FilterChip label={`Assigned: ${teamMembers.find(m => m.id === assignedToFilter)?.name || "…"}`} onRemove={() => setParam("assignedTo", "")} />}
+                        {departmentFilter && <FilterChip label={`Dept: ${departmentLabel(departmentFilter)}`} onRemove={() => { setParam("department", ""); setParam("stage", ""); }} />}
+                        {stageFilter     && <FilterChip label={`Stage: ${stageLabel(departmentFilter, stageFilter)}`} onRemove={() => setParam("stage", "")} />}
                         {(scoreMin || scoreMax) && <FilterChip label={`Score: ${scoreMin||"0"}–${scoreMax||"100"}`} onRemove={() => { setParam("score_min",""); setParam("score_max",""); }} />}
                         {(dateFrom || dateTo)   && <FilterChip label={`Date: ${dateFrom||"…"} → ${dateTo||"…"}`}   onRemove={() => { setParam("startDate",""); setParam("endDate",""); }} />}
                         <button onClick={clearAllFilters} className="text-xs text-red-500 hover:text-red-700 font-semibold ml-1">Clear all</button>
@@ -514,24 +495,34 @@ const Leads = () => {
                             </div>
                         </div>
 
-                        {/* Assigned to (manager/admin only) */}
-                        {isManager && (
-                            <div>
-                                <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2"><User className="h-3 w-3" />Assigned To</label>
-                                <div className="flex items-center gap-2">
-                                    <select value={assignedToFilter} onChange={e => setParam("assignedTo", e.target.value)}
-                                        className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-400 outline-none bg-white">
-                                        <option value="">Anyone</option>
-                                        <option value="unassigned">Unassigned</option>
-                                        {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                    </select>
-                                    <button onClick={() => setParam("mine", mineFilter ? "" : "true")}
-                                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all whitespace-nowrap ${mineFilter ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"}`}>
-                                        <CheckCircle2 className="h-3 w-3" />Mine only
-                                    </button>
-                                </div>
+                        {/* My leads toggle */}
+                        <div>
+                            <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2"><User className="h-3 w-3" />Ownership</label>
+                            <button onClick={() => setParam("mine", mineFilter ? "" : "true")}
+                                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all whitespace-nowrap ${mineFilter ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"}`}>
+                                <CheckCircle2 className="h-3 w-3" />Assigned to me
+                            </button>
+                        </div>
+
+                        {/* Department & Stage — disabled in board view: columns already split by stage */}
+                        <div>
+                            <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2"><Users className="h-3 w-3" />Department</label>
+                            <div className="flex items-center gap-2">
+                                <select value={departmentFilter} disabled={isBoardView}
+                                    onChange={e => { setParam("department", e.target.value); setParam("stage", ""); }}
+                                    className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-400 outline-none bg-white disabled:opacity-50">
+                                    <option value="">Any department</option>
+                                    {DEPARTMENT_ORDER.map(d => <option key={d} value={d}>{departmentLabel(d)}</option>)}
+                                </select>
+                                <select value={stageFilter} disabled={isBoardView || !departmentFilter}
+                                    onChange={e => setParam("stage", e.target.value)}
+                                    className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-400 outline-none bg-white disabled:opacity-50">
+                                    <option value="">Any stage</option>
+                                    {departmentFilter && getStages(departmentFilter).map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
+                                </select>
+                                {isBoardView && <p className="text-[10px] text-gray-400 shrink-0">Board splits by stage</p>}
                             </div>
-                        )}
+                        </div>
 
                         {/* Clear / close row */}
                         <div className="sm:col-span-2 lg:col-span-3 flex items-center justify-between pt-2 border-t border-gray-100">
@@ -563,31 +554,6 @@ const Leads = () => {
                             </button>
                         )}
 
-                        {isManager && (
-                            <button
-                                onClick={() => smartAssignMutation.mutate(selectedLeads)}
-                                disabled={smartAssignMutation.isPending}
-                                className="inline-flex items-center text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 rounded-lg shadow-sm gap-1.5"
-                            >
-                                {smartAssignMutation.isPending
-                                    ? <Loader2 className="h-3 w-3 animate-spin" />
-                                    : <Zap className="h-3 w-3" />}
-                                Smart Re-assign
-                            </button>
-                        )}
-
-                        <select
-                            className="text-sm border-gray-300 rounded-lg focus:ring-indigo-500 py-1.5"
-                            onChange={(e) => { if (e.target.value) handleBulkUpdate(e.target.value); }}
-                            defaultValue=""
-                        >
-                            <option value="" disabled>Update Status...</option>
-                            <option value="NEW">New</option>
-                            <option value="CONTACTED">Contacted</option>
-                            <option value="FOLLOW_UP">Follow Up</option>
-                            <option value="CONVERTED">Converted</option>
-                            <option value="LOST">Lost</option>
-                        </select>
                         <button
                             onClick={() => setSelectedLeads([])}
                             className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5"
@@ -601,11 +567,13 @@ const Leads = () => {
             {/* View toggle + lead count */}
             <div className="flex items-center justify-between flex-wrap gap-4">
                 <p className="text-sm text-gray-500">
-                    Showing <span className="font-semibold text-gray-700">{meta.total === 0 ? 0 : (page - 1) * limit + 1}–{Math.min(page * limit, meta.total)}</span> of <span className="font-semibold text-gray-700">{meta.total}</span>
+                    {isBoardView
+                        ? "Click a card to open the lead"
+                        : <>Showing <span className="font-semibold text-gray-700">{meta.total === 0 ? 0 : (page - 1) * limit + 1}–{Math.min(page * limit, meta.total)}</span> of <span className="font-semibold text-gray-700">{meta.total}</span></>}
                 </p>
                 <div className="flex items-center gap-2">
-                    {/* Sort Dropdown */}
-                    <div className="flex items-center gap-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-600">
+                    {/* Sort Dropdown — list views only */}
+                    <div className={`flex items-center gap-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-600 ${viewMode === "kanban" ? "hidden" : ""}`}>
                         <span className="font-medium">Sort:</span>
                         <select
                             value={`${sortBy}:${sortOrder}`}
@@ -625,8 +593,6 @@ const Leads = () => {
                             <option value="score:asc">Score: Low to High</option>
                             <option value="name:asc">Name: A to Z</option>
                             <option value="name:desc">Name: Z to A</option>
-                            <option value="status:asc">Status: A to Z</option>
-                            <option value="status:desc">Status: Z to A</option>
                         </select>
                     </div>
 
@@ -637,22 +603,28 @@ const Leads = () => {
                         <button onClick={() => setViewMode("table")} className={`p-1.5 rounded-md transition-colors ${viewMode === "table" ? "bg-white shadow text-indigo-600" : "text-gray-400 hover:text-gray-600"}`} title="Table view">
                             <List className="h-4 w-4" />
                         </button>
+                        <button onClick={() => setViewMode("kanban")} className={`p-1.5 rounded-md transition-colors ${viewMode === "kanban" ? "bg-white shadow text-indigo-600" : "text-gray-400 hover:text-gray-600"}`} title="Board view (by stage)">
+                            <Kanban className="h-4 w-4" />
+                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* Card Grid */}
-            {viewMode === "grid" ? (
+            {/* Board view — read-only, category-scoped, server-paginated per department
+                (see useDepartmentBoard) so it loads quickly regardless of department size.
+                No drag-and-drop: moving a lead's stage happens from Lead Detail. */}
+            {isBoardView ? (
+                <LeadsBoard
+                    search={searchTerm}
+                    mine={mineFilter === "true"}
+                    initialDepartment={departmentFilter || undefined}
+                    slaWarningDays={slaWarningDays}
+                    slaBreachDays={slaBreachDays}
+                />
+            ) : viewMode === "grid" ? (
                 <div className={`grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 transition-opacity duration-150 ${isFetching && !isLoading ? "opacity-60" : ""}`}>
                     {leads.map((lead) => {
                         const latestRecording = lead.callLogs?.find(c => c.recordingUrl);
-                        const statusColors = {
-                            NEW: "bg-blue-50 text-blue-700 border-blue-100",
-                            CONTACTED: "bg-indigo-50 text-indigo-700 border-indigo-100",
-                            FOLLOW_UP: "bg-amber-50 text-amber-700 border-amber-100",
-                            CONVERTED: "bg-emerald-50 text-emerald-700 border-emerald-100",
-                            LOST: "bg-red-50 text-red-600 border-red-100",
-                        };
                         const dynamicCategory = getCategoryFromScore(lead.score ?? 0);
                         const categoryColors = {
                             PREMIUM: "bg-purple-100 text-purple-700",
@@ -677,16 +649,13 @@ const Leads = () => {
                                     />
                                 </div>
 
-                                {/* Card top — name + status */}
+                                {/* Card top — name + SLA */}
                                 <Link to={`/leads/${lead.id}`} className="px-4 pt-4 pb-3 pl-9 flex items-start justify-between gap-2">
                                     <div className="min-w-0">
                                         <h3 className="font-semibold text-gray-900 truncate text-sm group-hover:text-indigo-600 transition-colors">{lead.name}</h3>
                                         <p className="text-xs text-gray-400 mt-0.5 capitalize truncate">{lead.enquiryType?.toLowerCase().replace(/_/g, " ") || "—"}</p>
                                     </div>
                                     <div className="flex items-center gap-1 flex-shrink-0">
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusColors[lead.status] ?? "bg-gray-100 text-gray-500"}`}>
-                                            {lead.status?.replace("_", " ")}
-                                        </span>
                                         {sla?.level === "breach" && (
                                             <span title={`No activity for ${sla.days} days`} className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">{sla.days}d inactive</span>
                                         )}
@@ -698,6 +667,11 @@ const Leads = () => {
 
                                 {/* Divider */}
                                 <div className="mx-4 border-t border-gray-100" />
+
+                                {/* Department services */}
+                                <div className="px-4 pt-3">
+                                    <DeptChips leadDepartments={lead.leadDepartments} stageLabel={stageLabel} />
+                                </div>
 
                                 {/* Contact info */}
                                 <div className="px-4 py-3 space-y-1.5 flex-1">
@@ -728,7 +702,6 @@ const Leads = () => {
                                             <span className="text-[10px] text-gray-400 capitalize">{lead.source.toLowerCase().replace(/_/g, " ")}</span>
                                         )}
                                     </div>
-                                    <span className="text-[10px] text-gray-400 truncate max-w-[80px]" title={lead.assignedTo?.name}>{lead.assignedTo?.name || "Unassigned"}</span>
                                 </div>
 
                                 {/* Action bar */}
@@ -788,12 +761,7 @@ const Leads = () => {
                                         </div>
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Source</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Assigned</th>
-                                    <th onClick={() => toggleSort("status")} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 hover:text-indigo-600 transition-colors">
-                                        <div className="flex items-center gap-1">
-                                            Status {sortBy === "status" && (sortOrder === "asc" ? "▲" : "▼")}
-                                        </div>
-                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Departments</th>
                                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
                                 </tr>
                             </thead>
@@ -832,10 +800,7 @@ const Leads = () => {
                                                 }`}>{dynamicCategory} · {lead.score ?? 0}</span>
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap"><span className="text-xs capitalize text-gray-500">{lead.source?.toLowerCase().replace(/_/g, " ") || "—"}</span></td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{lead.assignedTo?.name || "—"}</td>
-                                            <td className="px-4 py-3 whitespace-nowrap">
-                                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${lead.status === "NEW" ? "bg-blue-100 text-blue-700" : lead.status === "CONVERTED" ? "bg-emerald-100 text-emerald-700" : lead.status === "LOST" ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-700"}`}>{lead.status?.replace("_", " ")}</span>
-                                            </td>
+                                            <td className="px-4 py-3"><DeptChips leadDepartments={lead.leadDepartments} stageLabel={stageLabel} /></td>
                                             <td className="px-4 py-3 whitespace-nowrap text-right">
                                                 <div className="flex items-center justify-end gap-2">
                                                     <button onClick={() => setSelectedLeadForCalls(lead)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Call details"><Phone className="h-4 w-4" /></button>
@@ -847,7 +812,7 @@ const Leads = () => {
                                     );
                                 })}
                                 {leads.length === 0 && (
-                                    <tr><td colSpan="8" className="px-6 py-12 text-center text-sm text-gray-400">No leads found matching your filters.</td></tr>
+                                    <tr><td colSpan="7" className="px-6 py-12 text-center text-sm text-gray-400">No leads found matching your filters.</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -855,8 +820,8 @@ const Leads = () => {
                 </div>
             )}
 
-            {/* Pagination */}
-            <div className="flex items-center justify-between pt-1">
+            {/* Pagination — list views only */}
+            <div className={`flex items-center justify-between pt-1 ${viewMode === "kanban" ? "hidden" : ""}`}>
                 <button onClick={() => goTo(page - 1)} disabled={page === 1} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                     <ChevronLeft className="h-4 w-4" /> Prev
                 </button>

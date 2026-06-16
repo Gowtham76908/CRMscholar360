@@ -1,7 +1,45 @@
 ﻿const prisma = require("../utils/prisma");
-const { getTeamMemberIds } = require("./organizationService");
 const paginate = require("../utils/paginate");
 const { signUploadUrl } = require("../utils/signedUpload");
+const { createSalesAssignment, isMemberOfDepartment, getUserDepartments } = require("./leadDepartmentService");
+
+/**
+ * The ONLY supported way to create a lead. Every lead enters through Sales, so
+ * this atomically creates the Lead and its SALES LeadDepartment in one
+ * transaction. Calling `prisma.lead.create` directly is forbidden — it would
+ * produce an orphan lead with no department (invisible under the new model).
+ *
+ * @param {object} data            Prisma Lead create data (caller prepares scoring,
+ *                                  phoneNormalized, etc). Do NOT pass assignedToId —
+ *                                  this function owns the SALES assignment.
+ * @param {object} [opts]
+ * @param {string} [opts.createdByUserId]  If this user is a SALES member, the new
+ *                                  lead's SALES service is self-assigned to them.
+ * @param {string} [opts.salesAssigneeId]  Explicit SALES consultant to assign,
+ *                                  bypassing the membership check. Used by
+ *                                  prospecting sources (LinkedIn/Search) where the
+ *                                  scraper claims the lead regardless of department.
+ * @returns {Promise<object>} the created Lead
+ */
+async function createLead(data, { createdByUserId, salesAssigneeId } = {}) {
+    // Resolve who owns the SALES service:
+    //   1. an explicit assignee (prospecting self-claim), else
+    //   2. the creator, but only if they actually work in Sales, else
+    //   3. nobody — programmatic sources stay unassigned for a manager to allocate.
+    let assigneeId = null;
+    if (salesAssigneeId) {
+        assigneeId = salesAssigneeId;
+    } else if (createdByUserId && (await isMemberOfDepartment(createdByUserId, "SALES"))) {
+        assigneeId = createdByUserId;
+    }
+    const salesAssignee = assigneeId;
+
+    return prisma.$transaction(async (tx) => {
+        const lead = await tx.lead.create({ data });
+        await createSalesAssignment(tx, lead.id, salesAssignee);
+        return lead;
+    });
+}
 
 /**
  * Get leads with pagination, filtering, searching, and sorting
@@ -17,46 +55,60 @@ const getLeads = async ({
     sortOrder = "desc"
 }) => {
     // 1. Build Where Clause
-    // MERGED leads are terminal (absorbed into another lead) — exclude from all normal views
-    const where = { status: { not: "MERGED" } };
+    // Merged leads (absorbed into another lead) are excluded from all normal views.
+    const where = { mergedIntoId: null };
 
-    // Role-based visibility:
-    // EMPLOYEE    — own leads only
-    // ADMIN     — team leads (employees where managerId = userId); falls back to all if no team
-    // SUPER_ADMIN — everything
+    // Role-based visibility — multi-department model.
+    // A lead is visible when the actor is assigned to, or manages, one of its
+    // department services (LeadDepartment). Expressed as a single `leadDepartments.some`
+    // relation filter (`visScope`) so it composes with the filters below.
+    //   EMPLOYEE (Consultant) — leads where they are the assigned consultant on some service
+    //   ADMIN    (Manager)    — leads with a service in a department they belong to,
+    //                           plus anything assigned directly to them
+    //   SUPER_ADMIN (Director)— everything
+    const visScope = {};
+    const managed = role === "ADMIN" ? await getUserDepartments(userId) : [];
+    const managedSet = new Set(managed);
+
     if (role === "EMPLOYEE" || filters.mine) {
-        where.assignedToId = userId;
+        visScope.assignedEmployeeId = userId;
     } else if (role === "ADMIN") {
-        const teamIds = await getTeamMemberIds(userId);
-        if (teamIds.length > 0) {
-            if (filters.assignedTo) {
-                // A manager may filter to a single member, but ONLY within their own
-                // team — never another team's. An out-of-team id is clamped back to
-                // the team scope so it can't be used to read foreign leads.
-                where.OR = teamIds.includes(filters.assignedTo)
-                    ? [{ assignedToId: filters.assignedTo }]
-                    : [{ assignedToId: { in: teamIds } }, { assignedToId: null }];
-            } else {
-                // Show team leads plus unassigned leads the manager can claim
-                where.OR = [
-                    { assignedToId: { in: teamIds } },
-                    { assignedToId: null },
-                ];
-            }
-        } else if (filters.assignedTo) {
-            // Unseeded manager (no team rows): honour the explicit filter. This is a
-            // misconfiguration anyway; the IDOR fix above covers all seeded managers.
-            where.assignedToId = filters.assignedTo;
+        if (filters.assignedTo) {
+            // Manager filtering to a single consultant — constrained to the departments
+            // they manage so it can't be used to read another department's leads.
+            visScope.department = { in: managed };
+            visScope.assignedEmployeeId = filters.assignedTo;
+        } else if (managed.length) {
+            visScope.OR = [
+                { department: { in: managed } },
+                { assignedEmployeeId: userId },
+            ];
+        } else {
+            // Manager with no department membership: only their own assignments.
+            visScope.assignedEmployeeId = userId;
         }
-        // If no team yet and no filter, sees all (backward compat for unseeded managers)
     } else if (filters.assignedTo) {
-        where.assignedToId = filters.assignedTo;
+        // Director (or other) filtering to a specific consultant.
+        visScope.assignedEmployeeId = filters.assignedTo;
     }
 
-    // Exact match filters — support comma-separated multi-value (e.g. "FOLLOW_UP,CONTACTED")
-    if (filters.status) {
-        const statuses = filters.status.split(",").map(s => s.trim()).filter(Boolean);
-        where.status = statuses.length === 1 ? statuses[0] : { in: statuses };
+    // Narrow to a department / stage — must refine the SAME service row, and may
+    // only narrow visibility, never widen it.
+    if (filters.department) {
+        if (role === "SUPER_ADMIN" || role === "EMPLOYEE" || filters.mine) {
+            visScope.department = filters.department;
+        } else if (role === "ADMIN" && managedSet.has(filters.department)) {
+            // A managed department is a subset of the visible scope — safe to pin.
+            visScope.department = filters.department;
+        }
+        // ADMIN filtering by an unmanaged department: ignored (would widen/leak).
+    }
+    if (filters.stage) {
+        visScope.stage = filters.stage;
+    }
+
+    if (Object.keys(visScope).length > 0) {
+        where.leadDepartments = { some: visScope };
     }
 
     if (filters.isSearchLead !== undefined) {
@@ -73,11 +125,11 @@ const getLeads = async ({
     if (filters.category)    where.category    = filters.category;
     if (filters.enquiryType) where.enquiryType = filters.enquiryType;
 
-    // SLA filter: leads with no activity beyond N days (only active statuses qualify)
+    // SLA filter: leads with no activity beyond N days. "Active" now means the lead
+    // still has at least one department service (terminal handling is per-stage).
     if (filters.sla) {
         const cutoffMs = filters.sla === "breach" ? 7 * 86_400_000 : 3 * 86_400_000;
         const cutoff   = new Date(Date.now() - cutoffMs);
-        where.status   = { in: ["NEW", "CONTACTED", "FOLLOW_UP"] };
         const slaOr = [
             { lastActivityAt: { lt: cutoff } },
             { AND: [{ lastActivityAt: null }, { updatedAt: { lt: cutoff } }] },
@@ -124,7 +176,7 @@ const getLeads = async ({
     }
 
     // 2. Build Order By
-    const validSortFields = ["createdAt", "updatedAt", "score", "name", "status"];
+    const validSortFields = ["createdAt", "updatedAt", "score", "name"];
     const orderByField = validSortFields.includes(sortBy) ? sortBy : "createdAt";
     const orderDirection = sortOrder === "asc" ? "asc" : "desc";
     const orderBy = { [orderByField]: orderDirection };
@@ -142,8 +194,12 @@ const getLeads = async ({
             orderBy,
             // Optimization: Only fetch required nested relations to reduce payload
             include: {
-                assignedTo: { 
-                    select: { id: true, name: true, email: true } 
+                // Department services drive stage/consultant display in the list.
+                leadDepartments: {
+                    select: {
+                        id: true, department: true, stage: true, assignedEmployeeId: true,
+                        assignedEmployee: { select: { id: true, name: true, email: true } },
+                    },
                 },
                 // Avoid N+1 and bloated responses: only fetch latest 1 call log
                 callLogs: {
@@ -168,5 +224,6 @@ const getLeads = async ({
 };
 
 module.exports = {
-    getLeads
+    getLeads,
+    createLead
 };

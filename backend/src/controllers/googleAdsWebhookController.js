@@ -1,7 +1,7 @@
 const prisma = require("../utils/prisma");
+const leadService = require("../services/leadService");
 const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
-const { assignLeadOrAlert: autoAssignLead } = require("../services/leadDistributionEngine");
 const { runRulesForLead } = require("../services/automationEngine");
 
 // Google Ads stores a "Key" (webhook key) that it sends as ?google_key=... on every request.
@@ -90,16 +90,15 @@ const receiveGoogleAdsLead = async (req, res, next) => {
 
         const { score, category } = calculateLeadScore({ source: "WEBSITE", phone, email });
 
-        const newLead = await prisma.lead.create({
-            data: {
-                name: name || "Google Ads Lead",
-                email: email || null,
-                phone: phone || null,
-                source: "WEBSITE",
-                enquiryType: "SERVICES",
-                score,
-                category,
-            }
+        // Centralized creation: Lead + SALES LeadDepartment (unassigned)
+        const newLead = await leadService.createLead({
+            name: name || "Google Ads Lead",
+            email: email || null,
+            phone: phone || null,
+            source: "WEBSITE",
+            enquiryType: "SERVICES",
+            score,
+            category,
         });
 
         await logActivity({
@@ -108,10 +107,9 @@ const receiveGoogleAdsLead = async (req, res, next) => {
             metadata: { source: "GOOGLE_ADS", campaignName, adGroupName, gclidId, rawData }
         });
 
-        // Fire automation rules + auto-assign async so Google Ads leads get routed
+        // Fire automation rules async. The SALES service is created unassigned for
+        // a manager to allocate (auto-distribution retired).
         runRulesForLead("LEAD_CREATED", newLead).catch(console.error);
-        autoAssignLead(newLead.id, { reason: "AUTO_ASSIGNMENT" })
-            .catch(err => console.error(`[AutoAssign] google-ads ${newLead.id}:`, err.message || err));
 
         res.status(200).json({ message: "Lead received", leadId: newLead.id });
     } catch (error) {

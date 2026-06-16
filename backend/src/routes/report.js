@@ -8,9 +8,9 @@ router.use(authMiddleware);
 router.use(roleMiddleware(["SUPER_ADMIN", "ADMIN"]));
 
 router.get("/leads-by-source", reportController.getLeadsBySource);
-router.get("/leads-by-employee", reportController.getLeadsByEmployee);
-router.get("/conversion-rate", reportController.getConversionRate);
 router.get("/monthly-growth", reportController.getMonthlyGrowth);
-router.get("/leads-by-status", reportController.getLeadsByStatus);
+// /leads-by-employee, /conversion-rate, /leads-by-status retired — global status
+// funnels are replaced by per-department analytics (/lead-departments/dashboard)
+// and team performance (/team-performance).
 
 module.exports = router;

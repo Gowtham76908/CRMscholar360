@@ -2,6 +2,13 @@
 const { getTeamMemberIds } = require("../services/organizationService");
 const { ApiError } = require("../utils/apiError");
 const { istDateKey } = require("../utils/istTime");
+const { wonStageFilter, lostStageFilter, terminalStageFilter, isWonStage, isLostStage } = require("../config/departmentWorkflows");
+
+// Team "leads" are department services (LeadDepartment) whose consultant is on the
+// team. Outcomes are classified by stage (won/lost/active) across all departments.
+const WON_OR = wonStageFilter();
+const LOST_OR = lostStageFilter();
+const TERMINAL_OR = terminalStageFilter();
 
 // ── Date range helper ─────────────────────────────────────────────────────────
 function dateRange(period, from, to) {
@@ -59,15 +66,15 @@ const getKPIs = async (req, res, next) => {
 
         const [assigned, converted, pendingFollowUps, callRows, responded] =
             await prisma.$transaction([
-                prisma.lead.count({ where: { assignedToId: { in: teamIds }, assignedAt: dr } }),
-                prisma.lead.count({ where: { assignedToId: { in: teamIds }, status: "CONVERTED", updatedAt: dr } }),
-                prisma.lead.count({ where: { assignedToId: { in: teamIds }, status: "FOLLOW_UP" } }),
+                prisma.leadDepartment.count({ where: { assignedEmployeeId: { in: teamIds }, assignedAt: dr } }),
+                prisma.leadDepartment.count({ where: { assignedEmployeeId: { in: teamIds }, updatedAt: dr, OR: WON_OR } }),
+                prisma.leadDepartment.count({ where: { assignedEmployeeId: { in: teamIds }, NOT: { OR: TERMINAL_OR } } }),
                 prisma.fasterqCall.findMany({
                     where: { startedAt: dr },
                     select: { duration: true, agentEmail: true },
                 }),
-                prisma.lead.count({
-                    where: { assignedToId: { in: teamIds }, firstResponseAt: { not: null }, assignedAt: dr },
+                prisma.leadDepartment.count({
+                    where: { assignedEmployeeId: { in: teamIds }, assignedAt: dr, lead: { firstResponseAt: { not: null } } },
                 }),
             ]);
 
@@ -103,9 +110,9 @@ const getLeadChart = async (req, res, next) => {
         if (!teamIds.length) return res.json([]);
 
         const dr = dateRange(period, from, to);
-        const leads = await prisma.lead.findMany({
-            where: { assignedToId: { in: teamIds }, assignedAt: dr },
-            select: { status: true, assignedAt: true },
+        const services = await prisma.leadDepartment.findMany({
+            where: { assignedEmployeeId: { in: teamIds }, assignedAt: dr },
+            select: { department: true, stage: true, assignedAt: true },
         });
 
         const dayCount = Math.max(Math.ceil((Date.now() - new Date(dr.gte)) / 86_400_000), 1);
@@ -117,13 +124,13 @@ const getLeadChart = async (req, res, next) => {
             dayMap[key] = { date: key, assigned: 0, contacted: 0, converted: 0, lost: 0 };
         }
 
-        for (const l of leads) {
-            const key = l.assignedAt ? istDateKey(l.assignedAt) : null;
+        for (const s of services) {
+            const key = s.assignedAt ? istDateKey(s.assignedAt) : null;
             if (!key || !dayMap[key]) continue;
             dayMap[key].assigned++;
-            if (l.status === "CONTACTED") dayMap[key].contacted++;
-            if (l.status === "CONVERTED") dayMap[key].converted++;
-            if (l.status === "LOST")      dayMap[key].lost++;
+            if (isWonStage(s.department, s.stage))       dayMap[key].converted++;
+            else if (isLostStage(s.department, s.stage)) dayMap[key].lost++;
+            else                                         dayMap[key].contacted++; // active
         }
 
         const daily = Object.values(dayMap);
@@ -157,8 +164,7 @@ const getEmployeeTable = async (req, res, next) => {
 
         const dr = dateRange(period, from, to);
 
-        const idList = teamIds.map(id => `'${id}'`).join(",");
-        const [employees, leadStats, callRows] = await Promise.all([
+        const [employees, services, callRows] = await Promise.all([
             prisma.user.findMany({
                 where: { id: { in: teamIds } },
                 select: {
@@ -174,27 +180,28 @@ const getEmployeeTable = async (req, res, next) => {
                 },
                 orderBy: { name: "asc" },
             }),
-            prisma.$queryRawUnsafe(`
-                SELECT
-                    "assignedToId",
-                    COUNT(*)                                                        AS assigned,
-                    COUNT(*) FILTER (WHERE status = 'CONVERTED' AND "updatedAt" >= $1 AND "updatedAt" <= $2) AS converted,
-                    COUNT(*) FILTER (WHERE status = 'FOLLOW_UP')                   AS follow_up
-                FROM "Lead"
-                WHERE "assignedToId" IN (${idList})
-                  AND "assignedAt" >= $1
-                  AND "assignedAt" <= $2
-                GROUP BY "assignedToId"
-            `, dr.gte, dr.lte ?? new Date()),
+            // Department services assigned to the team in range — aggregated per
+            // consultant in JS (won/active classified by stage).
+            prisma.leadDepartment.findMany({
+                where: { assignedEmployeeId: { in: teamIds }, assignedAt: dr },
+                select: { assignedEmployeeId: true, department: true, stage: true },
+            }),
             prisma.fasterqCall.findMany({
                 where: { startedAt: dr },
                 select: { agentEmail: true, duration: true },
             }),
         ]);
 
-        const assignedMap  = Object.fromEntries(leadStats.map(r => [r.assignedToId, Number(r.assigned)]));
-        const convertedMap = Object.fromEntries(leadStats.map(r => [r.assignedToId, Number(r.converted)]));
-        const followUpMap  = Object.fromEntries(leadStats.map(r => [r.assignedToId, Number(r.follow_up)]));
+        const assignedMap = {}, convertedMap = {}, followUpMap = {};
+        for (const s of services) {
+            const eid = s.assignedEmployeeId;
+            assignedMap[eid] = (assignedMap[eid] || 0) + 1;
+            if (isWonStage(s.department, s.stage)) {
+                convertedMap[eid] = (convertedMap[eid] || 0) + 1;
+            } else if (!isLostStage(s.department, s.stage)) {
+                followUpMap[eid] = (followUpMap[eid] || 0) + 1; // active / in-progress
+            }
+        }
 
         const emailToId  = Object.fromEntries(employees.map(e => [e.email, e.id]));
         const callsById  = {};
@@ -303,23 +310,23 @@ const getWorkforce = async (req, res, next) => {
             prevWeekConverted, prevWeekAssigned,
             employees,
         ] = await prisma.$transaction([
-            prisma.lead.count({ where: { assignedToId: { in: teamIds }, status: { in: ["NEW", "CONTACTED", "FOLLOW_UP"] } } }),
-            prisma.lead.count({ where: { assignedToId: { in: teamIds }, status: "FOLLOW_UP" } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: { in: teamIds }, NOT: { OR: TERMINAL_OR } } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: { in: teamIds }, NOT: { OR: TERMINAL_OR } } }),
             prisma.task.count({ where: { assignedToId: { in: teamIds }, status: "COMPLETED", updatedAt: dr } }),
             prisma.task.count({ where: { assignedToId: { in: teamIds }, status: "PENDING" } }),
-            prisma.lead.findMany({
-                where: { assignedToId: { in: teamIds }, firstResponseAt: { not: null }, assignedAt: { not: null }, assignedAt: dr },
-                select: { assignedAt: true, firstResponseAt: true },
+            prisma.leadDepartment.findMany({
+                where: { assignedEmployeeId: { in: teamIds }, assignedAt: dr, lead: { firstResponseAt: { not: null } } },
+                select: { assignedAt: true, lead: { select: { firstResponseAt: true } } },
             }),
-            prisma.lead.findMany({
-                where: { assignedToId: { in: teamIds }, status: "CONVERTED", assignedAt: { not: null }, updatedAt: dr },
+            prisma.leadDepartment.findMany({
+                where: { assignedEmployeeId: { in: teamIds }, assignedAt: { not: null }, updatedAt: dr, OR: WON_OR },
                 select: { assignedAt: true, updatedAt: true },
             }),
-            prisma.lead.count({ where: { assignedToId: { in: teamIds }, status: { in: ["NEW", "CONTACTED"] }, updatedAt: { lt: sevenDaysAgo } } }),
-            prisma.lead.count({ where: { assignedToId: { in: teamIds }, status: "CONVERTED", updatedAt: { gte: weekStart } } }),
-            prisma.lead.count({ where: { assignedToId: { in: teamIds }, assignedAt: { gte: weekStart } } }),
-            prisma.lead.count({ where: { assignedToId: { in: teamIds }, status: "CONVERTED", updatedAt: { gte: prevWeekStart, lt: prevWeekEnd } } }),
-            prisma.lead.count({ where: { assignedToId: { in: teamIds }, assignedAt: { gte: prevWeekStart, lt: prevWeekEnd } } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: { in: teamIds }, NOT: { OR: TERMINAL_OR }, updatedAt: { lt: sevenDaysAgo } } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: { in: teamIds }, updatedAt: { gte: weekStart }, OR: WON_OR } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: { in: teamIds }, assignedAt: { gte: weekStart } } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: { in: teamIds }, updatedAt: { gte: prevWeekStart, lt: prevWeekEnd }, OR: WON_OR } }),
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: { in: teamIds }, assignedAt: { gte: prevWeekStart, lt: prevWeekEnd } } }),
             prisma.user.findMany({
                 where: { id: { in: teamIds } },
                 select: {
@@ -334,7 +341,7 @@ const getWorkforce = async (req, res, next) => {
         // Metrics calculations
         let avgLeadResponseTimeHours = 0;
         if (responseTimes.length > 0) {
-            const total = responseTimes.reduce((s, l) => s + (new Date(l.firstResponseAt) - new Date(l.assignedAt)) / 3_600_000, 0);
+            const total = responseTimes.reduce((s, l) => s + (new Date(l.lead.firstResponseAt) - new Date(l.assignedAt)) / 3_600_000, 0);
             avgLeadResponseTimeHours = parseFloat((total / responseTimes.length).toFixed(1));
         }
 
@@ -350,13 +357,13 @@ const getWorkforce = async (req, res, next) => {
             ? employees.reduce((s, e) => s + (e.employeeProfile?.followupDiscipline ?? 0.5), 0) / employees.length
             : 0.5;
 
-        // Enrich employee list with pending follow-ups for insights
-        const followUpGroups = await prisma.lead.groupBy({
-            by: ["assignedToId"],
-            where: { assignedToId: { in: teamIds }, status: "FOLLOW_UP" },
+        // Enrich employee list with active (in-progress) services for insights
+        const followUpGroups = await prisma.leadDepartment.groupBy({
+            by: ["assignedEmployeeId"],
+            where: { assignedEmployeeId: { in: teamIds }, NOT: { OR: TERMINAL_OR } },
             _count: { id: true },
         });
-        const fuMap = Object.fromEntries(followUpGroups.map(r => [r.assignedToId, r._count.id]));
+        const fuMap = Object.fromEntries(followUpGroups.map(r => [r.assignedEmployeeId, r._count.id]));
         const enrichedEmployees = employees.map(e => ({
             ...e,
             pendingFollowUps: fuMap[e.id] || 0,
@@ -418,128 +425,15 @@ const getWorkload = async (req, res, next) => {
 };
 
 // ── GET /api/team-performance/workflow-board ─────────────────────────────────
-const getWorkflowBoard = async (req, res, next) => {
-    try {
-        const { userId, role } = req.user;
-        const teamIds = await resolveTeamIds(userId, role);
-
-        if (!teamIds.length) return res.json({});
-
-        const STATUSES = ["NEW", "CONTACTED", "FOLLOW_UP", "CONVERTED", "LOST"];
-        const PER_COL  = 8;
-
-        const [leads, counts] = await prisma.$transaction([
-            prisma.lead.findMany({
-                where: { assignedToId: { in: teamIds }, status: { in: STATUSES } },
-                select: {
-                    id: true, name: true, status: true, score: true,
-                    createdAt: true, updatedAt: true,
-                    assignedTo: { select: { id: true, name: true } },
-                    activities: {
-                        orderBy: { createdAt: "desc" },
-                        take: 1,
-                        select: { action: true, createdAt: true },
-                    },
-                },
-                orderBy: [{ score: "desc" }, { updatedAt: "asc" }],
-            }),
-            prisma.lead.groupBy({
-                by: ["status"],
-                where: { assignedToId: { in: teamIds }, status: { in: STATUSES } },
-                _count: { id: true },
-            }),
-        ]);
-
-        const now = Date.now();
-        const formatted = leads.map(l => ({
-            id:           l.id,
-            name:         l.name,
-            status:       l.status,
-            score:        l.score,
-            ownerName:    l.assignedTo?.name || "Unassigned",
-            ownerId:      l.assignedTo?.id,
-            daysInStage:  Math.floor((now - new Date(l.updatedAt)) / 86_400_000),
-            lastActivity: l.activities[0]?.createdAt || l.updatedAt,
-            lastAction:   l.activities[0]?.action,
-        }));
-
-        const countMap = Object.fromEntries(counts.map(c => [c.status, c._count.id]));
-
-        const board = {};
-        for (const s of STATUSES) {
-            const col = formatted.filter(l => l.status === s);
-            board[s] = {
-                leads: col.slice(0, PER_COL),
-                total: countMap[s] || 0,
-            };
-        }
-
-        res.json(board);
-    } catch (err) {
-        return next(err);
-    }
+// The global status Kanban was retired with Lead.status. Per-department workflow
+// is viewed via the Department Queue; a department Kanban is planned separately.
+const getWorkflowBoard = async (_req, res) => {
+    res.json({});
 };
 
-const VALID_STATUSES = new Set(["NEW", "CONTACTED", "FOLLOW_UP", "CONVERTED", "LOST"]);
-const PAGE_SIZE      = 20;
-
-const getWorkflowColumnLeads = async (req, res, next) => {
-    try {
-        const { userId, role } = req.user;
-        const { status }       = req.params;
-        const page             = Math.max(1, parseInt(req.query.page, 10) || 1);
-        const search           = (req.query.search || "").trim();
-
-        if (!VALID_STATUSES.has(status)) return res.status(400).json({ message: "Invalid status" });
-
-        const teamIds = await resolveTeamIds(userId, role);
-        if (!teamIds.length) return res.json({ leads: [], total: 0, page, totalPages: 0 });
-
-        const nameFilter = search
-            ? { name: { contains: search, mode: "insensitive" } }
-            : {};
-
-        const [leads, total] = await prisma.$transaction([
-            prisma.lead.findMany({
-                where:   { assignedToId: { in: teamIds }, status, ...nameFilter },
-                select: {
-                    id: true, name: true, status: true, score: true,
-                    updatedAt: true,
-                    assignedTo: { select: { id: true, name: true } },
-                    activities: {
-                        orderBy: { createdAt: "desc" },
-                        take: 1,
-                        select: { action: true },
-                    },
-                },
-                orderBy: [{ score: "desc" }, { updatedAt: "asc" }],
-                skip:  (page - 1) * PAGE_SIZE,
-                take:  PAGE_SIZE,
-            }),
-            prisma.lead.count({
-                where: { assignedToId: { in: teamIds }, status, ...nameFilter },
-            }),
-        ]);
-
-        const now = Date.now();
-        res.json({
-            leads: leads.map(l => ({
-                id:          l.id,
-                name:        l.name,
-                status:      l.status,
-                score:       l.score,
-                ownerName:   l.assignedTo?.name || "Unassigned",
-                ownerId:     l.assignedTo?.id,
-                daysInStage: Math.floor((now - new Date(l.updatedAt)) / 86_400_000),
-                lastAction:  l.activities[0]?.action,
-            })),
-            total,
-            page,
-            totalPages: Math.ceil(total / PAGE_SIZE),
-        });
-    } catch (err) {
-        return next(err);
-    }
+const getWorkflowColumnLeads = async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    res.json({ leads: [], total: 0, page, totalPages: 0 });
 };
 
 // ── Revenue Intelligence helpers ──────────────────────────────────────────────
@@ -781,14 +675,15 @@ const getRevenueByManager = async (req, res, next) => {
             select: { id: true, name: true },
         });
 
+        // Attribute won-deal revenue to the manager of the deal's creator.
         const deals = await prisma.deal.findMany({
-            where: { deletedAt: null, stage: "WON", closedAt: dr, lead: { assignedTo: { managerId: { in: managers.map(m => m.id) } } } },
-            select: { amount: true, lead: { select: { assignedTo: { select: { managerId: true } } } } },
+            where: { deletedAt: null, stage: "WON", closedAt: dr, createdBy: { managerId: { in: managers.map(m => m.id) } } },
+            select: { amount: true, createdBy: { select: { managerId: true } } },
         });
 
         const byMgr = {};
         for (const d of deals) {
-            const mid = d.lead?.assignedTo?.managerId;
+            const mid = d.createdBy?.managerId;
             if (mid) byMgr[mid] = (byMgr[mid] || 0) + d.amount;
         }
 

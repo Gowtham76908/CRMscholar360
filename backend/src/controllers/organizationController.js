@@ -1,5 +1,9 @@
 ﻿const prisma = require("../utils/prisma");
 const { ApiError } = require("../utils/apiError");
+const { terminalStageFilter } = require("../config/departmentWorkflows");
+
+const TERMINAL_OR = terminalStageFilter();
+
 const {
     getTeamWithStats,
     getFullOrgWithStats,
@@ -52,7 +56,7 @@ const getEmployeeProfile = async (req, res, next) => {
                     select: { id: true, name: true, role: true, isActive: true },
                 },
                 _count: {
-                    select: { leads: true, tasks: true },
+                    select: { tasks: true },
                 },
             },
         });
@@ -60,9 +64,9 @@ const getEmployeeProfile = async (req, res, next) => {
         if (!employee) return res.status(404).json({ message: "Employee not found" });
 
         const [assignedLeads, pendingLeads, callCount] = await prisma.$transaction([
-            prisma.lead.count({ where: { assignedToId: id } }),
-            prisma.lead.count({
-                where: { assignedToId: id, status: { in: ["NEW", "FOLLOW_UP"] } },
+            prisma.leadDepartment.count({ where: { assignedEmployeeId: id } }),
+            prisma.leadDepartment.count({
+                where: { assignedEmployeeId: id, NOT: { OR: TERMINAL_OR } },
             }),
             prisma.callLog.count({ where: { userId: id } }),
         ]);

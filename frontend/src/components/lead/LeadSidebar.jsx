@@ -250,24 +250,6 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId,
                 </dl>
             </div>
 
-            {/* Assigned To */}
-            {lead.assignedTo && (
-                <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Assigned To</h3>
-                    <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-bold text-indigo-700">
-                                {lead.assignedTo.name.charAt(0).toUpperCase()}
-                            </span>
-                        </div>
-                        <div className="min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">{lead.assignedTo.name}</p>
-                            <p className="text-xs text-gray-500 truncate">{lead.assignedTo.email}</p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* Reminders */}
             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-3">

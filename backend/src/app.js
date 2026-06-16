@@ -190,7 +190,6 @@ app.use("/api/linkedin-leads",  linkedinLeadsRoutes);
 app.use("/api/sprints",         sprintRoutes);
 app.use("/api/audit-logs",      auditRoutes);
 app.use("/api/sessions",        sessionRoutes);
-app.use("/api/departments",     require("./routes/department"));
 app.use("/api/chat",            require("./routes/chat"));
 app.use("/api/attendance",      require("./routes/attendance"));
 app.use("/api/leave",           require("./routes/leave"));
@@ -207,12 +206,12 @@ app.use("/api/custom-fields",   require("./routes/customField"));
 app.use("/api/facebook",        require("./routes/facebook"));
 app.use("/api/integration-hub", require("./routes/integrationHub"));
 app.use("/api/organization",      require("./routes/organization"));
-app.use("/api/distribution",     require("./routes/distribution"));
 app.use("/api/team-performance", require("./routes/teamPerformance"));
 app.use("/api/employee-report",  require("./routes/employeeReport"));
 app.use("/api/deals",            require("./routes/deal"));
 app.use("/api/email-templates",  require("./routes/emailTemplates"));
 app.use("/api/leads/:id/journey", require("./routes/journey"));
+app.use("/api/lead-departments", require("./routes/leadDepartment"));
 // NOTE: public routers (email-track, google, google-ads, public/leads) are mounted
 // in the PUBLIC section above — they must precede the catch-all note/task routers.
 

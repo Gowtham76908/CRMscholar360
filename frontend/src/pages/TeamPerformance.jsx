@@ -338,9 +338,9 @@ const TeamPerformance = () => {
                                                     title="View Analytics">
                                                     <Eye className="h-3.5 w-3.5" />
                                                 </button>
-                                                <button onClick={() => navigate(`/unassigned-leads`)}
+                                                <button onClick={() => navigate(`/department-queue`)}
                                                     className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 transition-colors"
-                                                    title="Assign Leads">
+                                                    title="Department Queue">
                                                     <UserPlus className="h-3.5 w-3.5" />
                                                 </button>
                                                 <button onClick={() => navigate(`/messages`)}

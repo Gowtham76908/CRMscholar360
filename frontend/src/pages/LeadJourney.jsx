@@ -26,14 +26,6 @@ const FILTERS = [
     { id: "assignment", label: "Assignments" },
 ];
 
-const STATUS_PILL = {
-    NEW:       "bg-blue-100 text-blue-700",
-    CONTACTED: "bg-indigo-100 text-indigo-700",
-    FOLLOW_UP: "bg-amber-100 text-amber-700",
-    CONVERTED: "bg-green-100 text-green-700",
-    LOST:      "bg-red-100 text-red-700",
-};
-
 const SOURCE_LABEL = {
     FACEBOOK: "Facebook", INSTAGRAM: "Instagram", GMAIL: "Gmail",
     WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn",
@@ -245,9 +237,11 @@ export default function LeadJourney() {
                             <div>
                                 <div className="flex flex-wrap items-center gap-2 mb-1">
                                     <h1 className="text-xl font-black text-gray-900">{lead.name}</h1>
-                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${STATUS_PILL[lead.status] ?? "bg-gray-100 text-gray-700"}`}>
-                                        {lead.status?.replace("_", " ")}
-                                    </span>
+                                    {(lead.departments ?? []).map(d => (
+                                        <span key={d.department} className="text-xs font-bold px-2 py-0.5 rounded-full border bg-indigo-50 text-indigo-700 border-indigo-100">
+                                            {d.department?.replace(/_/g, " ")} · {d.stage?.replace(/_/g, " ")}
+                                        </span>
+                                    ))}
                                     {lead.score > 0 && (
                                         <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
                                             Score: {lead.score}
@@ -255,8 +249,10 @@ export default function LeadJourney() {
                                     )}
                                 </div>
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
-                                    {lead.assignedTo && (
-                                        <span className="flex items-center gap-1"><User className="h-3 w-3" />{lead.assignedTo.name}</span>
+                                    {(lead.departments ?? []).some(d => d.assignedEmployee) && (
+                                        <span className="flex items-center gap-1"><User className="h-3 w-3" />
+                                            {(lead.departments ?? []).filter(d => d.assignedEmployee).map(d => d.assignedEmployee.name).join(", ")}
+                                        </span>
                                     )}
                                     {lead.source && (
                                         <span className="flex items-center gap-1">

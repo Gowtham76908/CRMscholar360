@@ -73,6 +73,13 @@ async function main() {
     });
     console.log(`  ✓ Kishor M V S (EMPLOYEE) — ${kishor.email}`);
 
+    // Department membership (multi-department model): Kishor consults in SALES.
+    await prisma.userDepartment.upsert({
+        where: { userId_department: { userId: kishor.id, department: "SALES" } },
+        update: {},
+        create: { userId: kishor.id, department: "SALES" },
+    });
+
     // ──────────────────────────────────────────────
     // 2. RESTORE LEADS
     // ──────────────────────────────────────────────
@@ -85,7 +92,7 @@ async function main() {
             email: "arjun.sharma@example.com",
             source: "FACEBOOK",
             enquiryType: "PRODUCT",
-            status: "NEW",
+            stage: "ENQUIRY",
             score: 30,
             category: "Warm",
         },
@@ -95,7 +102,7 @@ async function main() {
             email: "priya.nair@example.com",
             source: "INSTAGRAM",
             enquiryType: "WHITE_LABEL",
-            status: "CONTACTED",
+            stage: "FOLLOW_UP",
             score: 55,
             category: "Hot",
         },
@@ -105,7 +112,7 @@ async function main() {
             email: "ravi.kumar@example.com",
             source: "WEBSITE",
             enquiryType: "LMS",
-            status: "FOLLOW_UP",
+            stage: "PROSPECT",
             score: 40,
             category: "Warm",
         },
@@ -115,7 +122,7 @@ async function main() {
             email: "deepa.menon@example.com",
             source: "GMAIL",
             enquiryType: "SERVICES",
-            status: "CONVERTED",
+            stage: "COMMISSION_INVOICING",
             score: 80,
             category: "Hot",
         },
@@ -125,7 +132,7 @@ async function main() {
             email: "suresh.babu@example.com",
             source: "PHONE_CALL",
             enquiryType: "PRODUCT",
-            status: "NEW",
+            stage: "ENQUIRY",
             score: 20,
             category: "Cold",
         },
@@ -133,6 +140,7 @@ async function main() {
 
     const createdLeads = [];
     for (const leadData of leadsData) {
+        const { stage, ...leadFields } = leadData;
         // Check if lead already exists by phone
         let lead = await prisma.lead.findFirst({
             where: { phone: leadData.phone }
@@ -141,9 +149,17 @@ async function main() {
         if (!lead) {
             lead = await prisma.lead.create({
                 data: {
-                    ...leadData,
-                    assignedToId: kishor.id,
+                    ...leadFields,
                     firstResponseAt: new Date(),
+                    // Kishor (a SALES consultant) services this lead in the SALES dept.
+                    leadDepartments: {
+                        create: [{
+                            department: "SALES",
+                            stage,
+                            assignedEmployeeId: kishor.id,
+                            assignedAt: new Date(),
+                        }],
+                    },
                 },
             });
             console.log(`  ✓ Lead created: ${lead.name}`);
