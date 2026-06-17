@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useMemo, useEffect, useCallback } from "react";
+import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Search, Filter, Edit, Plus, Upload, Phone, PhoneCall, Play, Pause, SearchCheck, Users, History, Mail, ChevronLeft, ChevronRight as ChevronRightIcon, LayoutGrid, List, Kanban, X, SlidersHorizontal, AlertTriangle, ChevronDown, User, Calendar, Star, Tag, Globe, CheckCircle2 } from "lucide-react";
@@ -15,7 +15,7 @@ import ImportLeadsModal from "../components/ImportLeadsModal";
 import { useAuth } from "../context/AuthContext";
 import { LeadsSkeleton } from "../components/ui/Skeleton";
 import { getCategoryFromScore, getSLAStatus } from "../utils/leadScore";
-import { useWorkflows } from "../hooks/useDepartments";
+import { useWorkflows, useMyDepartments, useClaimService } from "../hooks/useDepartments";
 import { DEPARTMENT_ORDER, departmentLabel } from "../lib/departments";
 import LeadsBoard from "./LeadsBoard";
 
@@ -176,6 +176,27 @@ const Leads = () => {
     const slaBreachDays  = orgSettings?.slaBreachDays  ?? 7;
 
     const { getStages, stageLabel } = useWorkflows();
+    const { data: myDepartments = [] } = useMyDepartments();
+    const claim = useClaimService();
+
+    // A consultant may directly claim an unassigned service still at its department's
+    // initial (enquiry) stage, in a department they belong to. Returns that service.
+    const claimableService = (lead) => {
+        if (user?.role !== "EMPLOYEE") return null;
+        return (lead.leadDepartments || []).find(
+            (ld) =>
+                !ld.assignedEmployeeId &&
+                myDepartments.includes(ld.department) &&
+                ld.stage === getStages(ld.department)[0]?.code
+        );
+    };
+
+    const handleClaim = (svc) => {
+        claim.mutate(svc.id, {
+            onSuccess: () => toast.success("Lead assigned to you"),
+            onError: (e) => toast.error(e.response?.data?.error?.message || "Could not claim lead"),
+        });
+    };
 
     const leads = leadsData?.data || [];
     const meta = { total: leadsData?.total ?? 0, totalPages: leadsData?.totalPages ?? 0 };
@@ -632,25 +653,14 @@ const Leads = () => {
                             WARM: "bg-amber-100 text-amber-700",
                             COLD: "bg-blue-100 text-blue-700",
                         };
-                        const isSelected = selectedLeads.includes(lead.id);
                         const sla = getSLAStatus(lead, slaWarningDays, slaBreachDays);
                         return (
                             <div
                                 key={lead.id}
-                                className={`relative bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all duration-200 flex flex-col group ${isSelected ? "border-indigo-400 ring-2 ring-indigo-100" : sla?.level === "breach" ? "border-red-200" : "border-gray-200"}`}
+                                className={`relative bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all duration-200 flex flex-col group ${sla?.level === "breach" ? "border-red-200" : "border-gray-200"}`}
                             >
-                                {/* Selection checkbox */}
-                                <div className="absolute top-3 left-3 z-10">
-                                    <input
-                                        type="checkbox"
-                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                                        checked={isSelected}
-                                        onChange={() => handleSelectOne(lead.id)}
-                                    />
-                                </div>
-
                                 {/* Card top — name + SLA */}
-                                <Link to={`/leads/${lead.id}`} className="px-4 pt-4 pb-3 pl-9 flex items-start justify-between gap-2">
+                                <Link to={`/leads/${lead.id}`} className="px-4 pt-4 pb-3 flex items-start justify-between gap-2">
                                     <div className="min-w-0">
                                         <h3 className="font-semibold text-gray-900 truncate text-sm group-hover:text-indigo-600 transition-colors">{lead.name}</h3>
                                         <p className="text-xs text-gray-400 mt-0.5 capitalize truncate">{lead.enquiryType?.toLowerCase().replace(/_/g, " ") || "—"}</p>
@@ -672,6 +682,25 @@ const Leads = () => {
                                 <div className="px-4 pt-3">
                                     <DeptChips leadDepartments={lead.leadDepartments} stageLabel={stageLabel} />
                                 </div>
+
+                                {/* Consultant self-claim (enquiry, unassigned, my department) */}
+                                {(() => {
+                                    const claimSvc = claimableService(lead);
+                                    if (!claimSvc) return null;
+                                    const busy = claim.isPending && claim.variables === claimSvc.id;
+                                    return (
+                                        <div className="px-4 pt-2">
+                                            <button
+                                                onClick={() => handleClaim(claimSvc)}
+                                                disabled={busy}
+                                                className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                                            >
+                                                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <User className="h-3.5 w-3.5" />}
+                                                Assign to me · {departmentLabel(claimSvc.department)}
+                                            </button>
+                                        </div>
+                                    );
+                                })()}
 
                                 {/* Contact info */}
                                 <div className="px-4 py-3 space-y-1.5 flex-1">
@@ -748,7 +777,6 @@ const Leads = () => {
                         <table className="min-w-full divide-y divide-gray-100">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="px-4 py-3 w-10"><input type="checkbox" className="rounded border-gray-300 text-indigo-600" onChange={handleSelectAll} checked={leads.length > 0 && selectedLeads.length === leads.length} /></th>
                                     <th onClick={() => toggleSort("name")} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 hover:text-indigo-600 transition-colors">
                                         <div className="flex items-center gap-1">
                                             Name {sortBy === "name" && (sortOrder === "asc" ? "▲" : "▼")}
@@ -770,8 +798,7 @@ const Leads = () => {
                                     const latestRecording = lead.callLogs?.find(c => c.recordingUrl);
                                     const dynamicCategory = getCategoryFromScore(lead.score ?? 0);
                                     return (
-                                        <tr key={lead.id} className={`hover:bg-gray-50 transition-colors ${selectedLeads.includes(lead.id) ? "bg-indigo-50/40" : ""}`}>
-                                            <td className="px-4 py-3"><input type="checkbox" className="rounded border-gray-300 text-indigo-600" checked={selectedLeads.includes(lead.id)} onChange={() => handleSelectOne(lead.id)} /></td>
+                                        <tr key={lead.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-4 py-3">
                                                 <Link to={`/leads/${lead.id}`} className="font-medium text-gray-900 hover:text-indigo-600 text-sm">{lead.name}</Link>
                                                 <p className="text-xs text-gray-400 capitalize">{lead.enquiryType?.toLowerCase().replace(/_/g, " ") || "—"}</p>
@@ -803,6 +830,22 @@ const Leads = () => {
                                             <td className="px-4 py-3"><DeptChips leadDepartments={lead.leadDepartments} stageLabel={stageLabel} /></td>
                                             <td className="px-4 py-3 whitespace-nowrap text-right">
                                                 <div className="flex items-center justify-end gap-2">
+                                                    {(() => {
+                                                        const claimSvc = claimableService(lead);
+                                                        if (!claimSvc) return null;
+                                                        const busy = claim.isPending && claim.variables === claimSvc.id;
+                                                        return (
+                                                            <button
+                                                                onClick={() => handleClaim(claimSvc)}
+                                                                disabled={busy}
+                                                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                                                                title={`Assign ${departmentLabel(claimSvc.department)} to me`}
+                                                            >
+                                                                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <User className="h-3.5 w-3.5" />}
+                                                                Assign to me
+                                                            </button>
+                                                        );
+                                                    })()}
                                                     <button onClick={() => setSelectedLeadForCalls(lead)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Call details"><Phone className="h-4 w-4" /></button>
                                                     <button onClick={() => setSelectedLeadForActivity(lead)} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Timeline"><History className="h-4 w-4" /></button>
                                                     <button onClick={() => setEditingLead(lead)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Edit"><Edit className="h-4 w-4" /></button>
@@ -812,7 +855,7 @@ const Leads = () => {
                                     );
                                 })}
                                 {leads.length === 0 && (
-                                    <tr><td colSpan="7" className="px-6 py-12 text-center text-sm text-gray-400">No leads found matching your filters.</td></tr>
+                                    <tr><td colSpan="6" className="px-6 py-12 text-center text-sm text-gray-400">No leads found matching your filters.</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -821,7 +864,7 @@ const Leads = () => {
             )}
 
             {/* Pagination — list views only */}
-            <div className={`flex items-center justify-between pt-1 ${viewMode === "kanban" ? "hidden" : ""}`}>
+            <div className={`flex items-center justify-center gap-4 pt-1 ${viewMode === "kanban" ? "hidden" : ""}`}>
                 <button onClick={() => goTo(page - 1)} disabled={page === 1} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                     <ChevronLeft className="h-4 w-4" /> Prev
                 </button>

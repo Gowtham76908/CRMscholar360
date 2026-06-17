@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
 import { Loader2, Trash2, Power, UserPlus, Shield, ToggleLeft, ToggleRight, Edit, Mail, Building } from "lucide-react";
@@ -9,10 +9,11 @@ import { Modal } from "../components/Modal";
 import AddUserForm from "../components/AddUserForm";
 import EditUserForm from "../components/EditUserForm";
 import { cn } from "../lib/utils";
+import { roleLabel } from "../lib/roles";
 
 const ROLE_STYLES = {
     SUPER_ADMIN: "bg-indigo-100 text-indigo-700",
-    ADMIN:     "bg-orange-100 text-orange-700",
+    ADMIN:     "bg-violet-100 text-violet-700",
     EMPLOYEE:    "bg-gray-100 text-gray-600",
 };
 
@@ -54,7 +55,7 @@ const Team = () => {
                 <Shield className="h-7 w-7 text-gray-400" />
             </div>
             <h2 className="text-lg font-bold text-gray-900">Access Denied</h2>
-            <p className="text-sm text-gray-500 mt-1">Only Super Admins can manage the team.</p>
+            <p className="text-sm text-gray-500 mt-1">Only Directors can manage the team.</p>
         </div>
     );
 
@@ -107,7 +108,7 @@ const Team = () => {
                                 <p className="font-semibold text-gray-900 truncate text-sm">{member.name}</p>
                                 <div className="flex items-center gap-1 mt-0.5">
                                     <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", ROLE_STYLES[member.role] ?? ROLE_STYLES.EMPLOYEE)}>
-                                        {member.role.replace("_", " ")}
+                                        {roleLabel(member.role)}
                                     </span>
                                 </div>
                             </div>
@@ -138,10 +139,10 @@ const Team = () => {
                                         className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-indigo-600 transition-colors"
                                     >
                                         {member.role === "ADMIN"
-                                            ? <ToggleRight className="h-5 w-5 text-orange-500" />
+                                            ? <ToggleRight className="h-5 w-5 text-indigo-600" />
                                             : <ToggleLeft className="h-5 w-5 text-gray-300" />
                                         }
-                                        <span>{member.role === "ADMIN" ? "Manager" : "Employee"}</span>
+                                        <span>{member.role === "ADMIN" ? "Manager" : "Consultant"}</span>
                                     </button>
                                 ) : (
                                     <span className="text-xs text-gray-400">{member.role === "ADMIN" ? "Manager access" : "Standard access"}</span>

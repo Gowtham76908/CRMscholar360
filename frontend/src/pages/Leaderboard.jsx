@@ -192,7 +192,7 @@ const Leaderboard = () => {
                                                         </div>
                                                         <div className="min-w-0">
                                                             <p className="font-bold text-gray-900 truncate">{row.user.name}</p>
-                                                            <p className="text-xs text-gray-400 truncate">{row.user.jobTitle || 'Employee'}</p>
+                                                            <p className="text-xs text-gray-400 truncate">{row.user.jobTitle || 'Consultant'}</p>
                                                         </div>
                                                     </div>
                                                 </td>

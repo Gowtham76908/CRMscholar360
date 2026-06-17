@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
     Users, UserCheck, ClipboardList, Clock, ChevronRight, X,
@@ -13,9 +13,9 @@ import { useAuth } from "../context/AuthContext";
 // ── Role config ───────────────────────────────────────────────────────────────
 
 const ROLE_CONFIG = {
-    SUPER_ADMIN: { label: "Super Admin", bg: "bg-red-100",    text: "text-red-700"    },
-    ADMIN:     { label: "Manager",     bg: "bg-orange-100", text: "text-orange-700" },
-    EMPLOYEE:    { label: "Employee",    bg: "bg-blue-100",   text: "text-blue-700"   },
+    SUPER_ADMIN: { label: "Director",   bg: "bg-red-100",    text: "text-red-700"    },
+    ADMIN:     { label: "Manager",    bg: "bg-violet-100", text: "text-violet-700" },
+    EMPLOYEE:    { label: "Consultant", bg: "bg-blue-100",   text: "text-blue-700"   },
 };
 
 const RoleBadge = ({ role }) => {
@@ -238,7 +238,7 @@ const TeamManagement = () => {
                     <Shield className="h-7 w-7 text-gray-400" />
                 </div>
                 <h2 className="text-lg font-bold text-gray-900">Access Denied</h2>
-                <p className="text-sm text-gray-500 mt-1">Only Managers and Super Admins can view this page.</p>
+                <p className="text-sm text-gray-500 mt-1">Only Managers and Directors can view this page.</p>
             </div>
         );
     }
@@ -267,7 +267,7 @@ const TeamManagement = () => {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard icon={Users} label="Total Employees" value={stats?.totalEmployees} color="bg-indigo-500" />
                 <StatCard icon={UserCheck} label="Active Employees" value={stats?.activeEmployees} color="bg-green-500" />
-                <StatCard icon={ClipboardList} label="Assigned Leads" value={stats?.assignedLeads} color="bg-orange-500" />
+                <StatCard icon={ClipboardList} label="Assigned Leads" value={stats?.assignedLeads} color="bg-indigo-600" />
                 <StatCard icon={Clock} label="Pending Leads" value={stats?.pendingLeads} color="bg-red-400" />
             </div>
 

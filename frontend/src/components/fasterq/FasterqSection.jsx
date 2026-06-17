@@ -29,7 +29,7 @@ export const fmtDate = (dt) => {
 };
 
 // ── shared mini-components ────────────────────────────────────────────────────
-export const Sparkline = ({ data = [], color = "#F97316" }) => {
+export const Sparkline = ({ data = [], color = "#4f46e5" }) => {
     if (!data.length) return null;
     const vals = data.map(d => d.count ?? d.total ?? 0);
     const max  = Math.max(...vals, 1);
@@ -108,7 +108,7 @@ const AudioPlayer = ({ url }) => {
         <div className="flex items-center gap-1.5">
             <audio ref={ref} src={url} onEnded={() => setPlaying(false)} className="hidden" />
             <button onClick={toggle}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#FFF7ED] text-[#F97316] hover:bg-[#FED7AA] text-xs font-medium transition-colors border border-[#FED7AA]">
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-medium transition-colors border border-indigo-200">
                 {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                 {playing ? "Pause" : "Play"}
             </button>
@@ -243,8 +243,8 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-xl bg-[#FFF7ED] flex items-center justify-center border border-[#FED7AA]">
-                        <Phone className="h-4 w-4 text-[#F97316]" />
+                    <div className="h-8 w-8 rounded-xl bg-indigo-50 flex items-center justify-center border border-indigo-200">
+                        <Phone className="h-4 w-4 text-indigo-600" />
                     </div>
                     <h2 className="font-bold text-[#18181B]">{title}</h2>
                 </div>
@@ -260,7 +260,7 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
                         </select>
                     </div>
                     <button onClick={refresh}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#F97316] text-[#F97316] rounded-xl text-sm font-medium hover:bg-[#FFF7ED] transition-colors shadow-sm">
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-indigo-600 text-indigo-600 rounded-xl text-sm font-medium hover:bg-indigo-50 transition-colors shadow-sm">
                         <RefreshCw className="h-3.5 w-3.5" /> Refresh
                     </button>
                 </div>
@@ -268,10 +268,10 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
 
             {/* KPI cards */}
             {statsLoading ? (
-                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-[#F97316]" /></div>
+                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-indigo-600" /></div>
             ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                    <KpiCard icon={Phone}         label="Total Calls"  value={s.totalCalls ?? 0}  sub={`Today: ${s.today ?? 0}`}               iconBg="bg-[#FFF7ED]"  iconColor="text-[#F97316]"   sparkData={sparkBase}                                           sparkColor="#F97316" />
+                    <KpiCard icon={Phone}         label="Total Calls"  value={s.totalCalls ?? 0}  sub={`Today: ${s.today ?? 0}`}               iconBg="bg-indigo-50"  iconColor="text-indigo-600"   sparkData={sparkBase}                                           sparkColor="#4f46e5" />
                     <KpiCard icon={PhoneIncoming} label="Answered"     value={s.answered   ?? 0}  sub={answerRate ? `${answerRate}% rate` : "—"} iconBg="bg-green-50"   iconColor="text-green-600"  sparkData={perDay.slice(-7).map(d=>({count:d.answered}))}      sparkColor="#22C55E" />
                     <KpiCard icon={PhoneMissed}   label="Missed"       value={s.missed     ?? 0}  sub={missedRate ? `${missedRate}% rate` : "—"} iconBg="bg-red-50"     iconColor="text-red-500"    sparkData={perDay.slice(-7).map(d=>({count:d.missed}))}        sparkColor="#EF4444" />
                     <KpiCard icon={Clock}         label="Avg Duration" value={fmtSecs(s.avgDuration)} sub={`Total: ${fmtSecs(s.totalDuration)}`} iconBg="bg-amber-50"   iconColor="text-amber-600"  sparkData={sparkBase}                                           sparkColor="#F59E0B" />
@@ -286,11 +286,11 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
                 <div className={`bg-white rounded-2xl border border-[#E4E4E7] p-5 shadow-sm ${!hideTopAgents ? "lg:col-span-2" : ""}`}>
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
-                            <TrendingUp className="h-4 w-4 text-[#F97316]" />
+                            <TrendingUp className="h-4 w-4 text-indigo-600" />
                             <h3 className="font-semibold text-[#18181B] text-sm">Calls Overview</h3>
                         </div>
                         <select value={chartMode} onChange={e => setChartMode(e.target.value)}
-                            className="text-xs border border-[#E4E4E7] rounded-lg px-2 py-1.5 bg-white text-[#18181B] focus:outline-none focus:ring-1 focus:ring-[#F97316]">
+                            className="text-xs border border-[#E4E4E7] rounded-lg px-2 py-1.5 bg-white text-[#18181B] focus:outline-none focus:ring-1 focus:ring-indigo-600">
                             <option value="daily">Daily</option>
                             <option value="weekly">Weekly</option>
                         </select>
@@ -319,7 +319,7 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
                 {/* Distribution donut */}
                 <div className="bg-white rounded-2xl border border-[#E4E4E7] p-5 shadow-sm flex flex-col">
                     <div className="flex items-center gap-2 mb-3">
-                        <div className="h-4 w-4 rounded-full bg-[#F97316]" />
+                        <div className="h-4 w-4 rounded-full bg-indigo-600" />
                         <h3 className="font-semibold text-[#18181B] text-sm">Call Distribution</h3>
                     </div>
                     <div className="flex-1 flex items-center justify-center">
@@ -360,7 +360,7 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
                 {/* Insights */}
                 <div className="bg-white rounded-2xl border border-[#E4E4E7] p-5 shadow-sm">
                     <div className="flex items-center gap-2 mb-4">
-                        <Lightbulb className="h-4 w-4 text-[#F97316]" />
+                        <Lightbulb className="h-4 w-4 text-indigo-600" />
                         <h3 className="font-semibold text-[#18181B] text-sm">Insights</h3>
                     </div>
                     <div className="grid grid-cols-3 gap-3">
@@ -384,7 +384,7 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
                 {!hideTopAgents && (
                     <div className="bg-white rounded-2xl border border-[#E4E4E7] p-5 shadow-sm">
                         <div className="flex items-center gap-2 mb-4">
-                            <Users className="h-4 w-4 text-[#F97316]" />
+                            <Users className="h-4 w-4 text-indigo-600" />
                             <h3 className="font-semibold text-[#18181B] text-sm">Top Agents</h3>
                         </div>
                         {topAgents.length === 0 ? (
@@ -401,7 +401,7 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
                                     </thead>
                                     <tbody className="divide-y divide-[#F4F4F5]">
                                         {topAgents.map(a => (
-                                            <tr key={a.agent} className="hover:bg-[#FFF7ED]/50 transition-colors">
+                                            <tr key={a.agent} className="hover:bg-indigo-50/30 transition-colors">
                                                 <td className="px-2 py-2 font-medium text-[#18181B] truncate max-w-[100px]">{a.agent}</td>
                                                 <td className="px-2 py-2 font-semibold text-[#18181B]">{a.total}</td>
                                                 <td className="px-2 py-2 text-green-600 font-medium">{a.answered}</td>
@@ -424,23 +424,22 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#71717A]" />
                             <input type="text" placeholder="Search name, phone…" value={searchInput}
-                                onChange={e => setSearchInput(e.target.value)}
-                                className="w-full pl-8 pr-3 py-2 text-sm border border-[#E4E4E7] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F97316]" />
+                                className="w-full pl-8 pr-3 py-2 text-sm border border-[#E4E4E7] rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-600" />
                         </div>
                         <button type="submit"
-                            className="px-4 py-2 bg-[#F97316] text-white text-sm rounded-xl hover:bg-[#FB923C] transition-colors font-medium">
+                            className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-xl hover:bg-indigo-700 transition-colors font-medium">
                             Search
                         </button>
                     </form>
                     <select value={direction} onChange={handleFilter(setDirection)}
-                        className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#F97316]">
+                        className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600">
                         <option value="">All Directions</option>
                         <option value="outgoing">Outgoing</option>
                         <option value="incoming">Incoming</option>
                         <option value="missed">Missed</option>
                     </select>
                     <select value={status} onChange={handleFilter(setStatus)}
-                        className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#F97316]">
+                        className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600">
                         <option value="">All Statuses</option>
                         <option value="answered">Answered</option>
                         <option value="missed">Missed</option>
@@ -450,10 +449,10 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
                     </select>
                     <div className="flex items-center gap-1.5">
                         <input type="date" value={dateFrom} onChange={handleFilter(setDateFrom)}
-                            className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#F97316]" />
+                            className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600" />
                         <span className="text-[#71717A] text-xs">to</span>
                         <input type="date" value={dateTo} onChange={handleFilter(setDateTo)}
-                            className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#F97316]" />
+                            className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600" />
                     </div>
                     {hasFilter && (
                         <button onClick={clearFilters} className="text-sm text-red-500 hover:text-red-700 px-2 py-2 rounded-xl hover:bg-red-50 transition-colors">
@@ -461,7 +460,7 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
                         </button>
                     )}
                     <button onClick={exportCsv}
-                        className="ml-auto flex items-center gap-1.5 px-3 py-2 border border-[#E4E4E7] rounded-xl text-sm hover:bg-[#FFF7ED] hover:border-[#F97316] hover:text-[#F97316] transition-colors">
+                        className="ml-auto flex items-center gap-1.5 px-3 py-2 border border-[#E4E4E7] rounded-xl text-sm hover:bg-indigo-50 hover:border-indigo-600 hover:text-indigo-600 transition-colors">
                         <Download className="h-3.5 w-3.5" /> Export
                     </button>
                 </div>
@@ -476,18 +475,18 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
                 </div>
                 {callsLoading ? (
                     <div className="p-10 text-center flex flex-col items-center gap-2 text-[#71717A] text-sm">
-                        <Loader2 className="h-6 w-6 animate-spin text-[#F97316]" /> Loading calls…
+                        <Loader2 className="h-6 w-6 animate-spin text-indigo-600" /> Loading calls…
                     </div>
                 ) : calls.length === 0 ? (
                     <div className="py-16 text-center">
-                        <Phone className="h-7 w-7 text-[#F97316] mx-auto mb-3" />
+                        <Phone className="h-7 w-7 text-indigo-600 mx-auto mb-3" />
                         <p className="font-semibold text-[#18181B] text-sm">No call records found</p>
                         <p className="text-[#71717A] text-xs mt-1">Calls will appear here once Fasterq pushes data</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
-                            <thead className="bg-[#FFF7ED] border-b border-[#E4E4E7]">
+                            <thead className="bg-indigo-50/50 border-b border-[#E4E4E7]">
                                 <tr>
                                     {["Date & Time", "Direction", "Contact", "Phone Number", "Agent", "Duration", "Status", "Recording"].map(h => (
                                         <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold text-[#71717A] uppercase tracking-wide whitespace-nowrap">{h}</th>
@@ -496,12 +495,12 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
                             </thead>
                             <tbody className="divide-y divide-[#F4F4F5]">
                                 {calls.map(call => (
-                                    <tr key={call.id} className="hover:bg-[#FFF7ED]/50 transition-colors">
+                                    <tr key={call.id} className="hover:bg-indigo-50/30 transition-colors">
                                         <td className="px-4 py-3 text-xs text-[#71717A] whitespace-nowrap">{fmtDate(call.startedAt)}</td>
                                         <td className="px-4 py-3"><DirectionChip d={call.direction} /></td>
                                         <td className="px-4 py-3 font-medium text-[#18181B]">
                                             {call.contactName || <span className="text-[#71717A]">Unknown</span>}
-                                            {call.lead && <div className="text-[10px] text-[#F97316] font-medium mt-0.5">{call.lead.name}</div>}
+                                            {call.lead && <div className="text-[10px] text-indigo-600 font-medium mt-0.5">{call.lead.name}</div>}
                                         </td>
                                         <td className="px-4 py-3 text-xs text-[#71717A] font-mono">{call.contactPhone || call.fromNumber || call.toNumber || "—"}</td>
                                         <td className="px-4 py-3">
@@ -522,11 +521,11 @@ const FasterqSection = ({ agentEmails = null, hideTopAgents = false, title = "Fa
                         <span className="text-xs text-[#71717A]">Page {page} of {pages} · {total} calls</span>
                         <div className="flex items-center gap-1.5">
                             <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
-                                className="p-1.5 rounded-lg border border-[#E4E4E7] disabled:opacity-40 hover:bg-[#FFF7ED] hover:border-[#F97316] transition-colors">
+                                className="p-1.5 rounded-lg border border-[#E4E4E7] disabled:opacity-40 hover:bg-indigo-50 hover:border-indigo-600 transition-colors">
                                 <ChevronLeft className="h-4 w-4" />
                             </button>
                             <button disabled={page >= pages} onClick={() => setPage(p => p + 1)}
-                                className="p-1.5 rounded-lg border border-[#E4E4E7] disabled:opacity-40 hover:bg-[#FFF7ED] hover:border-[#F97316] transition-colors">
+                                className="p-1.5 rounded-lg border border-[#E4E4E7] disabled:opacity-40 hover:bg-indigo-50 hover:border-indigo-600 transition-colors">
                                 <ChevronRight className="h-4 w-4" />
                             </button>
                         </div>

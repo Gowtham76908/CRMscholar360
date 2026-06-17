@@ -1,4 +1,4 @@
-﻿import { useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
@@ -11,7 +11,6 @@ const editUserSchema = z.object({
     name: z.string().min(2, "Name is required"),
     phone: z.string().optional(),
     role: z.enum(["SUPER_ADMIN", "ADMIN", "EMPLOYEE"]),
-    department: z.string().optional(),
     jobTitle: z.string().optional(),
 });
 
@@ -29,7 +28,6 @@ const EditUserForm = ({ user, onClose }) => {
             name: user.name,
             phone: user.phone || "",
             role: user.role,
-            department: user.department || "",
             jobTitle: user.jobTitle || ""
         }
     });
@@ -40,7 +38,6 @@ const EditUserForm = ({ user, onClose }) => {
             setValue("name", user.name);
             setValue("phone", user.phone);
             setValue("role", user.role);
-            setValue("department", user.department);
             setValue("jobTitle", user.jobTitle);
         }
     }, [user, setValue]);
@@ -88,20 +85,10 @@ const EditUserForm = ({ user, onClose }) => {
                     {...register("role")}
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                 >
-                    <option value="EMPLOYEE">Employee</option>
-                    <option value="ADMIN">Admin</option>
-                    <option value="SUPER_ADMIN">Super Admin</option>
+                    <option value="EMPLOYEE">Consultant</option>
+                    <option value="ADMIN">Manager</option>
+                    <option value="SUPER_ADMIN">Director</option>
                 </select>
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-gray-700">Department</label>
-                <input
-                    {...register("department")}
-                    placeholder="e.g. Sales"
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                />
-                <p className="mt-1 text-xs text-gray-400">Service departments are assigned in Dept. Staffing.</p>
             </div>
 
             <div>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, Plus, X, Loader2, UserPlus, ChevronDown } from "lucide-react";
+import { Building2, Plus, X, Loader2, UserPlus, ChevronDown, History, ArrowRight } from "lucide-react";
 import api from "../../api/axios";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -9,6 +9,8 @@ import {
     useMyDepartments,
     useWorkflows,
     useDepartmentMembers,
+    useServiceTimeline,
+    useRequestReassignment,
 } from "../../hooks/useDepartments";
 import {
     departmentLabel,
@@ -116,8 +118,13 @@ function DepartmentServiceRow({ assignment, user, isDirector, isManager, myDepar
     const canAssign = managesDept;
     const canUpdateStage = isDirector || managesDept || a.assignedEmployeeId === user?.id;
     const canRemove = canAllocate && a.department !== "SALES";
+    // A consultant assigned to this service can't reassign it directly — they ask a
+    // manager via a reassignment request (their own surface, not the manager Assign).
+    const canRequestReassign = !managesDept && a.assignedEmployeeId === user?.id;
 
     const [assigning, setAssigning] = useState(false);
+    const [requesting, setRequesting] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
 
     const stageMut = useMutation({
         mutationFn: (stage) => api.patch(`/lead-departments/${a.id}/stage`, { stage }).then((r) => r.data),
@@ -165,6 +172,15 @@ function DepartmentServiceRow({ assignment, user, isDirector, isManager, myDepar
                         <UserPlus className="h-3 w-3" /> {a.assignedEmployeeId ? "Reassign" : "Assign"}
                     </button>
                 )}
+                {!canAssign && canRequestReassign && (
+                    <button
+                        onClick={() => setRequesting((v) => !v)}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-800 shrink-0"
+                        title="Request a manager to reassign this lead"
+                    >
+                        <UserPlus className="h-3 w-3" /> Request reassign
+                    </button>
+                )}
             </div>
 
             {assigning && canAssign && (
@@ -174,6 +190,15 @@ function DepartmentServiceRow({ assignment, user, isDirector, isManager, myDepar
                     currentId={a.assignedEmployeeId}
                     onClose={() => setAssigning(false)}
                     onDone={onChanged}
+                />
+            )}
+
+            {requesting && canRequestReassign && (
+                <RequestReassign
+                    leadDepartmentId={a.id}
+                    department={a.department}
+                    currentId={a.assignedEmployeeId}
+                    onClose={() => setRequesting(false)}
                 />
             )}
 
@@ -191,7 +216,67 @@ function DepartmentServiceRow({ assignment, user, isDirector, isManager, myDepar
                     <span className="text-xs font-medium text-gray-700">{stageLabel(a.department, a.stage)}</span>
                 )}
             </div>
+
+            {/* Stage history (lazy-loaded from the historical ledger) */}
+            <div className="mt-2">
+                <button
+                    onClick={() => setShowHistory((v) => !v)}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500 hover:text-indigo-600 transition-colors"
+                >
+                    <History className="h-3 w-3" />
+                    {showHistory ? "Hide history" : "Stage history"}
+                    <ChevronDown className={`h-3 w-3 transition-transform ${showHistory ? "rotate-180" : ""}`} />
+                </button>
+                {showHistory && <StageTimeline leadDepartmentId={a.id} stageLabel={stageLabel} department={a.department} />}
+            </div>
         </div>
+    );
+}
+
+// ── Stage history timeline (Lead Details → Journey → Activity Timeline) ─────────
+
+function StageTimeline({ leadDepartmentId, stageLabel, department }) {
+    const { data, isLoading } = useServiceTimeline(leadDepartmentId, true);
+    const events = data?.events || [];
+
+    const fmtDate = (d) =>
+        new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+    if (isLoading) {
+        return (
+            <div className="flex justify-center py-3">
+                <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+            </div>
+        );
+    }
+    if (events.length === 0) {
+        return <p className="text-[11px] text-gray-400 py-2">No stage history recorded yet.</p>;
+    }
+
+    return (
+        <ol className="mt-2 pl-1 space-y-2.5 border-l-2 border-gray-100">
+            {events.map((e) => (
+                <li key={e.id} className="relative pl-3">
+                    <span className="absolute -left-[5px] top-1 h-2 w-2 rounded-full bg-indigo-400 ring-2 ring-white" />
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        {e.fromStage ? (
+                            <>
+                                <span className="text-[11px] text-gray-400">{stageLabel(department, e.fromStage)}</span>
+                                <ArrowRight className="h-3 w-3 text-gray-300" />
+                                <span className="text-[11px] font-semibold text-gray-700">{stageLabel(department, e.toStage)}</span>
+                            </>
+                        ) : (
+                            <span className="text-[11px] font-semibold text-emerald-700">
+                                Entered · {stageLabel(department, e.toStage)}
+                            </span>
+                        )}
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                        {fmtDate(e.at)}{e.by?.name ? ` · ${e.by.name}` : " · system"}
+                    </p>
+                </li>
+            ))}
+        </ol>
     );
 }
 
@@ -249,6 +334,52 @@ function AssignConsultant({ leadDepartmentId, department, currentId, onClose, on
                         <option key={m.id} value={m.id}>{m.name}{m.role === "ADMIN" ? " (Manager)" : ""}</option>
                     ))}
                 </select>
+            )}
+        </div>
+    );
+}
+
+// ── Request reassignment (consultant → manager approval) ───────────────────────
+
+function RequestReassign({ leadDepartmentId, department, currentId, onClose }) {
+    const { data: members = [], isLoading } = useDepartmentMembers(department);
+    const mut = useRequestReassignment();
+
+    const submit = (toUserId) => {
+        mut.mutate(
+            { leadDepartmentId, toUserId, reason: null },
+            {
+                onSuccess: () => { toast.success("Reassignment requested — sent to the manager for approval"); onClose(); },
+                onError: (e) => toast.error(e.response?.data?.error?.message || "Could not send request"),
+            }
+        );
+    };
+
+    // The current assignee can't be a target; everyone else in the department can.
+    const options = members.filter((m) => m.id !== currentId);
+
+    return (
+        <div className="mt-2 p-2 rounded-md bg-amber-50/60 border border-amber-100">
+            {isLoading ? (
+                <div className="flex justify-center py-1"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /></div>
+            ) : options.length === 0 ? (
+                <p className="text-[11px] text-gray-400 py-1">No other members in {departmentLabel(department)} to reassign to.</p>
+            ) : (
+                <>
+                    <p className="text-[10px] text-amber-700 mb-1.5">A manager must approve this reassignment.</p>
+                    <select
+                        autoFocus
+                        defaultValue=""
+                        disabled={mut.isPending}
+                        onChange={(e) => e.target.value && submit(e.target.value)}
+                        className="w-full text-xs border border-amber-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-200"
+                    >
+                        <option value="" disabled>Reassign to…</option>
+                        {options.map((m) => (
+                            <option key={m.id} value={m.id}>{m.name}{m.role === "ADMIN" ? " (Manager)" : ""}</option>
+                        ))}
+                    </select>
+                </>
             )}
         </div>
     );

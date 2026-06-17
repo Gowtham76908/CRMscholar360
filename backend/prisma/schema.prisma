@@ -62,6 +62,11 @@ model User {
   chatMessages       ChatMessage[]
   userDepartments    UserDepartment[]
   leadDepartments    LeadDepartment[]
+  stageEventsChanged LeadDepartmentStageEvent[] @relation("StageEventChangedBy")
+  assignmentRequestsRaised   LeadAssignmentRequest[] @relation("AssignmentRequestRequestedBy")
+  assignmentRequestsFrom     LeadAssignmentRequest[] @relation("AssignmentRequestFrom")
+  assignmentRequestsTo       LeadAssignmentRequest[] @relation("AssignmentRequestTo")
+  assignmentRequestsDecided  LeadAssignmentRequest[] @relation("AssignmentRequestDecidedBy")
 
   @@index([phoneNormalized])
   @@index([managerId])
@@ -457,11 +462,67 @@ model LeadDepartment {
   updatedAt          DateTime       @updatedAt
   lead               Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
   assignedEmployee   User?          @relation(fields: [assignedEmployeeId], references: [id])
+  stageEvents        LeadDepartmentStageEvent[]
+  assignmentRequests LeadAssignmentRequest[]
 
   @@unique([leadId, department])
   @@index([department])
   @@index([assignedEmployeeId])
   @@index([stage])
+}
+
+// A consultant-initiated request to (re)assign a department service to a different
+// consultant. Self-claiming an unassigned ENQUIRY service is direct (no request);
+// every other consultant-driven assignment change is routed here for the
+// department manager to approve or reject. Managers/Directors assign directly and
+// never create these rows.
+model LeadAssignmentRequest {
+  id               String                  @id @default(uuid())
+  leadDepartmentId String
+  department       DepartmentType
+  requestedById    String                  // consultant who raised the request
+  fromUserId       String?                 // assignee at request time (null if it was unassigned)
+  toUserId         String                  // requested new assignee
+  status           AssignmentRequestStatus @default(PENDING)
+  reason           String?
+  decidedById      String?                 // manager/director who approved or rejected
+  decidedAt        DateTime?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  leadDepartment   LeadDepartment @relation(fields: [leadDepartmentId], references: [id], onDelete: Cascade)
+  requestedBy      User           @relation("AssignmentRequestRequestedBy", fields: [requestedById], references: [id])
+  fromUser         User?          @relation("AssignmentRequestFrom", fields: [fromUserId], references: [id])
+  toUser           User           @relation("AssignmentRequestTo", fields: [toUserId], references: [id])
+  decidedBy        User?          @relation("AssignmentRequestDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([department, status])
+  @@index([leadDepartmentId, status])
+  @@index([requestedById])
+  @@index([status])
+}
+
+// Append-only historical ledger of every stage transition for a department service.
+// Source of truth for "what happened over time" analytics (the snapshot on
+// LeadDepartment.stage only tells you "what exists right now"). Written atomically
+// with each stage change; `fromStage = null` marks a service entering its workflow.
+model LeadDepartmentStageEvent {
+  id               String         @id @default(uuid())
+  leadDepartmentId String
+  department       DepartmentType
+  fromStage        String?        // null = service entered the workflow
+  toStage          String
+  changedByUserId  String?        // null = system/programmatic origin (import, webhook, scraper)
+  createdAt        DateTime       @default(now())
+
+  leadDepartment   LeadDepartment @relation(fields: [leadDepartmentId], references: [id], onDelete: Cascade)
+  changedByUser    User?          @relation("StageEventChangedBy", fields: [changedByUserId], references: [id])
+
+  @@index([department, createdAt])
+  @@index([changedByUserId, createdAt])
+  @@index([toStage, createdAt])
+  @@index([leadDepartmentId])
+  @@index([createdAt])
 }
 
 model Attendance {
@@ -568,6 +629,13 @@ enum LeaveStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum AssignmentRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
 }
 
 enum ApprovalStatus {

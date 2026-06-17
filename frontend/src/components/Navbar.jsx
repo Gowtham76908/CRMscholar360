@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Menu, Settings, LogOut } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { roleLabel } from "../lib/roles";
 import GlobalSearch from "./GlobalSearch";
 import NotificationDropdown from "./NotificationDropdown";
 import Avatar from "./Avatar";
@@ -52,7 +53,7 @@ const Navbar = ({ onMenuClick }) => {
                 <div className="flex items-center gap-3">
                     <div className="text-right hidden sm:block">
                         <p className="text-sm font-medium text-gray-900">{user?.name || "User"}</p>
-                        <p className="text-xs text-gray-500 capitalize">{user?.role?.replace("_", " ") || "Role"}</p>
+                        <p className="text-xs text-gray-500">{user?.role ? roleLabel(user.role) : "Role"}</p>
                     </div>
 
                     {/* Avatar with profile dropdown */}

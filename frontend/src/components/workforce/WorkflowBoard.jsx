@@ -70,7 +70,7 @@ const LeadCard = ({ lead, navigate }) => (
 
         <div className="flex items-center gap-1 mt-2.5 pt-2 border-t border-[#F4F4F5] opacity-0 group-hover:opacity-100 transition-opacity">
             <button onClick={() => navigate(`/leads/${lead.id}`)}
-                className="flex-1 flex items-center justify-center gap-1 py-1 text-[10px] font-medium rounded-lg bg-[#FFF7ED] text-[#F97316] hover:bg-[#FED7AA] transition-colors border border-[#FED7AA]">
+                className="flex-1 flex items-center justify-center gap-1 py-1 text-[10px] font-medium rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors border border-indigo-100">
                 <ExternalLink className="h-2.5 w-2.5" /> Open
             </button>
             <button onClick={() => navigate("/department-queue")}
@@ -121,7 +121,7 @@ const DrawerRow = ({ lead, navigate }) => (
 
         <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
             <button onClick={() => navigate(`/leads/${lead.id}`)}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-lg bg-[#FFF7ED] text-[#F97316] hover:bg-[#FED7AA] border border-[#FED7AA] transition-colors">
+                className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-100 transition-colors">
                 <ExternalLink className="h-2.5 w-2.5" /> Open
             </button>
             <button onClick={() => navigate("/department-queue")}
@@ -174,7 +174,7 @@ const ColumnDrawer = ({ col, navigate, onClose }) => {
                         value={search}
                         onChange={e => handleSearch(e.target.value)}
                         placeholder="Search by name…"
-                        className="w-full pl-9 pr-9 py-2 text-sm border border-[#E4E4E7] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F97316]/30 focus:border-[#F97316]"
+                        className="w-full pl-9 pr-9 py-2 text-sm border border-[#E4E4E7] rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600/30 focus:border-indigo-600"
                     />
                     {search && (
                         <button onClick={() => handleSearch("")}
@@ -195,7 +195,7 @@ const ColumnDrawer = ({ col, navigate, onClose }) => {
                 <div className="flex flex-col gap-2 flex-1">
                     {isLoading ? (
                         <div className="flex justify-center py-10">
-                            <Loader2 className="h-5 w-5 animate-spin text-[#F97316]" />
+                            <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
                         </div>
                     ) : (
                         <AnimatePresence mode="popLayout">
@@ -261,8 +261,8 @@ const WorkflowBoard = () => {
                     onClick={() => setExpanded(v => !v)}
                     className="w-full flex items-center justify-between px-5 py-4 border-b border-[#E4E4E7] hover:bg-[#FAFAFA] transition-colors">
                     <div className="flex items-center gap-2">
-                        <div className="h-7 w-7 rounded-lg bg-[#FFF7ED] flex items-center justify-center">
-                            <Layers className="h-3.5 w-3.5 text-[#F97316]" />
+                        <div className="h-7 w-7 rounded-lg bg-indigo-50 flex items-center justify-center">
+                            <Layers className="h-3.5 w-3.5 text-indigo-600" />
                         </div>
                         <h2 className="font-semibold text-[#18181B]">Team Workflow Board</h2>
                         <span className="text-xs text-[#71717A] bg-[#F4F4F5] px-2 py-0.5 rounded-full ml-1">
@@ -282,7 +282,7 @@ const WorkflowBoard = () => {
                             className="overflow-hidden">
                             {isLoading ? (
                                 <div className="flex justify-center py-10">
-                                    <Loader2 className="h-6 w-6 animate-spin text-[#F97316]" />
+                                    <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
                                 </div>
                             ) : (
                                 <div className="p-4 overflow-x-auto">
@@ -317,11 +317,11 @@ const WorkflowBoard = () => {
                                                                 initial={{ opacity: 0, y: 4 }}
                                                                 animate={{ opacity: 1, y: 0 }}
                                                                 onClick={() => setDrawerCol(col.key)}
-                                                                className="w-full py-2.5 flex flex-col items-center gap-0.5 text-xs border border-dashed border-[#E4E4E7] rounded-xl hover:bg-[#FFF7ED] hover:border-[#F97316] hover:text-[#F97316] transition-colors group">
-                                                                <span className="font-semibold text-[#71717A] group-hover:text-[#F97316]">
+                                                                className="w-full py-2.5 flex flex-col items-center gap-0.5 text-xs border border-dashed border-[#E4E4E7] rounded-xl hover:bg-indigo-50 hover:border-indigo-600 hover:text-indigo-600 transition-colors group">
+                                                                <span className="font-semibold text-[#71717A] group-hover:text-indigo-600">
                                                                     +{overflow} more lead{overflow !== 1 ? "s" : ""}
                                                                 </span>
-                                                                <span className="text-[10px] text-[#71717A] group-hover:text-[#F97316]">View All →</span>
+                                                                <span className="text-[10px] text-[#71717A] group-hover:text-indigo-600">View All →</span>
                                                             </motion.button>
                                                         )}
 

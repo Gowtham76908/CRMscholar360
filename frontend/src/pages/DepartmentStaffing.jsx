@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Users, Loader2, ShieldCheck } from "lucide-react";
@@ -14,10 +14,12 @@ import { departmentLabel, DEPARTMENT_ORDER } from "../lib/departments";
 export default function DepartmentStaffing() {
     const { user } = useAuth();
     const qc = useQueryClient();
+    const [roleTab, setRoleTab] = useState("all"); // "all", "SUPER_ADMIN", "ADMIN", "EMPLOYEE"
 
+    // Use /team endpoint to fetch the updated user and member list
     const { data: users = [], isLoading: usersLoading } = useQuery({
-        queryKey: ["users"],
-        queryFn: () => api.get("/users").then((r) => (Array.isArray(r.data) ? r.data : r.data?.users || [])),
+        queryKey: ["team"],
+        queryFn: () => api.get("/team").then((r) => r.data || []),
     });
 
     // One membership query per department; combine into { dept: Set(userId) }.
@@ -54,6 +56,12 @@ export default function DepartmentStaffing() {
         onError: (e) => toast.error(e.response?.data?.error?.message || "Could not update membership"),
     });
 
+    // Filter users list based on selected role tab
+    const filteredUsers = useMemo(() => {
+        if (roleTab === "all") return users;
+        return users.filter((u) => u.role === roleTab);
+    }, [users, roleTab]);
+
     if (user?.role !== "SUPER_ADMIN") {
         return (
             <div className="max-w-3xl mx-auto px-4 py-12 text-center text-sm text-gray-500">
@@ -73,8 +81,56 @@ export default function DepartmentStaffing() {
             </div>
             <p className="text-sm text-gray-500 mb-5">Assign users to departments. Membership controls visibility and who can be assigned services.</p>
 
+            {/* Role Tabs */}
+            <div className="flex border-b border-gray-200 mb-5">
+                <button
+                    onClick={() => setRoleTab("all")}
+                    className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer -mb-[2px] ${
+                        roleTab === "all"
+                            ? "border-indigo-600 text-indigo-600"
+                            : "border-transparent text-gray-400 hover:text-gray-600"
+                    }`}
+                >
+                    All Staff ({users.length})
+                </button>
+                <button
+                    onClick={() => setRoleTab("SUPER_ADMIN")}
+                    className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer -mb-[2px] ${
+                        roleTab === "SUPER_ADMIN"
+                            ? "border-indigo-600 text-indigo-600"
+                            : "border-transparent text-gray-400 hover:text-gray-600"
+                    }`}
+                >
+                    Directors ({users.filter(u => u.role === "SUPER_ADMIN").length})
+                </button>
+                <button
+                    onClick={() => setRoleTab("ADMIN")}
+                    className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer -mb-[2px] ${
+                        roleTab === "ADMIN"
+                            ? "border-indigo-600 text-indigo-600"
+                            : "border-transparent text-gray-400 hover:text-gray-600"
+                    }`}
+                >
+                    Managers ({users.filter(u => u.role === "ADMIN").length})
+                </button>
+                <button
+                    onClick={() => setRoleTab("EMPLOYEE")}
+                    className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer -mb-[2px] ${
+                        roleTab === "EMPLOYEE"
+                            ? "border-indigo-600 text-indigo-600"
+                            : "border-transparent text-gray-400 hover:text-gray-600"
+                    }`}
+                >
+                    Consultants ({users.filter(u => u.role === "EMPLOYEE").length})
+                </button>
+            </div>
+
             {loading ? (
                 <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+            ) : filteredUsers.length === 0 ? (
+                <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-sm text-gray-500">
+                    No users found under this category.
+                </div>
             ) : (
                 <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
                     <table className="w-full text-sm">
@@ -89,7 +145,7 @@ export default function DepartmentStaffing() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {users.map((u) => (
+                            {filteredUsers.map((u) => (
                                 <tr key={u.id} className="hover:bg-gray-50/40">
                                     <td className="px-4 py-2.5 sticky left-0 bg-white">
                                         <div className="font-medium text-gray-900">{u.name}</div>

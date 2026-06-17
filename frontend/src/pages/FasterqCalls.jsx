@@ -46,7 +46,7 @@ const AudioPlayer = ({ url }) => {
             <audio ref={ref} src={url} onEnded={() => setPlaying(false)} className="hidden" />
             <button
                 onClick={toggle}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#FFF7ED] text-[#F97316] hover:bg-[#FED7AA] text-xs font-medium transition-colors border border-[#FED7AA]"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-medium transition-colors border border-indigo-200"
             >
                 {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                 {playing ? "Pause" : "Play"}
@@ -56,7 +56,7 @@ const AudioPlayer = ({ url }) => {
 };
 
 // ── Sparkline ─────────────────────────────────────────────────────────────────
-const Sparkline = ({ data = [], color = "#F97316" }) => {
+const Sparkline = ({ data = [], color = "#4f46e5" }) => {
     if (!data.length) return null;
     const vals = data.map(d => d.v ?? 0);
     const max = Math.max(...vals, 1);
@@ -304,7 +304,7 @@ const FasterqCalls = () => {
     if (statsLoading && callsLoading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <Loader2 className="h-8 w-8 animate-spin text-[#F97316]" />
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
             </div>
         );
     }
@@ -323,8 +323,8 @@ const FasterqCalls = () => {
             {/* ── Header ─────────────────────────────────────────────────────── */}
             <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-[#FFF7ED] flex items-center justify-center shadow-sm border border-[#FED7AA]">
-                        <Phone className="h-5 w-5 text-[#F97316]" />
+                    <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center shadow-sm border border-indigo-200">
+                        <Phone className="h-5 w-5 text-indigo-600" />
                     </div>
                     <div>
                         <h1 className="text-xl font-bold text-[#18181B]">Fasterq Call Analytics</h1>
@@ -351,7 +351,7 @@ const FasterqCalls = () => {
                     </div>
                     <button
                         onClick={refresh}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#F97316] text-[#F97316] rounded-xl text-sm font-medium hover:bg-[#FFF7ED] transition-colors shadow-sm"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-white border border-indigo-600 text-indigo-600 rounded-xl text-sm font-medium hover:bg-indigo-50 transition-colors shadow-sm"
                     >
                         <RefreshCw className="h-3.5 w-3.5" /> Refresh
                     </button>
@@ -365,8 +365,8 @@ const FasterqCalls = () => {
                     label="Total Calls"
                     value={s.totalCalls ?? 0}
                     sub={`Today: ${s.today ?? 0}`}
-                    iconBg="bg-[#FFF7ED]" iconColor="text-[#F97316]"
-                    spark={sparkTotal} sparkColor="#F97316"
+                    iconBg="bg-indigo-50" iconColor="text-indigo-600"
+                    spark={sparkTotal} sparkColor="#4f46e5"
                 />
                 <KpiCard
                     icon={PhoneIncoming}
@@ -416,7 +416,7 @@ const FasterqCalls = () => {
                 <div className="lg:col-span-2 bg-white rounded-2xl border border-[#E4E4E7] p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
-                            <TrendingUp className="h-4 w-4 text-[#F97316]" />
+                            <TrendingUp className="h-4 w-4 text-indigo-600" />
                             <h2 className="font-semibold text-[#18181B] text-sm">Trend</h2>
                         </div>
                         <div className="flex items-center gap-2">
@@ -424,13 +424,13 @@ const FasterqCalls = () => {
                             <div className="flex rounded-lg border border-[#E4E4E7] overflow-hidden text-xs">
                                 <button
                                     onClick={() => setChartView("calls")}
-                                    className={`px-3 py-1.5 transition-colors ${chartView === "calls" ? "bg-[#F97316] text-white" : "bg-white text-[#71717A] hover:bg-[#FFF7ED]"}`}
+                                    className={`px-3 py-1.5 transition-colors ${chartView === "calls" ? "bg-indigo-600 text-white" : "bg-white text-[#71717A] hover:bg-indigo-50"}`}
                                 >
                                     Calls
                                 </button>
                                 <button
                                     onClick={() => setChartView("duration")}
-                                    className={`px-3 py-1.5 transition-colors ${chartView === "duration" ? "bg-[#F97316] text-white" : "bg-white text-[#71717A] hover:bg-[#FFF7ED]"}`}
+                                    className={`px-3 py-1.5 transition-colors ${chartView === "duration" ? "bg-indigo-600 text-white" : "bg-white text-[#71717A] hover:bg-indigo-50"}`}
                                 >
                                     Duration
                                 </button>
@@ -440,7 +440,7 @@ const FasterqCalls = () => {
                                 <select
                                     value={chartMode}
                                     onChange={e => setChartMode(e.target.value)}
-                                    className="text-xs border border-[#E4E4E7] rounded-lg px-2 py-1.5 bg-white text-[#18181B] focus:outline-none focus:ring-1 focus:ring-[#F97316]"
+                                    className="text-xs border border-[#E4E4E7] rounded-lg px-2 py-1.5 bg-white text-[#18181B] focus:outline-none focus:ring-1 focus:ring-indigo-600"
                                 >
                                     <option value="daily">Daily</option>
                                     <option value="weekly">Weekly</option>
@@ -483,7 +483,7 @@ const FasterqCalls = () => {
                                     labelFormatter={v => new Date(v).toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short" })}
                                     formatter={(v) => [fmt(v), "Avg Duration"]}
                                 />
-                                <Bar dataKey="avgDuration" name="Avg Duration" fill="#F97316" radius={[4, 4, 0, 0]} maxBarSize={20} />
+                                <Bar dataKey="avgDuration" name="Avg Duration" fill="#4f46e5" radius={[4, 4, 0, 0]} maxBarSize={20} />
                             </BarChart>
                         </ResponsiveContainer>
                     )}
@@ -551,7 +551,7 @@ const FasterqCalls = () => {
                         <div className="bg-[#FAFAFA] rounded-xl p-3 border border-[#E4E4E7]">
                             {peakDay ? (
                                 <>
-                                    <p className="text-xl font-bold text-[#F97316]">{peakDay.total}</p>
+                                    <p className="text-xl font-bold text-indigo-600">{peakDay.total}</p>
                                     <p className="text-[11px] font-medium text-[#18181B] mt-0.5">Peak Day</p>
                                     <p className="text-[10px] text-[#71717A] mt-0.5">
                                         {new Date(peakDay.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
@@ -602,7 +602,7 @@ const FasterqCalls = () => {
                                 </thead>
                                 <tbody className="divide-y divide-[#F4F4F5]">
                                     {topAgents.map(a => (
-                                        <tr key={a.agent} className="hover:bg-[#FFF7ED]/50 transition-colors">
+                                        <tr key={a.agent} className="hover:bg-indigo-50/30 transition-colors">
                                             <td className="px-2 py-2 font-medium text-[#18181B] truncate max-w-[100px]">{a.agent}</td>
                                             <td className="px-2 py-2 font-semibold text-[#18181B]">{a.total}</td>
                                             <td className="px-2 py-2">
@@ -632,16 +632,16 @@ const FasterqCalls = () => {
                                 placeholder="Search name, phone, agent…"
                                 value={searchInput}
                                 onChange={e => setSearchInput(e.target.value)}
-                                className="w-full pl-8 pr-3 py-2 text-sm border border-[#E4E4E7] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F97316] focus:border-[#F97316]"
+                                className="w-full pl-8 pr-3 py-2 text-sm border border-[#E4E4E7] rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-600 focus:border-indigo-600"
                             />
                         </div>
-                        <button type="submit" className="px-4 py-2 bg-[#F97316] text-white text-sm rounded-xl hover:bg-[#FB923C] transition-colors font-medium shadow-sm">
+                        <button type="submit" className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm">
                             Search
                         </button>
                     </form>
 
                     <select value={direction} onChange={handleFilter(setDirection)}
-                        className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#F97316] text-[#18181B]">
+                        className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-[#18181B]">
                         <option value="">All Directions</option>
                         <option value="outgoing">Outgoing</option>
                         <option value="incoming">Incoming</option>
@@ -649,7 +649,7 @@ const FasterqCalls = () => {
                     </select>
 
                     <select value={status} onChange={handleFilter(setStatus)}
-                        className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#F97316] text-[#18181B]">
+                        className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-[#18181B]">
                         <option value="">All Statuses</option>
                         <option value="answered">Answered</option>
                         <option value="missed">Missed</option>
@@ -660,10 +660,10 @@ const FasterqCalls = () => {
 
                     <div className="flex items-center gap-1.5">
                         <input type="date" value={dateFrom} onChange={handleFilter(setDateFrom)}
-                            className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#F97316] text-[#18181B]" />
+                            className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-[#18181B]" />
                         <span className="text-[#71717A] text-xs">to</span>
                         <input type="date" value={dateTo} onChange={handleFilter(setDateTo)}
-                            className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#F97316] text-[#18181B]" />
+                            className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-[#18181B]" />
                     </div>
 
                     {hasFilter && (
@@ -672,7 +672,7 @@ const FasterqCalls = () => {
                         </button>
                     )}
 
-                    <button onClick={exportCsv} className="ml-auto flex items-center gap-1.5 px-3 py-2 border border-[#E4E4E7] rounded-xl text-sm text-[#18181B] hover:bg-[#FFF7ED] hover:border-[#F97316] hover:text-[#F97316] transition-colors">
+                    <button onClick={exportCsv} className="ml-auto flex items-center gap-1.5 px-3 py-2 border border-[#E4E4E7] rounded-xl text-sm text-[#18181B] hover:bg-indigo-50 hover:border-indigo-600 hover:text-indigo-600 transition-colors">
                         <Download className="h-3.5 w-3.5" /> Export
                     </button>
                 </div>
@@ -692,13 +692,13 @@ const FasterqCalls = () => {
 
                 {callsLoading ? (
                     <div className="p-10 text-center text-[#71717A] text-sm flex flex-col items-center gap-2">
-                        <Loader2 className="h-6 w-6 animate-spin text-[#F97316]" />
+                        <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
                         Loading calls…
                     </div>
                 ) : calls.length === 0 ? (
                     <div className="py-16 text-center">
-                        <div className="h-16 w-16 rounded-2xl bg-[#FFF7ED] flex items-center justify-center mx-auto mb-3 border border-[#FED7AA]">
-                            <Phone className="h-7 w-7 text-[#F97316]" />
+                        <div className="h-16 w-16 rounded-2xl bg-indigo-50 flex items-center justify-center mx-auto mb-3 border border-indigo-200">
+                            <Phone className="h-7 w-7 text-indigo-600" />
                         </div>
                         <p className="font-semibold text-[#18181B] text-sm">No call records found</p>
                         <p className="text-[#71717A] text-xs mt-1">
@@ -708,7 +708,7 @@ const FasterqCalls = () => {
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
-                            <thead className="bg-[#FFF7ED] border-b border-[#E4E4E7]">
+                            <thead className="bg-indigo-50/50 border-b border-[#E4E4E7]">
                                 <tr>
                                     {["Date & Time", "Direction", "Contact", "Phone", "Agent", "Duration", "Status", "Recording"].map(h => (
                                         <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold text-[#71717A] uppercase tracking-wide whitespace-nowrap">{h}</th>
@@ -721,7 +721,7 @@ const FasterqCalls = () => {
                                         <tr
                                             key={call.id}
                                             onClick={() => setExpandedRow(expandedRow === call.id ? null : call.id)}
-                                            className="hover:bg-[#FFF7ED]/50 transition-colors border-b border-[#F4F4F5] cursor-pointer"
+                                            className="hover:bg-indigo-50/30 transition-colors border-b border-[#F4F4F5] cursor-pointer"
                                         >
                                             <td className="px-4 py-3 text-xs text-[#71717A] whitespace-nowrap">{fmtDate(call.startedAt)}</td>
                                             <td className="px-4 py-3"><DirectionChip d={call.direction} /></td>
@@ -730,7 +730,7 @@ const FasterqCalls = () => {
                                                 {call.lead && (
                                                     <button
                                                         onClick={e => { e.stopPropagation(); navigate(`/leads/${call.lead.id}`); }}
-                                                        className="text-[10px] text-[#F97316] font-medium mt-0.5 flex items-center gap-0.5 hover:underline"
+                                                        className="text-[10px] text-indigo-600 font-medium mt-0.5 flex items-center gap-0.5 hover:underline"
                                                     >
                                                         {call.lead.name} <ExternalLink className="h-2.5 w-2.5" />
                                                     </button>
@@ -747,7 +747,7 @@ const FasterqCalls = () => {
                                         </tr>
                                         {/* Expanded row — notes + end time */}
                                         {expandedRow === call.id && (
-                                            <tr key={`${call.id}-exp`} className="bg-[#FFF7ED]/40 border-b border-[#F4F4F5]">
+                                            <tr key={`${call.id}-exp`} className="bg-indigo-50/20 border-b border-[#F4F4F5]">
                                                 <td colSpan={8} className="px-4 py-3">
                                                     <div className="flex flex-wrap gap-6 text-xs">
                                                         {call.endedAt && (
@@ -790,7 +790,7 @@ const FasterqCalls = () => {
                         <span className="text-xs text-[#71717A]">Page {page} of {pages} · {total} calls</span>
                         <div className="flex items-center gap-1.5">
                             <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
-                                className="p-1.5 rounded-lg border border-[#E4E4E7] disabled:opacity-40 hover:bg-[#FFF7ED] hover:border-[#F97316] transition-colors">
+                                className="p-1.5 rounded-lg border border-[#E4E4E7] disabled:opacity-40 hover:bg-indigo-50 hover:border-indigo-600 transition-colors">
                                 <ChevronLeft className="h-4 w-4 text-[#18181B]" />
                             </button>
                             {/* Page numbers */}
@@ -799,13 +799,13 @@ const FasterqCalls = () => {
                                 if (p < 1 || p > pages) return null;
                                 return (
                                     <button key={p} onClick={() => setPage(p)}
-                                        className={`h-7 w-7 rounded-lg text-xs font-medium transition-colors ${p === page ? "bg-[#F97316] text-white" : "border border-[#E4E4E7] text-[#18181B] hover:bg-[#FFF7ED]"}`}>
+                                        className={`h-7 w-7 rounded-lg text-xs font-medium transition-colors ${p === page ? "bg-indigo-600 text-white" : "border border-[#E4E4E7] text-[#18181B] hover:bg-indigo-50"}`}>
                                         {p}
                                     </button>
                                 );
                             })}
                             <button disabled={page >= pages} onClick={() => setPage(p => p + 1)}
-                                className="p-1.5 rounded-lg border border-[#E4E4E7] disabled:opacity-40 hover:bg-[#FFF7ED] hover:border-[#F97316] transition-colors">
+                                className="p-1.5 rounded-lg border border-[#E4E4E7] disabled:opacity-40 hover:bg-indigo-50 hover:border-indigo-600 transition-colors">
                                 <ChevronRight className="h-4 w-4 text-[#18181B]" />
                             </button>
                         </div>

@@ -41,7 +41,7 @@ export default function AppLayout() {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="min-h-screen flex items-center justify-center bg-[#f8f6ff]">
                 <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
             </div>
         );
@@ -55,7 +55,7 @@ export default function AppLayout() {
     const mainLeft = panelOpen ? 296 : 56;
 
     return (
-        <div className="min-h-screen bg-gray-50 flex">
+        <div className="min-h-screen bg-[#f8f6ff] flex">
             {/* Zone 1 — Navigation Rail (56px) */}
             <NavigationRail
                 panelOpen={panelOpen}

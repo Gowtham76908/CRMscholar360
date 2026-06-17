@@ -20,7 +20,7 @@ const { isMemberOfDepartment } = require("./leadDepartmentService");
  */
 
 // Build the LeadDepartment `where` scope for an actor + department.
-async function buildScope(department, actor) {
+async function buildScope(department, actor, assignedEmployeeId, startDate, endDate) {
     if (!isValidDepartment(department)) {
         throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, `Invalid department: ${department}`);
     }
@@ -31,9 +31,32 @@ async function buildScope(department, actor) {
         if (!(await isMemberOfDepartment(actor.userId, department))) {
             throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You do not manage this department");
         }
-    } else if (actor.role !== "SUPER_ADMIN") {
+        if (assignedEmployeeId) {
+            where.assignedEmployeeId = assignedEmployeeId;
+        }
+    } else if (actor.role === "SUPER_ADMIN") {
+        if (assignedEmployeeId) {
+            where.assignedEmployeeId = assignedEmployeeId;
+        }
+    } else {
         throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Access denied");
     }
+
+    if (startDate && endDate) {
+        where.createdAt = {
+            gte: new Date(startDate + "T00:00:00Z"),
+            lte: new Date(endDate + "T23:59:59Z"),
+        };
+    } else if (startDate) {
+        where.createdAt = {
+            gte: new Date(startDate + "T00:00:00Z"),
+        };
+    } else if (endDate) {
+        where.createdAt = {
+            lte: new Date(endDate + "T23:59:59Z"),
+        };
+    }
+
     return where;
 }
 
@@ -42,8 +65,8 @@ async function buildScope(department, actor) {
  * totals, today's intake, unassigned count, won/lost/active counts, conversion
  * rate, and an aging breakdown of active services.
  */
-async function getDepartmentDashboard({ department, actor }) {
-    const where = await buildScope(department, actor);
+async function getDepartmentDashboard({ department, actor, assignedEmployeeId, startDate, endDate }) {
+    const where = await buildScope(department, actor, assignedEmployeeId, startDate, endDate);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);

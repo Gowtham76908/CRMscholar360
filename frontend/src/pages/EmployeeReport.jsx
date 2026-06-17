@@ -12,6 +12,7 @@ import {
     CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import api from "../api/axios";
+import { roleLabel } from "../lib/roles";
 import { useAuth } from "../context/AuthContext";
 import FasterqSection, { fmtSecs } from "../components/fasterq/FasterqSection";
 import ProductivitySection from "../components/workforce/ProductivitySection";
@@ -261,7 +262,7 @@ const EmployeeReport = () => {
                     </div>
                     <div className="flex-1">
                         <h1 className="text-xl font-bold text-[#18181B]">{profile.name}</h1>
-                        <p className="text-sm text-[#71717A]">{profile.jobTitle || profile.role} {profile.department ? `· ${profile.department}` : ""}</p>
+                        <p className="text-sm text-[#71717A]">{profile.jobTitle || roleLabel(profile.role)} {profile.department ? `· ${profile.department}` : ""}</p>
                         {profile.manager && (
                             <p className="text-xs text-[#71717A] mt-0.5">Reports to: <span className="font-medium text-[#18181B]">{profile.manager.name}</span></p>
                         )}

@@ -1,24 +1,38 @@
 @import "tailwindcss";
 
-/* ── Brand: remap indigo → orange so all existing indigo-* classes go orange ── */
+/* ── Brand: remap colors to violet/purple theme ── */
 @theme {
-  /* indigo scale → orange scale */
-  --color-indigo-50:  #fff7ed;
-  --color-indigo-100: #ffedd5;
-  --color-indigo-200: #fed7aa;
-  --color-indigo-300: #fdba74;
-  --color-indigo-400: #fb923c;
-  --color-indigo-500: #f97316;
-  --color-indigo-600: #ea580c;
-  --color-indigo-700: #c2410c;
-  --color-indigo-800: #9a3412;
-  --color-indigo-900: #7c2d12;
+  /* indigo scale → violet scale */
+  --color-indigo-50:  #f5f3ff;
+  --color-indigo-100: #ede9fe;
+  --color-indigo-200: #ddd6fe;
+  --color-indigo-300: #c4b5fd;
+  --color-indigo-400: #a78bfa;
+  --color-indigo-500: #8b5cf6;
+  --color-indigo-600: #7c3aed;
+  --color-indigo-700: #6d28d9;
+  --color-indigo-800: #5b21b6;
+  --color-indigo-900: #4c1d95;
+  --color-indigo-950: #2e1065;
 
-  /* brand aliases */
-  --color-brand-orange:      #F97316;
-  --color-brand-orange-light:#FB923C;
-  --color-brand-orange-soft: #FED7AA;
-  --color-brand-orange-bg:   #FFF7ED;
+  /* blue scale → violet scale */
+  --color-blue-50:  #f5f3ff;
+  --color-blue-100: #ede9fe;
+  --color-blue-200: #ddd6fe;
+  --color-blue-300: #c4b5fd;
+  --color-blue-400: #a78bfa;
+  --color-blue-500: #8b5cf6;
+  --color-blue-600: #7c3aed;
+  --color-blue-700: #6d28d9;
+  --color-blue-800: #5b21b6;
+  --color-blue-900: #4c1d95;
+  --color-blue-950: #2e1065;
+
+  /* brand aliases mapped to violet */
+  --color-brand-orange:      #7c3aed;
+  --color-brand-orange-light:#8b5cf6;
+  --color-brand-orange-soft: #ede9fe;
+  --color-brand-orange-bg:   #f5f3ff;
   --color-brand-text:        #18181B;
   --color-brand-muted:       #71717A;
   --color-brand-border:      #E4E4E7;
@@ -26,7 +40,7 @@
 
 /* ── Global focus rings (exclude buttons/roles that manage their own ring) ───── */
 *:focus-visible:not(button):not([role="button"]):not(a) {
-  outline: 2px solid #F97316;
+  outline: 2px solid #7c3aed;
   outline-offset: 2px;
 }
 

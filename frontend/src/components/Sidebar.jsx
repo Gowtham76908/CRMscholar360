@@ -1,4 +1,4 @@
-﻿import {
+import {
     LayoutDashboard, Users, CheckSquare, Settings, BarChart,
     Building, MessageSquare, Clock, Calendar, LogOut, SearchCheck,
     Linkedin, Receipt, PhoneCall, Bot, Send, Search,
@@ -8,6 +8,7 @@
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../lib/utils";
+import { roleLabel } from "../lib/roles";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "./Avatar";
 import { useQuery } from "@tanstack/react-query";
@@ -18,40 +19,7 @@ const isManager     = (r) => r === "SUPER_ADMIN" || r === "ADMIN";
 // EMPLOYEE sees everything not gated by the above
 
 const NAV = [
-    // ── All roles ────────────────────────────────────────────────────────────
-    { group: "Workspace", icon: LayoutDashboard, label: "Dashboard",   path: "/dashboard" },
-    { group: "Workspace", icon: Users,           label: "Leads",       path: "/leads" },
-    { group: "Workspace", icon: HandCoins,       label: "Deals",       path: "/deals" },
-    { group: "Workspace", icon: LayoutGrid,      label: "Pipeline",    path: "/deals/pipeline" },
-    { group: "Workspace", icon: Building,        label: "Dept. Board", path: "/department-board" },
-    { group: "Activity",  icon: Inbox,           label: "Inbox",       path: "/inbox" },
-    { group: "Activity",  icon: CheckSquare,     label: "Tasks",       path: "/tasks" },
-    { group: "Activity",  icon: MessageSquare,   label: "Messages",    path: "/messages" },
-    { group: "Activity",  icon: Clock,           label: "Attendance",  path: "/attendance" },
-    { group: "Activity",  icon: Calendar,        label: "Leave",       path: "/leave" },
-    { group: "Account",   icon: Settings,        label: "Settings",    path: "/settings" },
-
-    // ── Manager + Super Admin ─────────────────────────────────────────────────
-    { group: "Team",      icon: ClipboardList, label: "Department Queue",   path: "/department-queue",  managerOnly: true },
-    { group: "Team",      icon: TrendingUp,    label: "Team Performance",   path: "/team-performance",  managerOnly: true },
-    { group: "Team",      icon: IndianRupee,   label: "Revenue Report",     path: "/revenue-report",    managerOnly: true },
-    { group: "Team",      icon: Trophy,        label: "Leaderboard",        path: "/leaderboard",       managerOnly: true },
-    { group: "Team",      icon: PhoneCall,     label: "Fasterq Calls",      path: "/fasterq",           managerOnly: true },
-    { group: "Team",      icon: BarChart,      label: "Reports",            path: "/reports",           managerOnly: true },
-    { group: "Team",      icon: Sparkles,      label: "AI Usage",           path: "/ai-usage",          managerOnly: true },
-
-    // ── Super Admin only ──────────────────────────────────────────────────────
-    { group: "Intelligence", icon: Bot,         label: "Automations",      path: "/automations",            superAdminOnly: true },
-    { group: "Intelligence", icon: Send,        label: "WA Campaigns",     path: "/whatsapp/campaigns",     superAdminOnly: true },
-    { group: "Intelligence", icon: Zap,         label: "WA Auto Reply",    path: "/whatsapp/auto-replies",  superAdminOnly: true },
-    { group: "Admin",        icon: UserCog,     label: "Team",             path: "/team",                   superAdminOnly: true },
-    { group: "Admin",        icon: UserCheck,   label: "Team Management",  path: "/team-management",        superAdminOnly: true },
-    { group: "Admin",        icon: Network,     label: "Dept. Staffing",   path: "/department-staffing",    superAdminOnly: true },
-    { group: "Admin",        icon: GitMerge,    label: "Duplicates",       path: "/duplicates",             superAdminOnly: true },
-    { group: "Admin",        icon: Receipt,     label: "Invoices",         path: "/invoices",               superAdminOnly: true },
-    { group: "Admin",        icon: SearchCheck, label: "Search Leads",     path: "/search-leads",           superAdminOnly: true },
-    { group: "Admin",        icon: Linkedin,    label: "LinkedIn Leads",   path: "/linkedin-leads",         superAdminOnly: true },
-    { group: "Admin",        icon: Puzzle,      label: "Integrations",     path: "/integrations",           superAdminOnly: true },
+    { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" }
 ];
 
 const Sidebar = ({ collapsed = false, onToggle }) => {
@@ -59,102 +27,110 @@ const Sidebar = ({ collapsed = false, onToggle }) => {
     const { user, logout, onlineStatus } = useAuth();
     const role = user?.role;
 
-    const { data: dashStats } = useQuery({
-        queryKey: ["dashboard-stats"],
-        queryFn: () => api.get("/leads/stats").then(r => r.data),
-        staleTime: 60_000,
-        retry: false,
-    });
-    const overdueCount = dashStats?.overdueFollowUps ?? 0;
-
-    const visible = NAV.filter((item) => {
-        if (item.superAdminOnly) return isSuperAdmin(role);
-        if (item.managerOnly)    return isManager(role);
-        return true;
-    });
-
-    // Group them preserving order
-    const groups = visible.reduce((acc, item) => {
-        if (!acc[item.group]) acc[item.group] = [];
-        acc[item.group].push(item);
-        return acc;
-    }, {});
-
     return (
         <aside className={cn(
-            "fixed inset-y-0 left-0 z-10 hidden md:flex flex-col bg-white border-r border-gray-200 transition-all duration-300",
+            "fixed inset-y-0 left-0 z-10 hidden md:flex flex-col bg-indigo-50/40 border-r border-gray-200/80 backdrop-blur-md transition-all duration-300",
             collapsed ? "w-14" : "w-64"
         )}>
             {/* Logo */}
             <div className={cn(
-                "flex items-center h-16 border-b border-gray-200 overflow-hidden",
-                collapsed ? "px-0 justify-center" : "px-6"
+                "flex flex-col justify-center border-b border-gray-200/60 overflow-hidden",
+                collapsed ? "px-0 items-center h-16" : "px-6 h-20"
             )}>
-                <img src="/DCODE.PNG" alt="D-CRM" className="h-8 w-8 object-contain flex-shrink-0" />
-                {!collapsed && <span className="ml-2 font-bold text-xl text-gray-900 whitespace-nowrap">D-CRM</span>}
+                {collapsed ? (
+                    <span className="font-extrabold text-indigo-600 text-xl">CP</span>
+                ) : (
+                    <div className="flex flex-col">
+                        <span className="font-extrabold text-lg text-indigo-950 leading-tight">Corporate Portal</span>
+                        <span className="text-[10px] font-semibold text-indigo-400 tracking-wider mt-0.5">Deep Lavender System</span>
+                    </div>
+                )}
             </div>
 
             {/* Nav */}
-            <nav className="flex-1 px-2 py-4 overflow-y-auto space-y-4 overflow-x-hidden">
-                {Object.entries(groups).map(([groupLabel, items]) => (
-                    <div key={groupLabel}>
-                        {!collapsed && (
-                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest px-3 mb-1">
-                                {groupLabel}
-                            </p>
-                        )}
-                        {collapsed && <div className="h-px bg-gray-100 mx-2 mb-2" />}
-                        <div className="space-y-0.5">
-                            {items.map((item) => {
-                                const isActive = location.pathname === item.path ||
-                                    (item.path !== "/dashboard" && location.pathname.startsWith(item.path));
-                                return (
-                                    <Link
-                                        key={item.path}
-                                        to={item.path}
-                                        title={collapsed ? item.label : undefined}
-                                        className={cn(
-                                            "relative flex items-center rounded-lg transition-colors group",
-                                            collapsed ? "justify-center p-2.5" : "px-3 py-2 text-sm font-medium",
-                                            isActive
-                                                ? "bg-orange-50 text-orange-700"
-                                                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                                        )}
-                                    >
-                                        <item.icon className={cn(
-                                            "transition-colors shrink-0",
-                                            collapsed ? "h-5 w-5" : "mr-3 h-4 w-4",
-                                            isActive ? "text-orange-600" : "text-gray-400 group-hover:text-gray-500"
-                                        )} />
-                                        {!collapsed && (
-                                            <>
-                                                <span className="flex-1">{item.label}</span>
-                                                {item.path === "/leads" && overdueCount > 0 && (
-                                                    <span className="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">
-                                                        {overdueCount}
-                                                    </span>
-                                                )}
-                                            </>
-                                        )}
-                                        {collapsed && item.path === "/leads" && overdueCount > 0 && (
-                                            <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-red-500" />
-                                        )}
-                                    </Link>
-                                );
-                            })}
-                        </div>
-                    </div>
-                ))}
+            <nav className="flex-1 px-2 py-6 overflow-y-auto space-y-1.5 overflow-x-hidden">
+                {NAV.map((item) => {
+                    const isActive = location.pathname === item.path ||
+                        (item.path !== "/dashboard" && location.pathname.startsWith(item.path));
+                    return (
+                        <Link
+                            key={item.path}
+                            to={item.path}
+                            title={collapsed ? item.label : undefined}
+                            className={cn(
+                                "relative flex items-center rounded-xl transition-all duration-200 group",
+                                collapsed ? "justify-center p-2.5" : "px-4 py-3 text-sm font-semibold",
+                                isActive
+                                    ? "bg-indigo-100 text-indigo-600 shadow-sm shadow-indigo-100"
+                                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                            )}
+                        >
+                            <item.icon className={cn(
+                                "transition-colors shrink-0",
+                                collapsed ? "h-5 w-5" : "mr-3.5 h-5 w-5",
+                                isActive ? "text-indigo-600" : "text-gray-400 group-hover:text-gray-600"
+                            )} />
+                            {!collapsed && (
+                                <span className="flex-1 tracking-wide">{item.label}</span>
+                            )}
+                        </Link>
+                    );
+                })}
             </nav>
 
             {/* Bottom */}
-            <div className={cn("border-t border-gray-200", collapsed ? "p-2 space-y-2" : "p-4 space-y-2")}>
+            <div className={cn("border-t border-gray-200/60", collapsed ? "p-2 space-y-2" : "p-4 space-y-3")}>
+                {/* Export Data Button */}
+                {!collapsed && (
+                    <button className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors shadow-md shadow-indigo-100/50 mb-2">
+                        Export Data
+                    </button>
+                )}
+
+                {/* Settings & Help */}
+                {!collapsed ? (
+                    <div className="space-y-1">
+                        <Link
+                            to="/settings"
+                            className="flex items-center gap-3.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-50 px-3 py-2 text-sm font-semibold transition-colors"
+                        >
+                            <Settings className="h-4 w-4 text-gray-400" />
+                            <span>Settings</span>
+                        </Link>
+                        <a
+                            href="#"
+                            className="flex items-center gap-3.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-50 px-3 py-2 text-sm font-semibold transition-colors"
+                        >
+                            <AlertCircle className="h-4 w-4 text-gray-400" />
+                            <span>Help</span>
+                        </a>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center gap-1">
+                        <Link
+                            to="/settings"
+                            title="Settings"
+                            className="p-2.5 rounded-lg text-gray-400 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+                        >
+                            <Settings className="h-5 w-5" />
+                        </Link>
+                        <a
+                            href="#"
+                            title="Help"
+                            className="p-2.5 rounded-lg text-gray-400 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+                        >
+                            <AlertCircle className="h-5 w-5" />
+                        </a>
+                    </div>
+                )}
+
+                {/* Collapse Button */}
                 <button
                     onClick={onToggle}
                     title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                     className={cn(
-                        "flex items-center gap-2 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition-colors",
-                        collapsed ? "w-full justify-center p-2.5" : "w-full px-3 py-2 text-xs"
+                        "flex items-center gap-2 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors",
+                        collapsed ? "w-full justify-center p-2" : "w-full px-3 py-1.5 text-xs font-medium"
                     )}
                 >
                     {collapsed
@@ -164,35 +140,28 @@ const Sidebar = ({ collapsed = false, onToggle }) => {
 
                 {!collapsed && (
                     <>
-                        <button
-                            onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }))}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-400 border border-gray-200 rounded-lg hover:border-orange-300 hover:text-orange-600 hover:bg-orange-50 transition-colors"
-                        >
-                            <Search className="h-3.5 w-3.5" />
-                            <span className="flex-1 text-left">Search & navigate</span>
-                            <kbd className="text-[10px] font-medium bg-gray-100 px-1.5 py-0.5 rounded">Ctrl K</kbd>
-                        </button>
-
-                        <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-lg border border-gray-100">
+                        {/* Profile Info */}
+                        <div className="flex items-center gap-3 px-3 py-2 bg-gray-50/80 rounded-xl border border-gray-100">
                             <Avatar user={user} size="sm" status={onlineStatus} />
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">{user?.name || "User"}</p>
-                                <p className="text-xs text-gray-500 truncate capitalize">{role?.replace("_", " ").toLowerCase() || "—"}</p>
+                                <p className="text-sm font-semibold text-gray-900 truncate leading-snug">{user?.name || "User"}</p>
+                                <p className="text-[10px] font-bold text-gray-400 truncate tracking-wider leading-none mt-0.5">{role ? roleLabel(role) : "—"}</p>
                             </div>
                         </div>
 
+                        {/* Logout */}
                         <button
                             onClick={logout}
-                            className="w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg text-red-600 hover:bg-red-50 transition-colors group"
+                            className="w-full flex items-center px-3 py-2 text-sm font-semibold rounded-lg text-red-600 hover:bg-red-50/50 transition-colors group"
                         >
-                            <LogOut className="mr-3 h-5 w-5 text-red-500 group-hover:text-red-600" />
+                            <LogOut className="mr-3 h-4 w-4 text-red-500 group-hover:text-red-600" />
                             Logout
                         </button>
                     </>
                 )}
 
                 {collapsed && (
-                    <button onClick={logout} title="Logout" className="w-full flex items-center justify-center p-2.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                    <button onClick={logout} title="Logout" className="w-full flex items-center justify-center p-2.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50/50 transition-colors">
                         <LogOut className="h-5 w-5" />
                     </button>
                 )}

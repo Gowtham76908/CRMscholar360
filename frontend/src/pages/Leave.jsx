@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
@@ -102,9 +102,9 @@ const Leave = () => {
                 {/* Pending Approvals (Admin Only) */}
                 {user?.role === "SUPER_ADMIN" || user?.role === "ADMIN" && pendingLeaves.length > 0 && (
                     <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-                        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-red-50">
+                        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50">
                             <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                                <AlertCircle className="h-5 w-5 text-orange-600" />
+                                <AlertCircle className="h-5 w-5 text-indigo-600" />
                                 Pending Approvals ({pendingLeaves.length})
                             </h2>
                         </div>

@@ -3,6 +3,7 @@ const logActivity = require("../utils/activityLogger");
 const { ApiError, ERROR_CODES } = require("../utils/apiError");
 const { runRulesForDepartmentEvent } = require("./automationEngine");
 const { awardServiceCommission } = require("./commissionService");
+const { createNotification } = require("./notificationService");
 const {
     isValidDepartment,
     isValidStage,
@@ -83,23 +84,50 @@ async function canUpdateStage(actor, leadDept) {
     return canManageDepartment(actor, leadDept.department);
 }
 
+// ── Historical stage ledger ───────────────────────────────────────────────────
+
+/**
+ * Append one row to the LeadDepartmentStageEvent ledger — the source of truth for
+ * "what happened over time" analytics. MUST be called with a transaction client
+ * (`tx`) on the same transaction as the state change it records, so a stage change
+ * can never exist without its event (and vice-versa).
+ *
+ * `fromStage = null` marks a service entering its workflow (creation/allocation).
+ * `changedByUserId = null` marks a system/programmatic origin (import, webhook).
+ */
+function recordStageEvent(tx, { leadDepartmentId, department, fromStage = null, toStage, changedByUserId = null }) {
+    return tx.leadDepartmentStageEvent.create({
+        data: { leadDepartmentId, department, fromStage, toStage, changedByUserId },
+    });
+}
+
 // ── Creation ─────────────────────────────────────────────────────────────────
 
 /**
- * Create the SALES LeadDepartment for a freshly created lead.
- * Pass a transaction client so the lead + its SALES service are atomic.
+ * Create the SALES LeadDepartment for a freshly created lead, plus its first stage
+ * event (null → ENQUIRY = "enquiry received"). Pass a transaction client so the
+ * lead, its SALES service, and the entry event are all atomic.
  * Used exclusively by leadService.createLead — every lead enters through Sales.
  */
-function createSalesAssignment(client, leadId, assignedEmployeeId = null) {
-    return client.leadDepartment.create({
+async function createSalesAssignment(client, leadId, assignedEmployeeId = null, changedByUserId = null) {
+    const stage = getInitialStage("SALES");
+    const created = await client.leadDepartment.create({
         data: {
             leadId,
             department: "SALES",
-            stage: getInitialStage("SALES"),
+            stage,
             assignedEmployeeId,
             assignedAt: assignedEmployeeId ? new Date() : null,
         },
     });
+    await recordStageEvent(client, {
+        leadDepartmentId: created.id,
+        department: "SALES",
+        fromStage: null,
+        toStage: stage,
+        changedByUserId,
+    });
+    return created;
 }
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────
@@ -134,14 +162,42 @@ async function allocateDepartments({ leadId, departments, actor }) {
         throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, `Department(s) have no workflow configured yet: ${unconfigured.join(", ")}`);
     }
 
-    await prisma.leadDepartment.createMany({
-        data: targets.map(department => ({
-            leadId,
-            department,
-            stage: getInitialStage(department),
-        })),
-        skipDuplicates: true, // re-allocating an existing department is a no-op
+    // Only departments not already present are created (skipDuplicates semantics),
+    // and only those emit a "entered workflow" stage event (null → initial stage).
+    const existing = await prisma.leadDepartment.findMany({
+        where: { leadId, department: { in: targets } },
+        select: { department: true },
     });
+    const existingSet = new Set(existing.map(e => e.department));
+    const newDepartments = targets.filter(d => !existingSet.has(d));
+
+    if (newDepartments.length) {
+        // Creation + its entry events are atomic: a service can never be created
+        // without the ledger row that records it entering the workflow.
+        await prisma.$transaction(async (tx) => {
+            await tx.leadDepartment.createMany({
+                data: newDepartments.map(department => ({
+                    leadId,
+                    department,
+                    stage: getInitialStage(department),
+                })),
+                skipDuplicates: true,
+            });
+            const created = await tx.leadDepartment.findMany({
+                where: { leadId, department: { in: newDepartments } },
+                select: { id: true, department: true, stage: true },
+            });
+            await tx.leadDepartmentStageEvent.createMany({
+                data: created.map(c => ({
+                    leadDepartmentId: c.id,
+                    department: c.department,
+                    fromStage: null,
+                    toStage: c.stage,
+                    changedByUserId: actor.userId,
+                })),
+            });
+        });
+    }
 
     await logActivity({
         leadId,
@@ -204,6 +260,321 @@ async function assignConsultant({ leadDepartmentId, consultantId, actor }) {
 }
 
 /**
+ * Bulk assign (or reassign) a consultant to multiple department services.
+ * Manager-of-department (or Director) only; the consultant must be a member of
+ * that department.
+ */
+async function assignConsultantBulk({ leadDepartmentIds, consultantId, actor }) {
+    if (!Array.isArray(leadDepartmentIds) || leadDepartmentIds.length === 0) {
+        throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "leadDepartmentIds must be a non-empty array");
+    }
+
+    const consultant = await prisma.user.findUnique({
+        where: { id: consultantId },
+        select: { id: true, isActive: true },
+    });
+    if (!consultant || !consultant.isActive) {
+        throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Consultant not found or inactive");
+    }
+
+    const results = [];
+
+    for (const id of leadDepartmentIds) {
+        const leadDept = await prisma.leadDepartment.findUnique({ where: { id } });
+        if (!leadDept) continue;
+
+        if (!(await canManageDepartment(actor, leadDept.department))) {
+            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, `You do not manage the department: ${leadDept.department}`);
+        }
+
+        if (!(await isMemberOfDepartment(consultantId, leadDept.department))) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, `Consultant does not belong to department: ${leadDept.department}`);
+        }
+
+        const updated = await prisma.leadDepartment.update({
+            where: { id },
+            data: { assignedEmployeeId: consultantId, assignedAt: new Date() },
+        });
+
+        await logActivity({
+            leadId: leadDept.leadId,
+            userId: actor.userId,
+            action: "CONSULTANT_ASSIGNED",
+            metadata: { department: leadDept.department, consultantId },
+        });
+
+        runRulesForDepartmentEvent("ASSIGNED", updated, { consultantId }).catch(console.error);
+        results.push(updated);
+    }
+
+    return results;
+}
+
+// ── Self-claim + manager-approved reassignment ────────────────────────────────
+
+/** Active ADMIN (Manager) members of a department — the approvers for that
+ *  department's reassignment requests. */
+async function getDepartmentManagers(department) {
+    const rows = await prisma.userDepartment.findMany({
+        where: { department, user: { isActive: true, role: "ADMIN" } },
+        select: { userId: true },
+    });
+    return rows.map(r => r.userId);
+}
+
+/**
+ * Consultant self-claim. A department member may take an UNASSIGNED service that
+ * is still at its initial (ENQUIRY) stage directly, with no manager approval.
+ * Anything else (already assigned, or past enquiry) must go through
+ * requestReassignment.
+ */
+async function claimService({ leadDepartmentId, actor }) {
+    const leadDept = await prisma.leadDepartment.findUnique({ where: { id: leadDepartmentId } });
+    if (!leadDept) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Department assignment not found");
+
+    if (!(await isMemberOfDepartment(actor.userId, leadDept.department))) {
+        throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You are not a member of this department");
+    }
+    if (leadDept.assignedEmployeeId) {
+        throw new ApiError(409, ERROR_CODES.DUPLICATE_ENTRY, "This lead is already assigned — request a reassignment instead");
+    }
+    if (leadDept.stage !== getInitialStage(leadDept.department)) {
+        throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Only enquiry-stage leads can be self-assigned");
+    }
+
+    const updated = await prisma.leadDepartment.update({
+        where: { id: leadDepartmentId },
+        data: { assignedEmployeeId: actor.userId, assignedAt: new Date() },
+    });
+
+    await logActivity({
+        leadId: leadDept.leadId,
+        userId: actor.userId,
+        action: "CONSULTANT_ASSIGNED",
+        metadata: { department: leadDept.department, consultantId: actor.userId, selfClaim: true },
+    });
+
+    runRulesForDepartmentEvent("ASSIGNED", updated, { consultantId: actor.userId }).catch(console.error);
+
+    return updated;
+}
+
+/**
+ * A consultant raises a request to move a service to a different consultant —
+ * either taking over an already-assigned lead, or handing their own lead to
+ * someone else. The assignment does NOT change yet; the request goes to the
+ * department's managers (in-app notification + a card in their department queue)
+ * to approve or reject.
+ */
+async function requestReassignment({ leadDepartmentId, toUserId, reason = null, actor }) {
+    if (!toUserId) {
+        throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "toUserId is required");
+    }
+
+    const leadDept = await prisma.leadDepartment.findUnique({
+        where: { id: leadDepartmentId },
+        include: { lead: { select: { name: true } } },
+    });
+    if (!leadDept) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Department assignment not found");
+
+    if (!(await isMemberOfDepartment(actor.userId, leadDept.department))) {
+        throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You are not a member of this department");
+    }
+
+    // Only the current assignee may hand the lead off; anyone in the department may
+    // request to take it for themselves.
+    const isCurrentAssignee = leadDept.assignedEmployeeId === actor.userId;
+    const takingForSelf = toUserId === actor.userId;
+    if (!isCurrentAssignee && !takingForSelf) {
+        throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Only the assigned consultant can hand this lead to someone else");
+    }
+    if (toUserId === leadDept.assignedEmployeeId) {
+        throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "That consultant is already assigned to this lead");
+    }
+
+    const target = await prisma.user.findUnique({
+        where: { id: toUserId },
+        select: { id: true, isActive: true, name: true },
+    });
+    if (!target || !target.isActive) {
+        throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Target consultant not found or inactive");
+    }
+    if (!(await isMemberOfDepartment(toUserId, leadDept.department))) {
+        throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Target consultant does not belong to this department");
+    }
+
+    // One open request per service at a time.
+    const pending = await prisma.leadAssignmentRequest.findFirst({
+        where: { leadDepartmentId, status: "PENDING" },
+        select: { id: true },
+    });
+    if (pending) {
+        throw new ApiError(409, ERROR_CODES.DUPLICATE_ENTRY, "A reassignment request is already pending for this lead");
+    }
+
+    const request = await prisma.leadAssignmentRequest.create({
+        data: {
+            leadDepartmentId,
+            department: leadDept.department,
+            requestedById: actor.userId,
+            fromUserId: leadDept.assignedEmployeeId,
+            toUserId,
+            reason,
+        },
+        include: {
+            requestedBy: { select: { id: true, name: true } },
+            toUser: { select: { id: true, name: true } },
+        },
+    });
+
+    await logActivity({
+        leadId: leadDept.leadId,
+        userId: actor.userId,
+        action: "REASSIGNMENT_REQUESTED",
+        metadata: { department: leadDept.department, fromUserId: leadDept.assignedEmployeeId, toUserId },
+    });
+
+    // Notify every manager of the department.
+    const managerIds = await getDepartmentManagers(leadDept.department);
+    const link = `/department-queue?department=${leadDept.department}`;
+    await Promise.all(
+        managerIds.map(userId =>
+            createNotification({
+                userId,
+                title: "Reassignment request",
+                message: `${request.requestedBy.name} requested to reassign "${leadDept.lead.name}" (${leadDept.department}) to ${request.toUser.name}.`,
+                type: "REASSIGNMENT_REQUEST",
+                link,
+            })
+        )
+    );
+
+    return request;
+}
+
+/**
+ * A manager (or Director) approves or rejects a pending reassignment request.
+ * Approve performs the actual reassignment atomically and notifies the requester
+ * and the new assignee; reject just notifies the requester.
+ */
+async function decideReassignment({ requestId, decision, actor }) {
+    const action = String(decision || "").toUpperCase();
+    if (!["APPROVE", "REJECT"].includes(action)) {
+        throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "decision must be APPROVE or REJECT");
+    }
+
+    const request = await prisma.leadAssignmentRequest.findUnique({
+        where: { id: requestId },
+        include: {
+            leadDepartment: { include: { lead: { select: { name: true } } } },
+            toUser: { select: { id: true, name: true } },
+        },
+    });
+    if (!request) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Reassignment request not found");
+    if (request.status !== "PENDING") {
+        throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "This request has already been decided");
+    }
+    if (!(await canManageDepartment(actor, request.department))) {
+        throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You do not manage this department");
+    }
+
+    const leadDept = request.leadDepartment;
+    const leadName = leadDept.lead.name;
+    const link = `/leads/${leadDept.leadId}`;
+
+    if (action === "REJECT") {
+        const updated = await prisma.leadAssignmentRequest.update({
+            where: { id: requestId },
+            data: { status: "REJECTED", decidedById: actor.userId, decidedAt: new Date() },
+        });
+        await logActivity({
+            leadId: leadDept.leadId,
+            userId: actor.userId,
+            action: "REASSIGNMENT_REJECTED",
+            metadata: { department: request.department, requestId, toUserId: request.toUserId },
+        });
+        await createNotification({
+            userId: request.requestedById,
+            title: "Reassignment rejected",
+            message: `Your request to reassign "${leadName}" (${request.department}) was rejected.`,
+            type: "REASSIGNMENT_REJECTED",
+            link,
+        });
+        return updated;
+    }
+
+    // APPROVE — target must still be a valid department member.
+    if (!(await isMemberOfDepartment(request.toUserId, request.department))) {
+        throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Target consultant no longer belongs to this department");
+    }
+
+    const { req } = await prisma.$transaction(async (tx) => {
+        const ld = await tx.leadDepartment.update({
+            where: { id: leadDept.id },
+            data: { assignedEmployeeId: request.toUserId, assignedAt: new Date() },
+        });
+        const updatedReq = await tx.leadAssignmentRequest.update({
+            where: { id: requestId },
+            data: { status: "APPROVED", decidedById: actor.userId, decidedAt: new Date() },
+        });
+        return { ld, req: updatedReq };
+    });
+
+    await logActivity({
+        leadId: leadDept.leadId,
+        userId: actor.userId,
+        action: "CONSULTANT_ASSIGNED",
+        metadata: { department: request.department, consultantId: request.toUserId, viaRequest: requestId },
+    });
+
+    runRulesForDepartmentEvent("ASSIGNED", { ...leadDept, assignedEmployeeId: request.toUserId }, {
+        consultantId: request.toUserId,
+    }).catch(console.error);
+
+    // Notify the requester, and the new assignee (if different from the requester).
+    await createNotification({
+        userId: request.requestedById,
+        title: "Reassignment approved",
+        message: `Your request to reassign "${leadName}" (${request.department}) to ${request.toUser.name} was approved.`,
+        type: "REASSIGNMENT_APPROVED",
+        link,
+    });
+    if (request.toUserId !== request.requestedById) {
+        await createNotification({
+            userId: request.toUserId,
+            title: "Lead assigned to you",
+            message: `"${leadName}" (${request.department}) has been assigned to you.`,
+            type: "REASSIGNMENT_APPROVED",
+            link,
+        });
+    }
+
+    return req;
+}
+
+/** Pending reassignment requests for a department (manager / Director view). */
+async function getPendingReassignmentRequests({ department, actor }) {
+    if (!isValidDepartment(department)) {
+        throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, `Invalid department: ${department}`);
+    }
+    if (!(await canManageDepartment(actor, department))) {
+        throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You do not manage this department");
+    }
+    return prisma.leadAssignmentRequest.findMany({
+        where: { department, status: "PENDING" },
+        include: {
+            leadDepartment: {
+                include: { lead: { select: { id: true, name: true, phone: true, email: true } } },
+            },
+            requestedBy: { select: { id: true, name: true } },
+            fromUser: { select: { id: true, name: true } },
+            toUser: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: "asc" },
+    });
+}
+
+/**
  * Advance/update the stage of a department's service.
  * Free movement: the assigned consultant (or dept manager / Director) may set any
  * stage that belongs to the department's workflow. No manager approval required.
@@ -220,11 +591,23 @@ async function updateStage({ leadDepartmentId, stage, actor }) {
         throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, `Invalid stage "${stage}" for ${leadDept.department}`);
     }
 
-    if (stage === leadDept.stage) return leadDept; // no-op
+    if (stage === leadDept.stage) return leadDept; // no-op (no event for a non-move)
 
-    const updated = await prisma.leadDepartment.update({
-        where: { id: leadDepartmentId },
-        data: { stage },
+    // Atomic: the stage update and its ledger row succeed or fail together, so a
+    // stage change can never exist without the historical event that records it.
+    const updated = await prisma.$transaction(async (tx) => {
+        const row = await tx.leadDepartment.update({
+            where: { id: leadDepartmentId },
+            data: { stage },
+        });
+        await recordStageEvent(tx, {
+            leadDepartmentId,
+            department: leadDept.department,
+            fromStage: leadDept.stage,
+            toStage: stage,
+            changedByUserId: actor.userId,
+        });
+        return row;
     });
 
     await logActivity({
@@ -361,7 +744,7 @@ async function getDepartmentQueue({ department, actor, filters = {} }) {
     return prisma.leadDepartment.findMany({
         where,
         include: {
-            lead: { select: { id: true, name: true, email: true, phone: true, source: true, score: true, category: true } },
+            lead: { select: { id: true, name: true, email: true, phone: true, source: true, score: true, category: true, enquiryType: true, createdAt: true } },
             assignedEmployee: { select: { id: true, name: true, email: true } },
         },
         orderBy: { updatedAt: "desc" },
@@ -487,6 +870,12 @@ module.exports = {
     // lifecycle
     allocateDepartments,
     assignConsultant,
+    assignConsultantBulk,
+    claimService,
+    requestReassignment,
+    decideReassignment,
+    getPendingReassignmentRequests,
+    getDepartmentManagers,
     updateStage,
     removeDepartment,
     getDepartmentAssignments,

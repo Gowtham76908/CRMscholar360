@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Zap, Plus, Trash2, ToggleLeft, ToggleRight, ChevronDown, ChevronRight, Loader2, X } from "lucide-react";
 import api from "../api/axios";
+import { roleLabel } from "../lib/roles";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -356,7 +357,7 @@ function RuleModal({ initial, users, onSave, onClose }) {
                                         onChange={e => setActionConfig(i, { userId: e.target.value })}
                                     >
                                         <option value="">— select user —</option>
-                                        {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+                                        {users.map(u => <option key={u.id} value={u.id}>{u.name} ({roleLabel(u.role)})</option>)}
                                     </select>
                                 )}
                                 {action.type === "CREATE_TASK" && (

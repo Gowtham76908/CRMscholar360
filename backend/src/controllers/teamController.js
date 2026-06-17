@@ -1,4 +1,4 @@
-﻿const prisma = require("../utils/prisma");
+const prisma = require("../utils/prisma");
 const bcrypt = require("bcrypt");
 const { upsertUserToStream } = require("./chatController");
 const { getTeamMemberIds } = require("../services/organizationService");
@@ -25,8 +25,8 @@ const createUser = async (req, res, next) => {
             return res.status(403).json({ message: "Only Super Admins can create Managers" });
         }
 
-        if (role === "SUPER_ADMIN") {
-            return res.status(403).json({ message: "Cannot create Super Admin users" });
+        if (role === "SUPER_ADMIN" && req.user.role !== "SUPER_ADMIN") {
+            return res.status(403).json({ message: "Only Directors can create other Directors" });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -134,8 +134,8 @@ const updateUser = async (req, res, next) => {
         const { id } = req.params;
         let { name, phone, role, department, jobTitle, managerId } = req.body;
 
-        if (role === "SUPER_ADMIN") {
-            return res.status(403).json({ message: "Cannot assign SUPER_ADMIN role" });
+        if (role === "SUPER_ADMIN" && req.user.role !== "SUPER_ADMIN") {
+            return res.status(403).json({ message: "Only Directors can assign the Director role" });
         }
         if (role === "ADMIN" && req.user.role !== "SUPER_ADMIN") {
             return res.status(403).json({ message: "Only Super Admins can assign the Manager role" });

@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
@@ -34,8 +34,8 @@ const PeriodBar = ({ period, setPeriod, from, setFrom, to, setTo }) => (
             <button key={p.key} onClick={() => setPeriod(p.key)}
                 className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${
                     period === p.key
-                        ? "bg-[#F97316] text-white shadow-sm"
-                        : "bg-white border border-[#E4E4E7] text-[#18181B] hover:bg-[#FFF7ED] hover:border-[#F97316] hover:text-[#F97316]"
+                        ? "bg-indigo-600 text-white shadow-sm"
+                        : "bg-white border border-[#E4E4E7] text-[#18181B] hover:bg-indigo-50 hover:border-indigo-600 hover:text-indigo-600"
                 }`}>
                 {p.label}
             </button>
@@ -43,10 +43,10 @@ const PeriodBar = ({ period, setPeriod, from, setFrom, to, setTo }) => (
         {period === "custom" && (
             <div className="flex items-center gap-1.5 ml-1">
                 <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-                    className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-[#F97316]" />
+                    className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600" />
                 <span className="text-[#71717A] text-xs">to</span>
                 <input type="date" value={to} onChange={e => setTo(e.target.value)}
-                    className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-[#F97316]" />
+                    className="text-sm border border-[#E4E4E7] rounded-xl px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600" />
             </div>
         )}
     </div>
@@ -151,7 +151,7 @@ const TeamPerformance = () => {
     };
 
     const kpiCards = [
-        { label: "Assigned Leads",     value: kpis?.assignedLeads    ?? 0, icon: Users,         iconBg: "bg-[#FFF7ED]",  iconColor: "text-[#F97316]" },
+        { label: "Assigned Leads",     value: kpis?.assignedLeads    ?? 0, icon: Users,         iconBg: "bg-indigo-50",  iconColor: "text-indigo-600" },
         { label: "Converted Leads",    value: kpis?.convertedLeads   ?? 0, icon: CheckCircle,   iconBg: "bg-green-50",   iconColor: "text-green-600" },
         { label: "Calls Made",         value: kpis?.callsMade        ?? 0, icon: Phone,         iconBg: "bg-blue-50",    iconColor: "text-blue-600"  },
         { label: "Pending Follow-ups", value: kpis?.pendingFollowUps ?? 0, icon: AlertCircle,   iconBg: "bg-yellow-50",  iconColor: "text-yellow-600"},
@@ -165,8 +165,8 @@ const TeamPerformance = () => {
             {/* Header */}
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-[#FFF7ED] flex items-center justify-center shadow-sm border border-[#FED7AA]">
-                        <Users className="h-5 w-5 text-[#F97316]" />
+                    <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center shadow-sm border border-indigo-100">
+                        <Users className="h-5 w-5 text-indigo-600" />
                     </div>
                     <div>
                         <h1 className="text-xl font-bold text-[#18181B]">Team Command Center</h1>
@@ -184,7 +184,7 @@ const TeamPerformance = () => {
 
             {/* KPI cards */}
             {kpisLoading ? (
-                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-[#F97316]" /></div>
+                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-indigo-600" /></div>
             ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                     {kpiCards.map(c => (
@@ -197,17 +197,17 @@ const TeamPerformance = () => {
             <div className="bg-white rounded-2xl border border-[#E4E4E7] p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                        <TrendingUp className="h-4 w-4 text-[#F97316]" />
+                        <TrendingUp className="h-4 w-4 text-indigo-600" />
                         <h2 className="font-semibold text-[#18181B] text-sm">Lead Analytics</h2>
                     </div>
                     <select value={chartMode} onChange={e => setChartMode(e.target.value)}
-                        className="text-xs border border-[#E4E4E7] rounded-lg px-2 py-1.5 bg-white text-[#18181B] focus:outline-none focus:ring-1 focus:ring-[#F97316]">
+                        className="text-xs border border-[#E4E4E7] rounded-lg px-2 py-1.5 bg-white text-[#18181B] focus:outline-none focus:ring-1 focus:ring-indigo-600">
                         <option value="daily">Daily</option>
                         <option value="weekly">Weekly</option>
                     </select>
                 </div>
                 {chartLoading ? (
-                    <div className="h-52 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-[#F97316]" /></div>
+                    <div className="h-52 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-indigo-600" /></div>
                 ) : chartData.length === 0 ? (
                     <div className="h-52 flex items-center justify-center text-[#71717A] text-sm">No data for this period</div>
                 ) : (
@@ -220,7 +220,7 @@ const TeamPerformance = () => {
                             <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E4E4E7", fontSize: 12 }}
                                 labelFormatter={v => new Date(v).toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short" })} />
                             <Legend wrapperStyle={{ fontSize: 11 }} />
-                            <Line dataKey="assigned"  name="Assigned"  stroke="#F97316" strokeWidth={2} dot={false} />
+                            <Line dataKey="assigned"  name="Assigned"  stroke="#7c3aed" strokeWidth={2} dot={false} />
                             <Line dataKey="contacted" name="Contacted" stroke="#3B82F6" strokeWidth={2} dot={false} />
                             <Line dataKey="converted" name="Converted" stroke="#22C55E" strokeWidth={2} dot={false} />
                             <Line dataKey="lost"      name="Lost"      stroke="#EF4444" strokeWidth={2} dot={false} />
@@ -252,7 +252,7 @@ const TeamPerformance = () => {
                 </div>
                 {empLoading ? (
                     <div className="p-10 text-center flex flex-col items-center gap-2 text-[#71717A] text-sm">
-                        <Loader2 className="h-6 w-6 animate-spin text-[#F97316]" /> Loading employees…
+                        <Loader2 className="h-6 w-6 animate-spin text-indigo-600" /> Loading employees…
                     </div>
                 ) : employees.length === 0 ? (
                     <div className="py-16 text-center">
@@ -262,7 +262,7 @@ const TeamPerformance = () => {
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
-                            <thead className="bg-[#FFF7ED] border-b border-[#E4E4E7]">
+                            <thead className="bg-indigo-50/50 border-b border-[#E4E4E7]">
                                 <tr>
                                     {[
                                         { key: "name",            label: "Employee" },
@@ -278,7 +278,7 @@ const TeamPerformance = () => {
                                     ].map(col => (
                                         <th key={col.label}
                                             onClick={() => col.key && toggleSort(col.key)}
-                                            className={`px-4 py-3 text-left text-[11px] font-semibold text-[#71717A] uppercase tracking-wide whitespace-nowrap ${col.key ? "cursor-pointer hover:text-[#F97316] select-none" : ""}`}>
+                                            className={`px-4 py-3 text-left text-[11px] font-semibold text-[#71717A] uppercase tracking-wide whitespace-nowrap ${col.key ? "cursor-pointer hover:text-indigo-600 select-none" : ""}`}>
                                             {col.label}<SortIcon col={col.key} />
                                         </th>
                                     ))}
@@ -286,14 +286,14 @@ const TeamPerformance = () => {
                             </thead>
                             <tbody className="divide-y divide-[#F4F4F5]">
                                 {sorted.map(emp => (
-                                    <tr key={emp.id} className="hover:bg-[#FFF7ED]/40 transition-colors cursor-pointer"
+                                    <tr key={emp.id} className="hover:bg-indigo-50/20 transition-colors cursor-pointer"
                                         onClick={() => navigate(`/employee-report/${emp.id}`)}>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-2">
                                                 {emp.profilePhoto ? (
                                                     <img src={emp.profilePhoto} className="h-8 w-8 rounded-full object-cover" alt="" />
                                                 ) : (
-                                                    <div className="h-8 w-8 rounded-full bg-[#FFF7ED] border border-[#FED7AA] flex items-center justify-center text-[#F97316] font-semibold text-xs">
+                                                    <div className="h-8 w-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-semibold text-xs">
                                                         {emp.name?.[0]?.toUpperCase()}
                                                     </div>
                                                 )}
@@ -315,7 +315,7 @@ const TeamPerformance = () => {
                                         <td className="px-4 py-3 text-[#71717A]">{fmt(emp.talkTime)}</td>
                                         <td className="px-4 py-3">
                                             {emp.pendingFollowUps > 10 ? (
-                                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-100 font-medium">{emp.pendingFollowUps}</span>
+                                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100 font-medium">{emp.pendingFollowUps}</span>
                                             ) : (
                                                 <span className="text-sm text-[#18181B]">{emp.pendingFollowUps}</span>
                                             )}
@@ -334,7 +334,7 @@ const TeamPerformance = () => {
                                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                                             <div className="flex items-center gap-1.5">
                                                 <button onClick={() => navigate(`/employee-report/${emp.id}`)}
-                                                    className="p-1.5 rounded-lg bg-[#FFF7ED] text-[#F97316] hover:bg-[#FED7AA] border border-[#FED7AA] transition-colors"
+                                                    className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-100 transition-colors"
                                                     title="View Analytics">
                                                     <Eye className="h-3.5 w-3.5" />
                                                 </button>

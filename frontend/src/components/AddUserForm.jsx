@@ -1,4 +1,4 @@
-﻿import { useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
@@ -13,8 +13,7 @@ const addUserSchema = z.object({
     email: z.string().email("Invalid email"),
     phone: z.string().min(10, "Phone number is required"),
     password: z.string().min(6, "Password must be at least 6 characters"),
-    role: z.enum(["ADMIN", "EMPLOYEE"]),
-    department: z.string().optional(),
+    role: z.enum(["SUPER_ADMIN", "ADMIN", "EMPLOYEE"]),
     jobTitle: z.string().optional(),
 });
 
@@ -103,26 +102,20 @@ const AddUserForm = ({ onClose }) => {
                 {errors.password && <p className="text-red-500 text-xs">{errors.password.message}</p>}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Role</label>
-                    <select
-                        {...register("role")}
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    >
-                        <option value="EMPLOYEE">Employee</option>
-                        {user?.role === "SUPER_ADMIN" && <option value="ADMIN">Admin</option>}
-                    </select>
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Department</label>
-                    <input
-                        {...register("department")}
-                        placeholder="e.g. Sales"
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    />
-                    <p className="mt-1 text-xs text-gray-400">Service departments are assigned in Dept. Staffing.</p>
-                </div>
+            <div>
+                <label className="block text-sm font-medium text-gray-700">Role</label>
+                <select
+                    {...register("role")}
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                >
+                    <option value="EMPLOYEE">Consultant</option>
+                    {user?.role === "SUPER_ADMIN" && (
+                        <>
+                            <option value="ADMIN">Manager</option>
+                            <option value="SUPER_ADMIN">Director</option>
+                        </>
+                    )}
+                </select>
             </div>
 
             <div>

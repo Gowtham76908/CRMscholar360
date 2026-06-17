@@ -2,6 +2,7 @@
 const paginate = require("../utils/paginate");
 const { signUploadUrl } = require("../utils/signedUpload");
 const { createSalesAssignment, isMemberOfDepartment, getUserDepartments } = require("./leadDepartmentService");
+const { getInitialStage } = require("../config/departmentWorkflows");
 
 /**
  * The ONLY supported way to create a lead. Every lead enters through Sales, so
@@ -36,7 +37,9 @@ async function createLead(data, { createdByUserId, salesAssigneeId } = {}) {
 
     return prisma.$transaction(async (tx) => {
         const lead = await tx.lead.create({ data });
-        await createSalesAssignment(tx, lead.id, salesAssignee);
+        // changedByUserId attributes the "enquiry received" event to the creator when
+        // there is one; programmatic sources (no createdByUserId) record a null actor.
+        await createSalesAssignment(tx, lead.id, salesAssignee, createdByUserId || null);
         return lead;
     });
 }
@@ -70,8 +73,18 @@ const getLeads = async ({
     const managed = role === "ADMIN" ? await getUserDepartments(userId) : [];
     const managedSet = new Set(managed);
 
-    if (role === "EMPLOYEE" || filters.mine) {
+    if (filters.mine) {
         visScope.assignedEmployeeId = userId;
+    } else if (role === "EMPLOYEE") {
+        // Consultants see their own assignments PLUS claimable services: unassigned
+        // leads still at a department's initial (enquiry) stage in a department they
+        // belong to — so they can pick them up directly from the Leads page.
+        const myDepts = await getUserDepartments(userId);
+        const claimable = myDepts
+            .map((d) => ({ department: d, stage: getInitialStage(d) }))
+            .filter((b) => b.stage) // skip departments with no configured workflow
+            .map((b) => ({ department: b.department, assignedEmployeeId: null, stage: b.stage }));
+        visScope.OR = [{ assignedEmployeeId: userId }, ...claimable];
     } else if (role === "ADMIN") {
         if (filters.assignedTo) {
             // Manager filtering to a single consultant — constrained to the departments

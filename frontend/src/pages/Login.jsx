@@ -12,7 +12,7 @@ const loginSchema = z.object({
 });
 
 const previewCards = [
-    { icon: TrendingUp, label: "Lead Pipeline",  value: "Capture & score every lead",    color: "text-orange-500", bg: "bg-orange-50",  delay: "0s",   duration: "5s"   },
+    { icon: TrendingUp, label: "Lead Pipeline",  value: "Capture & score every lead",    color: "text-indigo-600", bg: "bg-indigo-50",  delay: "0s",   duration: "5s"   },
     { icon: Bot,        label: "AI Automation",  value: "Auto follow-ups & reminders",   color: "text-emerald-600",bg: "bg-emerald-50", delay: "1.2s", duration: "6s"   },
     { icon: Users,      label: "Team Activity",  value: "Tasks, sprints & attendance",   color: "text-violet-600", bg: "bg-violet-50",  delay: "0.6s", duration: "4.5s" },
     { icon: Inbox,      label: "Unified Inbox",  value: "WhatsApp, email & calls",       color: "text-sky-600",    bg: "bg-sky-50",     delay: "1.8s", duration: "5.5s" },
@@ -61,12 +61,12 @@ const Login = () => {
     return (
         <div className="min-h-screen flex">
             <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden flex-col justify-between p-12"
-                style={{ background: "linear-gradient(135deg, #fff7ed 0%, #ffedd5 40%, #fed7aa 100%)" }}>
+                style={{ background: "linear-gradient(135deg, #f5f3ff 0%, #ede9fe 40%, #ddd6fe 100%)" }}>
 
                 <div className="absolute top-[-80px] left-[-80px] w-80 h-80 rounded-full opacity-30"
-                    style={{ background: "radial-gradient(circle, #f97316 0%, transparent 70%)", filter: "blur(60px)" }} />
+                    style={{ background: "radial-gradient(circle, #7c3aed 0%, transparent 70%)", filter: "blur(60px)" }} />
                 <div className="absolute bottom-[-60px] right-[-40px] w-64 h-64 rounded-full opacity-20"
-                    style={{ background: "radial-gradient(circle, #fb923c 0%, transparent 70%)", filter: "blur(50px)" }} />
+                    style={{ background: "radial-gradient(circle, #8b5cf6 0%, transparent 70%)", filter: "blur(50px)" }} />
 
                 <div className="relative z-10 flex items-center gap-2.5">
                     <img src="/DCODE.PNG" alt="D-CRM" className="h-9 w-9 object-contain" />
@@ -75,12 +75,12 @@ const Login = () => {
 
                 <div className="relative z-10 flex-1 flex flex-col justify-center">
                     <div className="animate-fade-up" style={{ animationDelay: "0.1s" }}>
-                        <p className="text-xs font-semibold tracking-widest uppercase text-orange-500 mb-4">
+                        <p className="text-xs font-semibold tracking-widest uppercase text-indigo-600 mb-4">
                             Premium CRM Platform
                         </p>
                         <h1 className="text-4xl xl:text-5xl font-extrabold text-zinc-900 leading-[1.1] mb-5">
                             Manage<br />Relationships<br />
-                            <span className="text-orange-500">Smarter.</span>
+                            <span className="text-indigo-600">Smarter.</span>
                         </h1>
                         <p className="text-base text-zinc-500 leading-relaxed max-w-sm">
                             AI-powered CRM designed for high-growth teams. Automate follow-ups, track leads, and close deals faster.
@@ -128,7 +128,7 @@ const Login = () => {
                                         type="email"
                                         {...register("email")}
                                         placeholder="you@company.com"
-                                        className="w-full pl-9 pr-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition"
+                                        className="w-full pl-9 pr-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                                     />
                                 </div>
                                 {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>}
@@ -137,7 +137,7 @@ const Login = () => {
                             <div>
                                 <div className="flex justify-between items-center mb-1.5">
                                     <label className="text-sm font-semibold text-zinc-700">Password</label>
-                                    <Link to="/forgot-password" className="text-xs text-orange-500 hover:text-orange-600 font-medium transition-colors">
+                                    <Link to="/forgot-password" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium transition-colors">
                                         Forgot password?
                                     </Link>
                                 </div>
@@ -147,7 +147,7 @@ const Login = () => {
                                         type={showPassword ? "text" : "password"}
                                         {...register("password")}
                                         placeholder="••••••••"
-                                        className="w-full pl-9 pr-10 py-2.5 border border-zinc-200 rounded-lg text-sm text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition"
+                                        className="w-full pl-9 pr-10 py-2.5 border border-zinc-200 rounded-lg text-sm text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                                     />
                                     <button
                                         type="button"
@@ -165,17 +165,17 @@ const Login = () => {
                                 disabled={isLoading}
                                 className="w-full py-2.5 px-4 rounded-lg text-sm font-semibold text-white transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2 hover:-translate-y-px"
                                 style={{
-                                    background: isLoading ? "#FB923C" : "linear-gradient(135deg, #F97316 0%, #EA580C 100%)",
-                                    boxShadow: isLoading ? "none" : "0 4px 14px 0 rgba(249,115,22,0.35)",
+                                    background: isLoading ? "#8b5cf6" : "linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)",
+                                    boxShadow: isLoading ? "none" : "0 4px 14px 0 rgba(124,58,237,0.35)",
                                 }}
                             >
                                 {isLoading ? <><Loader2 size={15} className="animate-spin" />Signing in…</> : "Sign in"}
                             </button>
                         </form>
 
-                        <div className="mt-5 p-3.5 bg-orange-50 border border-orange-100 rounded-lg">
-                            <p className="text-xs font-semibold text-orange-700 mb-1">Demo credentials</p>
-                            <p className="text-xs text-orange-600">admin@gmail.com · admin123</p>
+                        <div className="mt-5 p-3.5 bg-indigo-50 border border-indigo-100 rounded-lg">
+                            <p className="text-xs font-semibold text-indigo-700 mb-1">Demo credentials</p>
+                            <p className="text-xs text-indigo-600">admin@gmail.com · admin123</p>
                         </div>
                     </div>
                 </div>

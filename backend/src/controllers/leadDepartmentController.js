@@ -1,11 +1,14 @@
 const leadDepartmentService = require("../services/leadDepartmentService");
 const departmentAnalyticsService = require("../services/departmentAnalyticsService");
+const departmentHistoryService = require("../services/departmentHistoryService");
 const {
     DEPARTMENT_WORKFLOWS,
     STAGE_LABELS,
     DEPARTMENTS,
     getStageLabel,
 } = require("../config/departmentWorkflows");
+
+const GRANULARITIES = ["day", "week", "month", "year"];
 
 /**
  * HTTP layer for the multi-department lead model. All authorization lives in
@@ -70,6 +73,77 @@ const assignConsultant = async (req, res, next) => {
             actor: actorOf(req),
         });
         res.json(updated);
+    } catch (err) {
+        return next(err);
+    }
+};
+
+// PATCH /api/lead-departments/bulk-assign   body: { leadDepartmentIds, consultantId }
+const assignConsultantBulk = async (req, res, next) => {
+    try {
+        const updated = await leadDepartmentService.assignConsultantBulk({
+            leadDepartmentIds: req.body.leadDepartmentIds,
+            consultantId: req.body.consultantId,
+            actor: actorOf(req),
+        });
+        res.json(updated);
+    } catch (err) {
+        return next(err);
+    }
+};
+
+// PATCH /api/lead-departments/:leadDepartmentId/claim
+// Consultant self-claim of an unassigned enquiry-stage service (no approval).
+const claimService = async (req, res, next) => {
+    try {
+        const updated = await leadDepartmentService.claimService({
+            leadDepartmentId: req.params.leadDepartmentId,
+            actor: actorOf(req),
+        });
+        res.json(updated);
+    } catch (err) {
+        return next(err);
+    }
+};
+
+// POST /api/lead-departments/:leadDepartmentId/reassign-request   body: { toUserId, reason? }
+// Consultant requests a (re)assignment that a department manager must approve.
+const requestReassignment = async (req, res, next) => {
+    try {
+        const request = await leadDepartmentService.requestReassignment({
+            leadDepartmentId: req.params.leadDepartmentId,
+            toUserId: req.body.toUserId,
+            reason: req.body.reason || null,
+            actor: actorOf(req),
+        });
+        res.status(201).json(request);
+    } catch (err) {
+        return next(err);
+    }
+};
+
+// PATCH /api/lead-departments/reassign-requests/:requestId   body: { decision: "APPROVE" | "REJECT" }
+const decideReassignment = async (req, res, next) => {
+    try {
+        const result = await leadDepartmentService.decideReassignment({
+            requestId: req.params.requestId,
+            decision: req.body.decision,
+            actor: actorOf(req),
+        });
+        res.json(result);
+    } catch (err) {
+        return next(err);
+    }
+};
+
+// GET /api/lead-departments/reassign-requests?department=SALES   (manager / Director)
+const getReassignmentRequests = async (req, res, next) => {
+    try {
+        const requests = await leadDepartmentService.getPendingReassignmentRequests({
+            department: req.query.department,
+            actor: actorOf(req),
+        });
+        res.json(requests);
     } catch (err) {
         return next(err);
     }
@@ -147,13 +221,14 @@ const getBoardQueue = async (req, res, next) => {
     }
 };
 
-// ── Analytics (per-department dashboards / reports) ────────────────────────────
-
-// GET /api/lead-departments/dashboard?department=SALES
+// GET /api/lead-departments/dashboard?department=SALES&assignedEmployeeId=&startDate=&endDate=
 const getDashboard = async (req, res, next) => {
     try {
         const data = await departmentAnalyticsService.getDepartmentDashboard({
             department: req.query.department,
+            assignedEmployeeId: req.query.assignedEmployeeId || undefined,
+            startDate: req.query.startDate || undefined,
+            endDate: req.query.endDate || undefined,
             actor: actorOf(req),
         });
         res.json(data);
@@ -169,6 +244,76 @@ const getWorkload = async (req, res, next) => {
             department: req.query.department,
             actor: actorOf(req),
         });
+        res.json(data);
+    } catch (err) {
+        return next(err);
+    }
+};
+
+// ── Historical analytics (LeadDepartmentStageEvent ledger) ─────────────────────
+
+// GET /api/lead-departments/reports/timeseries?department=&toStage=&granularity=day&from=&to=
+// Stage activity over time. Omit `department` for an org-wide series (scoped to the
+// actor's departments for a manager). `toStage=ENQUIRY` = "enquiries received".
+const getHistoryTimeSeries = async (req, res, next) => {
+    try {
+        const granularity = GRANULARITIES.includes(req.query.granularity) ? req.query.granularity : "day";
+        const data = await departmentHistoryService.getStageTimeSeries({
+            department: req.query.department || undefined,
+            toStage: req.query.toStage || undefined,
+            granularity,
+            from: req.query.from || undefined,
+            to: req.query.to || undefined,
+            actor: actorOf(req),
+        });
+        res.json(data);
+    } catch (err) {
+        return next(err);
+    }
+};
+
+// GET /api/lead-departments/reports/throughput?department=SALES&from=&to=
+// How many services moved into each stage during the range (group by toStage).
+const getHistoryThroughput = async (req, res, next) => {
+    try {
+        const data = await departmentHistoryService.getDepartmentThroughput({
+            department: req.query.department,
+            from: req.query.from || undefined,
+            to: req.query.to || undefined,
+            actor: actorOf(req),
+        });
+        res.json(data);
+    } catch (err) {
+        return next(err);
+    }
+};
+
+// GET /api/lead-departments/reports/employee-activity?employeeId=&department=&from=&to=
+// A consultant's stage moves in the range. Defaults to the caller when employeeId
+// is omitted; consultants may only ever query themselves (enforced in the service).
+const getHistoryEmployeeActivity = async (req, res, next) => {
+    try {
+        const data = await departmentHistoryService.getEmployeeStageActivity({
+            changedByUserId: req.query.employeeId || req.user.userId,
+            department: req.query.department || undefined,
+            from: req.query.from || undefined,
+            to: req.query.to || undefined,
+            actor: actorOf(req),
+        });
+        res.json(data);
+    } catch (err) {
+        return next(err);
+    }
+};
+
+// GET /api/lead-departments/:leadDepartmentId/timeline
+// Full chronological progression of one service (Lead Details → Journey → Timeline).
+const getServiceTimeline = async (req, res, next) => {
+    try {
+        const data = await departmentHistoryService.getServiceTimeline(
+            req.params.leadDepartmentId,
+            actorOf(req),
+        );
         res.json(data);
     } catch (err) {
         return next(err);
@@ -230,12 +375,21 @@ module.exports = {
     listForLead,
     allocate,
     assignConsultant,
+    assignConsultantBulk,
+    claimService,
+    requestReassignment,
+    decideReassignment,
+    getReassignmentRequests,
     updateStage,
     remove,
     getQueue,
     getBoardQueue,
     getDashboard,
     getWorkload,
+    getHistoryTimeSeries,
+    getHistoryThroughput,
+    getHistoryEmployeeActivity,
+    getServiceTimeline,
     getMyDepartments,
     getMembers,
     addMember,

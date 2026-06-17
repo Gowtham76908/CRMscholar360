@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, useEffect } from "react";
 import api from "../api/axios";
 import { humanizeStage, sortDepartments, DEPARTMENT_ORDER } from "../lib/departments";
@@ -91,11 +91,11 @@ export function useDepartmentBoard(department, filters = {}, page = 1, perStage 
     });
 }
 
-export function useDepartmentDashboard(department) {
+export function useDepartmentDashboard(department, filters = {}) {
     return useQuery({
-        queryKey: ["department-dashboard", department],
+        queryKey: ["department-dashboard", department, filters],
         queryFn: () =>
-            api.get("/lead-departments/dashboard", { params: { department } }).then((r) => r.data),
+            api.get("/lead-departments/dashboard", { params: { department, ...filters } }).then((r) => r.data),
         enabled: Boolean(department),
         staleTime: 60 * 1000,
     });
@@ -107,6 +107,124 @@ export function useDepartmentWorkload(department) {
         queryFn: () =>
             api.get("/lead-departments/workload", { params: { department } }).then((r) => r.data),
         enabled: Boolean(department),
+    });
+}
+
+// ── Historical analytics (LeadDepartmentStageEvent ledger) ─────────────────────
+// "What happened over time", as opposed to the snapshot dashboard above. Backed by
+// /lead-departments/reports/* and /lead-departments/:id/timeline.
+
+/** One service's full stage progression (Lead Details → Journey → Timeline). */
+export function useServiceTimeline(leadDepartmentId, enabled = true) {
+    return useQuery({
+        queryKey: ["service-timeline", leadDepartmentId],
+        queryFn: () =>
+            api.get(`/lead-departments/${leadDepartmentId}/timeline`).then((r) => r.data),
+        enabled: Boolean(leadDepartmentId) && enabled,
+        staleTime: 60 * 1000,
+    });
+}
+
+/** Stage activity over time → { series:[{bucket,count}], ... }. `toStage` narrows
+ *  to a single metric (e.g. ENQUIRY = enquiries received). */
+export function useStageTimeSeries({ department, toStage, granularity = "day", from, to } = {}) {
+    return useQuery({
+        queryKey: ["stage-timeseries", department, toStage, granularity, from, to],
+        queryFn: () =>
+            api
+                .get("/lead-departments/reports/timeseries", {
+                    params: { department, toStage, granularity, from, to },
+                })
+                .then((r) => r.data),
+        placeholderData: (prev) => prev,
+        staleTime: 60 * 1000,
+    });
+}
+
+/** How many services moved into each stage during the range (group by toStage). */
+export function useDepartmentThroughput(department, { from, to } = {}) {
+    return useQuery({
+        queryKey: ["department-throughput", department, from, to],
+        queryFn: () =>
+            api
+                .get("/lead-departments/reports/throughput", { params: { department, from, to } })
+                .then((r) => r.data),
+        enabled: Boolean(department),
+        placeholderData: (prev) => prev,
+        staleTime: 60 * 1000,
+    });
+}
+
+/** A consultant's stage activity in a range (defaults to the caller server-side). */
+export function useEmployeeStageActivity({ employeeId, department, from, to } = {}) {
+    return useQuery({
+        queryKey: ["employee-activity", employeeId, department, from, to],
+        queryFn: () =>
+            api
+                .get("/lead-departments/reports/employee-activity", {
+                    params: { employeeId, department, from, to },
+                })
+                .then((r) => r.data),
+        placeholderData: (prev) => prev,
+        staleTime: 60 * 1000,
+    });
+}
+
+// ── Self-claim + manager-approved reassignment ─────────────────────────────────
+
+/** Consultant self-claim of an unassigned enquiry-stage service (no approval). */
+export function useClaimService() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (leadDepartmentId) =>
+            api.patch(`/lead-departments/${leadDepartmentId}/claim`).then((r) => r.data),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["leads"] });
+            qc.invalidateQueries({ queryKey: ["lead-departments"] });
+            qc.invalidateQueries({ queryKey: ["department-queue"] });
+            qc.invalidateQueries({ queryKey: ["department-board"] });
+        },
+    });
+}
+
+/** Consultant raises a reassignment request (manager approval required). */
+export function useRequestReassignment() {
+    return useMutation({
+        mutationFn: ({ leadDepartmentId, toUserId, reason }) =>
+            api
+                .post(`/lead-departments/${leadDepartmentId}/reassign-request`, { toUserId, reason })
+                .then((r) => r.data),
+    });
+}
+
+/** Pending reassignment requests for a department (manager / Director view). */
+export function useReassignmentRequests(department, enabled = true) {
+    return useQuery({
+        queryKey: ["reassign-requests", department],
+        queryFn: () =>
+            api
+                .get("/lead-departments/reassign-requests", { params: { department } })
+                .then((r) => r.data),
+        enabled: Boolean(department) && enabled,
+        staleTime: 30 * 1000,
+    });
+}
+
+/** Manager approves/rejects a reassignment request. */
+export function useDecideReassignment(department) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ requestId, decision }) =>
+            api
+                .patch(`/lead-departments/reassign-requests/${requestId}`, { decision })
+                .then((r) => r.data),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["reassign-requests", department] });
+            qc.invalidateQueries({ queryKey: ["department-queue"] });
+            qc.invalidateQueries({ queryKey: ["department-board"] });
+            qc.invalidateQueries({ queryKey: ["lead-departments"] });
+            qc.invalidateQueries({ queryKey: ["notifications"] });
+        },
     });
 }
 

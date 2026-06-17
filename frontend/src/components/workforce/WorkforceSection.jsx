@@ -31,19 +31,19 @@ const WorkforceSection = ({ period = "30d", from, to }) => {
     });
 
     const statCards = [
-        { label: "Active Leads",          value: data?.totalActiveLeads    ?? 0, icon: Users,        iconBg: "bg-[#FFF7ED]",  iconColor: "text-[#F97316]" },
+        { label: "Active Leads",          value: data?.totalActiveLeads    ?? 0, icon: Users,        iconBg: "bg-indigo-50",  iconColor: "text-indigo-600" },
         { label: "Pending Follow-ups",    value: data?.totalPendingFollowUps ?? 0, icon: AlertCircle, iconBg: "bg-yellow-50",  iconColor: "text-yellow-600" },
         { label: "Tasks Completed",       value: data?.tasksCompleted       ?? 0, icon: CheckSquare,  iconBg: "bg-green-50",   iconColor: "text-green-600" },
         { label: "Tasks Pending",         value: data?.tasksPending         ?? 0, icon: CheckSquare,  iconBg: "bg-red-50",     iconColor: "text-red-500"   },
         { label: "Avg Response Time",     value: data?.avgLeadResponseTimeHours != null ? `${data.avgLeadResponseTimeHours}h` : "—",    icon: Clock,        iconBg: "bg-blue-50",    iconColor: "text-blue-600"  },
         { label: "Avg Conversion Time",   value: data?.avgConversionTimeDays    != null ? `${data.avgConversionTimeDays}d`  : "—",    icon: TrendingUp,   iconBg: "bg-purple-50",  iconColor: "text-purple-600"},
-        { label: "Aging Leads (7d+)",     value: data?.leadAgingCount       ?? 0, icon: Clock,        iconBg: "bg-orange-50",  iconColor: "text-orange-600"},
+        { label: "Aging Leads (7d+)",     value: data?.leadAgingCount       ?? 0, icon: Clock,        iconBg: "bg-indigo-50",  iconColor: "text-indigo-600"},
     ];
 
     if (isLoading) {
         return (
             <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-[#F97316]" />
+                <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
             </div>
         );
     }
@@ -52,8 +52,8 @@ const WorkforceSection = ({ period = "30d", from, to }) => {
         <div className="space-y-5">
             {/* Section heading */}
             <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-xl bg-[#FFF7ED] flex items-center justify-center border border-[#FED7AA]">
-                    <Zap className="h-4 w-4 text-[#F97316]" />
+                <div className="h-8 w-8 rounded-xl bg-indigo-50 flex items-center justify-center border border-indigo-100">
+                    <Zap className="h-4 w-4 text-indigo-600" />
                 </div>
                 <h2 className="font-bold text-[#18181B]">Workforce Intelligence</h2>
             </div>
@@ -76,7 +76,7 @@ const WorkforceSection = ({ period = "30d", from, to }) => {
             {data?.insights?.length > 0 && (
                 <div className="bg-white rounded-2xl border border-[#E4E4E7] p-5 shadow-sm">
                     <div className="flex items-center gap-2 mb-4">
-                        <Info className="h-4 w-4 text-[#F97316]" />
+                        <Info className="h-4 w-4 text-indigo-600" />
                         <h3 className="font-semibold text-[#18181B] text-sm">Actionable Insights</h3>
                         <span className="ml-auto text-xs text-[#71717A] bg-[#F4F4F5] px-2 py-0.5 rounded-full">{data.insights.length}</span>
                     </div>

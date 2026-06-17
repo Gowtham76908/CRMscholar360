@@ -4,6 +4,7 @@ import { Loader2, Monitor, LogOut, Shield } from "lucide-react";
 import api from "../api/axios";
 import { toast } from "sonner";
 import Dialog from "./ui/Dialog";
+import { roleLabel } from "../lib/roles";
 
 const SessionManager = () => {
     const queryClient = useQueryClient();
@@ -66,8 +67,8 @@ const SessionManager = () => {
                                         <div className="text-xs text-gray-500">{session.user.email}</div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-indigo-100 text-indigo-800 capitalize">
-                                            {session.user.role.toLowerCase().replace("_", " ")}
+                                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-indigo-100 text-indigo-800">
+                                            {roleLabel(session.user.role)}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

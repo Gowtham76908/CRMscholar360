@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Search, Loader2, User, CheckSquare, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import { roleLabel } from "../lib/roles";
 
 const GlobalSearch = () => {
     const [query, setQuery] = useState("");
@@ -118,7 +119,7 @@ const GlobalSearch = () => {
                                     className="px-2 py-2 hover:bg-gray-50 rounded cursor-pointer text-sm"
                                 >
                                     <div className="font-medium text-gray-900">{user.name}</div>
-                                    <div className="text-xs text-gray-500">{user.department || user.role}</div>
+                                    <div className="text-xs text-gray-500">{user.department || roleLabel(user.role)}</div>
                                 </div>
                             ))}
                         </div>

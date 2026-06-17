@@ -39,7 +39,7 @@ const StatusBadge = ({ status }) => {
         LEAVE:    { bg: "bg-blue-100 text-blue-700",     label: "Leave"    },
         WFH:      { bg: "bg-purple-100 text-purple-700", label: "WFH"      },
         HALF_DAY: { bg: "bg-yellow-100 text-yellow-700", label: "Half Day" },
-        COMP_OFF: { bg: "bg-orange-100 text-orange-700", label: "Comp Off" },
+        COMP_OFF: { bg: "bg-indigo-100 text-indigo-700", label: "Comp Off" },
     };
     const s = map[status] || { bg: "bg-gray-100 text-gray-500", label: status };
     return (
@@ -69,7 +69,7 @@ const MonthYearPicker = ({ isOpen, onClose, currentMonth, currentYear, onSelect 
                         <button
                             key={m}
                             onClick={() => onSelect(idx + 1, currentYear)}
-                            className={`py-2 text-xs font-semibold rounded-lg transition ${currentMonth === idx + 1 ? "bg-orange-500 text-white shadow" : "bg-gray-50 text-gray-700 hover:bg-gray-100"}`}
+                            className={`py-2 text-xs font-semibold rounded-lg transition ${currentMonth === idx + 1 ? "bg-indigo-600 text-white shadow" : "bg-gray-50 text-gray-700 hover:bg-gray-100"}`}
                         >
                             {m.slice(0, 3)}
                         </button>
@@ -80,7 +80,7 @@ const MonthYearPicker = ({ isOpen, onClose, currentMonth, currentYear, onSelect 
                         <button
                             key={y}
                             onClick={() => onSelect(currentMonth, y)}
-                            className={`px-4 py-2 text-sm font-bold rounded-xl transition ${currentYear === y ? "bg-orange-500 text-white shadow" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                            className={`px-4 py-2 text-sm font-bold rounded-xl transition ${currentYear === y ? "bg-indigo-600 text-white shadow" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
                         >
                             {y}
                         </button>
@@ -129,7 +129,7 @@ const MyLogsPanel = () => {
                     <button onClick={prevMonth} className="p-1 hover:bg-gray-100 rounded-lg">
                         <ChevronLeft className="h-4 w-4 text-gray-600" />
                     </button>
-                    <button onClick={() => setShowPicker(true)} className="font-semibold text-gray-900 min-w-[130px] text-center hover:bg-orange-50 px-2 py-1 rounded-lg transition text-sm">
+                    <button onClick={() => setShowPicker(true)} className="font-semibold text-gray-900 min-w-[130px] text-center hover:bg-indigo-50 px-2 py-1 rounded-lg transition text-sm">
                         {MONTHS[month - 1]} {year}
                     </button>
                     <button onClick={nextMonth} disabled={isNextDisabled} className="p-1 hover:bg-gray-100 rounded-lg disabled:opacity-30">
@@ -143,12 +143,12 @@ const MyLogsPanel = () => {
 
             <div className="bg-white rounded-2xl border border-[#E4E4E7] overflow-hidden shadow-sm">
                 {isLoading ? (
-                    <div className="flex justify-center py-12"><Loader2 className="h-7 w-7 animate-spin text-orange-500" /></div>
+                    <div className="flex justify-center py-12"><Loader2 className="h-7 w-7 animate-spin text-indigo-600" /></div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
-                                <tr className="bg-[#FFF7ED] border-b border-[#E4E4E7]">
+                                <tr className="bg-indigo-50/50 border-b border-[#E4E4E7]">
                                     {["Date", "Day", "Check In", "Check Out", "Hours", "Status"].map(h => (
                                         <th key={h} className="px-6 py-3.5 text-left text-xs font-semibold text-[#71717A] uppercase tracking-wider">{h}</th>
                                     ))}
@@ -161,16 +161,16 @@ const MyLogsPanel = () => {
                                         ? ((new Date(rec.checkOut) - new Date(rec.checkIn)) / 36e5).toFixed(1) : null;
 
                                     if (day.isSunday) return (
-                                        <tr key={day.d} className="bg-orange-50/40">
-                                            <td className="px-6 py-3 font-medium text-orange-700">{String(day.d).padStart(2, "0")} {MONTHS[month - 1].slice(0, 3)}</td>
-                                            <td className="px-6 py-3 text-orange-600">{day.dayName}</td>
-                                            <td colSpan="3" className="px-6 py-3 text-orange-400 text-xs italic">— Weekly Holiday —</td>
-                                            <td className="px-6 py-3"><span className="px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-orange-100 text-orange-700">Holiday</span></td>
+                                        <tr key={day.d} className="bg-indigo-50/20">
+                                            <td className="px-6 py-3 font-medium text-indigo-700">{String(day.d).padStart(2, "0")} {MONTHS[month - 1].slice(0, 3)}</td>
+                                            <td className="px-6 py-3 text-indigo-600">{day.dayName}</td>
+                                            <td colSpan="3" className="px-6 py-3 text-indigo-400 text-xs italic">— Weekly Holiday —</td>
+                                            <td className="px-6 py-3"><span className="px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-indigo-100 text-indigo-700">Holiday</span></td>
                                         </tr>
                                     );
 
                                     return (
-                                        <tr key={day.d} className={`transition-colors ${day.isToday ? "bg-orange-50/40" : "hover:bg-gray-50/60"}`}>
+                                        <tr key={day.d} className={`transition-colors ${day.isToday ? "bg-indigo-50/30" : "hover:bg-gray-50/60"}`}>
                                             <td className="px-6 py-3 font-medium text-[#18181B]">{String(day.d).padStart(2, "0")} {MONTHS[month - 1].slice(0, 3)}</td>
                                             <td className="px-6 py-3 text-[#71717A] font-medium">{day.dayName}</td>
                                             <td className="px-6 py-3 text-[#71717A]">{rec?.checkIn ? formatTime(rec.checkIn) : <span className="text-gray-300">—</span>}</td>
@@ -306,7 +306,7 @@ const CheckInPanel = () => {
         { label: "Present",    value: stats?.present || 0, sub: "This Month",  icon: CheckCircle,  color: "text-green-600", iconBg: "bg-green-50" },
         { label: "WFH",        value: stats?.wfh || 0,    sub: "This Month",   icon: Home,         color: "text-purple-600", iconBg: "bg-purple-50" },
         { label: "Absent",     value: stats?.absent || 0, sub: "This Month",   icon: UserX,        color: "text-red-500", iconBg: "bg-red-50" },
-        { label: "Comp Off",   value: stats?.compOffBalance || 0, sub: "Sundays worked", icon: Timer, color: "text-orange-600", iconBg: "bg-orange-50" },
+        { label: "Comp Off",   value: stats?.compOffBalance || 0, sub: "Sundays worked", icon: Timer, color: "text-indigo-600", iconBg: "bg-indigo-50" },
     ];
 
     const timelineColorMap = {
@@ -322,15 +322,15 @@ const CheckInPanel = () => {
             <div className="flex flex-col gap-4">
 
                 {/* Left: Today's Status card */}
-                <div className="bg-gradient-to-br from-[#F97316] to-[#FB923C] rounded-2xl p-5 text-white shadow-lg shadow-orange-200/60 flex flex-col justify-between">
+                <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl p-5 text-white shadow-lg shadow-indigo-100 flex flex-col justify-between">
                     <div className="flex items-start justify-between gap-4">
                         <div>
-                            <p className="text-orange-100 text-[10px] font-semibold uppercase tracking-widest mb-1">Today's Status</p>
+                            <p className="text-indigo-100 text-[10px] font-semibold uppercase tracking-widest mb-1">Today's Status</p>
                             <h2 className="text-xl font-bold leading-tight">
                                 {checkedOut ? "Day Complete" : checkedIn ? "Checked In" : "Not Checked In"}
                             </h2>
                             {checkedIn && (
-                                <p className="text-orange-100 text-xs mt-0.5">
+                                <p className="text-indigo-100 text-xs mt-0.5">
                                     {formatTime(attendanceToday.checkIn)}
                                     {attendanceToday?.checkOut && ` → ${formatTime(attendanceToday.checkOut)}`}
                                 </p>
@@ -339,7 +339,7 @@ const CheckInPanel = () => {
                                 <a
                                     href={`https://www.google.com/maps?q=${attendanceToday.location.latitude},${attendanceToday.location.longitude}`}
                                     target="_blank" rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-orange-200 hover:text-white text-xs mt-1 transition"
+                                    className="inline-flex items-center gap-1 text-indigo-200 hover:text-white text-xs mt-1 transition"
                                 >
                                     <MapPin className="h-3 w-3" /> Location recorded · View on map
                                 </a>
@@ -354,7 +354,7 @@ const CheckInPanel = () => {
                             <button
                                 onClick={handleCheckIn}
                                 disabled={isPending || !isCheckInAllowed()}
-                                className="flex items-center gap-2 bg-white text-orange-600 px-4 py-2 rounded-xl font-semibold text-sm hover:bg-orange-50 transition shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex items-center gap-2 bg-white text-indigo-600 px-4 py-2 rounded-xl font-semibold text-sm hover:bg-indigo-50 transition shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
                                 {isGettingLocation ? "Getting location…" : checkInMutation.isPending ? "Checking in…" : !isCheckInAllowed() ? "Check-in Closed" : "Check In"}
@@ -364,17 +364,17 @@ const CheckInPanel = () => {
                             <button
                                 onClick={() => checkOutMutation.mutate()}
                                 disabled={checkOutMutation.isPending}
-                                className="flex items-center gap-2 bg-white text-orange-600 px-4 py-2 rounded-xl font-semibold text-sm hover:bg-orange-50 transition shadow-sm active:scale-95 disabled:opacity-50"
+                                className="flex items-center gap-2 bg-white text-indigo-600 px-4 py-2 rounded-xl font-semibold text-sm hover:bg-indigo-50 transition shadow-sm active:scale-95 disabled:opacity-50"
                             >
                                 {checkOutMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
                                 {checkOutMutation.isPending ? "Checking out…" : "Check Out"}
                             </button>
                         )}
                         {checkedIn && !checkedOut && (
-                            <span className="text-orange-100 text-xs font-mono">{workDuration}</span>
+                            <span className="text-indigo-100 text-xs font-mono">{workDuration}</span>
                         )}
                         {!isCheckInAllowed() && !checkedIn && (
-                            <p className="text-orange-200 text-xs">⚠ Deadline passed · Contact HR</p>
+                            <p className="text-indigo-200 text-xs">⚠ Deadline passed · Contact HR</p>
                         )}
                     </div>
                 </div>
@@ -417,12 +417,12 @@ const CheckInPanel = () => {
 
                     {/* Big circular button */}
                     <div className="relative">
-                        <div className="absolute inset-0 rounded-full bg-orange-100 animate-ping opacity-20" style={{ animationDuration: "2.5s" }} />
+                        <div className="absolute inset-0 rounded-full bg-indigo-100 animate-ping opacity-20" style={{ animationDuration: "2.5s" }} />
                         {!checkedIn ? (
                             <button
                                 onClick={handleCheckIn}
                                 disabled={isPending || !isCheckInAllowed()}
-                                className="relative h-32 w-32 rounded-full bg-gradient-to-br from-[#F97316] to-[#FB923C] text-white font-bold text-base flex flex-col items-center justify-center gap-1 shadow-xl shadow-orange-300/50 hover:shadow-orange-400/60 hover:scale-105 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="relative h-32 w-32 rounded-full bg-gradient-to-br from-indigo-600 to-violet-700 text-white font-bold text-base flex flex-col items-center justify-center gap-1 shadow-xl shadow-indigo-100/50 hover:shadow-indigo-200/60 hover:scale-105 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {isPending ? <Loader2 className="h-7 w-7 animate-spin" /> : <LogIn className="h-7 w-7" />}
                                 <span className="text-sm">{isGettingLocation ? "Locating…" : checkInMutation.isPending ? "Checking in…" : !isCheckInAllowed() ? "Closed" : "Check In"}</span>
@@ -431,7 +431,7 @@ const CheckInPanel = () => {
                             <button
                                 onClick={() => checkOutMutation.mutate()}
                                 disabled={checkOutMutation.isPending}
-                                className="relative h-32 w-32 rounded-full bg-gradient-to-br from-[#F97316] to-[#FB923C] text-white font-bold text-base flex flex-col items-center justify-center gap-1 shadow-xl shadow-orange-300/50 hover:shadow-orange-400/60 hover:scale-105 active:scale-95 transition-all duration-200 disabled:opacity-50"
+                                className="relative h-32 w-32 rounded-full bg-gradient-to-br from-indigo-600 to-violet-700 text-white font-bold text-base flex flex-col items-center justify-center gap-1 shadow-xl shadow-indigo-100/50 hover:shadow-indigo-200/60 hover:scale-105 active:scale-95 transition-all duration-200 disabled:opacity-50"
                             >
                                 {checkOutMutation.isPending ? <Loader2 className="h-7 w-7 animate-spin" /> : <LogOut className="h-7 w-7" />}
                                 <span className="text-sm">{checkOutMutation.isPending ? "Checking out…" : "Check Out"}</span>
@@ -491,7 +491,7 @@ const CheckInPanel = () => {
                                             <div className={`absolute left-0 top-1 h-[30px] w-[30px] rounded-full ${c.dot} ring-4 ${c.ring} flex items-center justify-center`}>
                                                 <div className="h-2 w-2 rounded-full bg-white" />
                                             </div>
-                                            <div className="flex-1 bg-[#FFF7ED] rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
+                                            <div className="flex-1 bg-indigo-50/40 rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
                                                 <div className="flex items-center justify-between">
                                                     <p className={`text-xs font-bold uppercase tracking-wider ${c.textColor}`}>{c.label}</p>
                                                     <span className="text-xs font-semibold text-[#18181B]">{formatTime(log.changedAt)}</span>
@@ -511,14 +511,14 @@ const CheckInPanel = () => {
             <div className="bg-white rounded-2xl border border-[#E4E4E7] overflow-hidden shadow-sm">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-[#E4E4E7]">
                     <h3 className="font-semibold text-[#18181B]">Recent Attendance</h3>
-                    <button className="inline-flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 transition">
+                    <button className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition">
                         View All Logs <ArrowRight className="h-3.5 w-3.5" />
                     </button>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead>
-                            <tr className="bg-[#FFF7ED] border-b border-[#E4E4E7]">
+                            <tr className="bg-indigo-50/50 border-b border-[#E4E4E7]">
                                 {["Date", "Check In", "Check Out", "Hours", "Location", "Status"].map(h => (
                                     <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-[#71717A] uppercase tracking-wider">{h}</th>
                                 ))}
@@ -529,7 +529,7 @@ const CheckInPanel = () => {
                                 const hours = record.checkIn && record.checkOut
                                     ? ((new Date(record.checkOut) - new Date(record.checkIn)) / 36e5).toFixed(1) : null;
                                 return (
-                                    <tr key={record.id} className="hover:bg-[#FFF7ED]/50 transition-colors">
+                                    <tr key={record.id} className="hover:bg-indigo-50/30 transition-colors">
                                         <td className="px-6 py-3.5 font-medium text-[#18181B] whitespace-nowrap">{formatDateShort(record.date)}</td>
                                         <td className="px-6 py-3.5 text-[#71717A]">{record.checkIn ? formatTime(record.checkIn) : "—"}</td>
                                         <td className="px-6 py-3.5 text-[#71717A]">{record.checkOut ? formatTime(record.checkOut) : "—"}</td>
@@ -538,7 +538,7 @@ const CheckInPanel = () => {
                                             {record.location?.latitude ? (
                                                 <a href={`https://www.google.com/maps?q=${record.location.latitude},${record.location.longitude}`}
                                                     target="_blank" rel="noopener noreferrer"
-                                                    className="inline-flex items-center gap-1 text-orange-600 hover:text-orange-700 hover:underline text-xs font-medium">
+                                                    className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-700 hover:underline text-xs font-medium">
                                                     <MapPin className="h-3 w-3" /> View
                                                 </a>
                                             ) : <span className="text-gray-300">—</span>}
@@ -627,7 +627,7 @@ const AdminReportsPanel = () => {
                 </div>
                 <div className="flex items-center gap-2 bg-white rounded-xl shadow-sm px-2 py-1.5 border border-[#E4E4E7]">
                     <button onClick={prevMonth} className="p-1 hover:bg-gray-100 rounded-lg"><ChevronLeft className="h-4 w-4 text-gray-600" /></button>
-                    <button onClick={() => setShowPicker(true)} className="font-semibold text-gray-900 min-w-[130px] text-center hover:bg-orange-50 px-2 py-1 rounded-lg transition text-sm">{MONTHS[month - 1]} {year}</button>
+                    <button onClick={() => setShowPicker(true)} className="font-semibold text-gray-900 min-w-[130px] text-center hover:bg-indigo-50 px-2 py-1 rounded-lg transition text-sm">{MONTHS[month - 1]} {year}</button>
                     <button onClick={nextMonth} disabled={isNextDisabled} className="p-1 hover:bg-gray-100 rounded-lg disabled:opacity-30"><ChevronRight className="h-4 w-4 text-gray-600" /></button>
                 </div>
             </div>
@@ -639,7 +639,7 @@ const AdminReportsPanel = () => {
                 <div className="grid grid-cols-3 gap-4">
                     {[
                         { label: "Working Days", value: reportData.meta.workingDays, color: "text-blue-600", border: "border-blue-300" },
-                        { label: "Sundays (Holidays)", value: reportData.meta.sundayCount, color: "text-orange-600", border: "border-orange-300" },
+                        { label: "Sundays (Holidays)", value: reportData.meta.sundayCount, color: "text-indigo-600", border: "border-indigo-300" },
                         { label: "Total Employees", value: reportData.report?.length || 0, color: "text-gray-700", border: "border-gray-300" },
                     ].map(c => (
                         <div key={c.label} className={`bg-white rounded-2xl border-l-4 ${c.border} border border-[#E4E4E7] p-4 text-center shadow-sm`}>
@@ -651,13 +651,13 @@ const AdminReportsPanel = () => {
             )}
 
             <div className="bg-white rounded-2xl border border-[#E4E4E7] overflow-hidden shadow-sm">
-                <div className="px-6 py-4 border-b border-[#E4E4E7] bg-[#FFF7ED] flex items-center gap-2">
-                    <Users className="h-4 w-4 text-orange-600" />
+                <div className="px-6 py-4 border-b border-[#E4E4E7] bg-indigo-50/50 flex items-center gap-2">
+                    <Users className="h-4 w-4 text-indigo-600" />
                     <h2 className="font-semibold text-[#18181B]">Employee Monthly Summary</h2>
                     <span className="text-xs text-[#71717A] ml-1">· click a row to view details</span>
                 </div>
                 {reportLoading ? (
-                    <div className="flex justify-center py-12"><Loader2 className="h-7 w-7 animate-spin text-orange-500" /></div>
+                    <div className="flex justify-center py-12"><Loader2 className="h-7 w-7 animate-spin text-indigo-600" /></div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
@@ -671,7 +671,7 @@ const AdminReportsPanel = () => {
                             <tbody className="divide-y divide-[#E4E4E7]">
                                 {reportData?.report?.map((row) => (
                                     <tr key={row.user.id} onClick={() => setSelectedEmployee(row.user)}
-                                        className={`cursor-pointer transition-colors hover:bg-[#FFF7ED] ${selectedEmployee?.id === row.user.id ? "bg-[#FFF7ED]" : ""}`}>
+                                        className={`cursor-pointer transition-colors hover:bg-indigo-50/30 ${selectedEmployee?.id === row.user.id ? "bg-indigo-50/40" : ""}`}>
                                         <td className="px-4 py-3">
                                             <p className="font-medium text-[#18181B]">{row.user.name}</p>
                                             <p className="text-xs text-[#71717A]">{row.user.department || row.user.email}</p>
@@ -681,7 +681,7 @@ const AdminReportsPanel = () => {
                                         <td className="px-4 py-3 text-center font-semibold text-blue-600">{row.leave}</td>
                                         <td className="px-4 py-3 text-center font-semibold text-yellow-600">{row.halfDay}</td>
                                         <td className="px-4 py-3 text-center font-semibold text-red-500">{row.absent}</td>
-                                        <td className="px-4 py-3 text-center font-bold text-orange-600">{row.compOffBalance || 0}</td>
+                                        <td className="px-4 py-3 text-center font-bold text-indigo-600">{row.compOffBalance || 0}</td>
                                     </tr>
                                 ))}
                                 {(!reportData?.report || reportData.report.length === 0) && (
@@ -695,7 +695,7 @@ const AdminReportsPanel = () => {
 
             {selectedEmployee && (
                 <div className="bg-white rounded-2xl border border-[#E4E4E7] overflow-hidden shadow-sm">
-                    <div className="px-6 py-4 border-b border-[#E4E4E7] bg-[#FFF7ED] flex items-center justify-between">
+                    <div className="px-6 py-4 border-b border-[#E4E4E7] bg-indigo-50/50 flex items-center justify-between">
                         <div>
                             <h2 className="font-semibold text-[#18181B]">{selectedEmployee.name}</h2>
                             <p className="text-sm text-[#71717A]">{MONTHS[month - 1]} {year} · Day-wise attendance</p>
@@ -703,7 +703,7 @@ const AdminReportsPanel = () => {
                         <button onClick={() => setSelectedEmployee(null)} className="text-[#71717A] hover:text-gray-900 text-sm px-3 py-1 rounded-lg hover:bg-gray-100">Close ✕</button>
                     </div>
                     {empLoading ? (
-                        <div className="flex justify-center py-12"><Loader2 className="h-7 w-7 animate-spin text-orange-500" /></div>
+                        <div className="flex justify-center py-12"><Loader2 className="h-7 w-7 animate-spin text-indigo-600" /></div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
@@ -724,16 +724,16 @@ const AdminReportsPanel = () => {
                                             ? ((new Date(rec.checkOut) - new Date(rec.checkIn)) / 36e5).toFixed(1) : null;
 
                                         if (day.isSunday) return (
-                                            <tr key={day.d} className="bg-orange-50/40">
-                                                <td className="px-4 py-2 text-orange-700 font-medium">{String(day.d).padStart(2, "0")} {MONTHS[month - 1].slice(0, 3)}</td>
-                                                <td className="px-4 py-2 text-orange-600 font-semibold">Sunday</td>
-                                                <td colSpan="4" className="px-4 py-2 text-orange-400 text-xs">— Weekly Holiday —</td>
-                                                <td className="px-4 py-2"><span className="px-2 py-0.5 text-xs rounded-full bg-orange-100 text-orange-700">Holiday</span></td>
+                                            <tr key={day.d} className="bg-indigo-50/20">
+                                                <td className="px-4 py-2 text-indigo-700 font-medium">{String(day.d).padStart(2, "0")} {MONTHS[month - 1].slice(0, 3)}</td>
+                                                <td className="px-4 py-2 text-indigo-600 font-semibold">Sunday</td>
+                                                <td colSpan="4" className="px-4 py-2 text-indigo-400 text-xs">— Weekly Holiday —</td>
+                                                <td className="px-4 py-2"><span className="px-2 py-0.5 text-xs rounded-full bg-indigo-100 text-indigo-700">Holiday</span></td>
                                             </tr>
                                         );
 
                                         return (
-                                            <tr key={day.d} className={`hover:bg-gray-50 ${day.isToday ? "bg-orange-50/40" : ""}`}>
+                                            <tr key={day.d} className={`hover:bg-gray-50 ${day.isToday ? "bg-indigo-50/30" : ""}`}>
                                                 <td className="px-4 py-2 font-medium text-[#18181B]">{String(day.d).padStart(2, "0")} {MONTHS[month - 1].slice(0, 3)}</td>
                                                 <td className="px-4 py-2 text-[#71717A]">{day.dayName}</td>
                                                 <td className="px-4 py-2 text-[#71717A]">{rec?.checkIn ? formatTime(rec.checkIn) : "—"}</td>
@@ -741,7 +741,7 @@ const AdminReportsPanel = () => {
                                                 <td className="px-4 py-2 text-[#71717A]">{hours ? `${hours} hrs` : "—"}</td>
                                                 <td className="px-4 py-2">
                                                     {rec?.location?.latitude ? (
-                                                        <a href={`https://www.google.com/maps?q=${rec.location.latitude},${rec.location.longitude}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-orange-600 hover:underline text-xs">
+                                                        <a href={`https://www.google.com/maps?q=${rec.location.latitude},${rec.location.longitude}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:underline text-xs">
                                                             <MapPin className="h-3 w-3" /> View
                                                         </a>
                                                     ) : "—"}
@@ -762,7 +762,7 @@ const AdminReportsPanel = () => {
                         <div className="p-6 border-t border-[#E4E4E7]">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="font-semibold text-[#18181B]">Leave / WFH Applications this month</h3>
-                                <div className="text-sm bg-orange-50 text-orange-700 px-3 py-1 rounded-full font-bold">
+                                <div className="text-sm bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-bold">
                                     Comp Off Balance: {empDetail?.compOffBalance || 0}
                                 </div>
                             </div>
@@ -807,7 +807,7 @@ const Attendance = () => {
                         ...(isAdmin ? [{ id: "reports", icon: Users, label: "Team Reports" }] : []),
                     ].map(tab => (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition ${activeTab === tab.id ? "bg-orange-500 text-white shadow-sm" : "text-[#71717A] hover:bg-orange-50 hover:text-orange-600"}`}>
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition ${activeTab === tab.id ? "bg-indigo-600 text-white shadow-sm" : "text-[#71717A] hover:bg-indigo-50 hover:text-indigo-600"}`}>
                             <tab.icon className="h-4 w-4" />
                             {tab.label}
                         </button>

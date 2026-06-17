@@ -9,6 +9,7 @@ import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import { useChat } from "../context/ChatContext";
 import { cn } from "../lib/utils";
+import { roleLabel } from "../lib/roles";
 
 const VideoCall = lazy(() => import("../components/VideoCall"));
 
@@ -559,7 +560,7 @@ const Messages = () => {
                                                     className="h-9 w-9 rounded-xl object-cover border border-[#E4E4E7]" />
                                                 <div>
                                                     <p className="text-sm font-semibold text-[#18181B]">{u.name}</p>
-                                                    <p className="text-xs text-[#71717A]">{u.jobTitle || u.role}</p>
+                                                    <p className="text-xs text-[#71717A]">{u.jobTitle || roleLabel(u.role)}</p>
                                                 </div>
                                             </button>
                                         ))
@@ -777,7 +778,7 @@ const AddMemberModal = ({ channel, onClose, allUsers, onAdded }) => {
                             className="h-9 w-9 rounded-xl border border-[#E4E4E7] object-cover" />
                         <div className="flex-1">
                             <p className="text-sm font-semibold text-[#18181B]">{u.name}</p>
-                            <p className="text-xs text-[#71717A]">{u.jobTitle || u.role}</p>
+                            <p className="text-xs text-[#71717A]">{u.jobTitle || roleLabel(u.role)}</p>
                         </div>
                         <button onClick={() => add(u.id)} disabled={busy}
                             className="px-3 py-1.5 bg-[#F97316] text-white text-xs rounded-lg hover:bg-[#FB923C] disabled:opacity-50 transition-colors font-medium">
