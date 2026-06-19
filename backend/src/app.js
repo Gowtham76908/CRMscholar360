@@ -38,7 +38,6 @@ const allowedOrigins = [
     "https://dcrm-testing.vercel.app",
     "https://dcrm-testing.onrender.com"
 ];
-
 if (process.env.FRONTEND_URL) {
     allowedOrigins.push(process.env.FRONTEND_URL);
 }
@@ -48,8 +47,8 @@ app.use(cors({
     origin: (origin, callback) => {
         if (!origin) return callback(null, true);
         const isAllowed = allowedOrigins.includes(origin) ||
-                          (process.env.NODE_ENV !== "production" &&
-                           /^https?:\/\/localhost(:\d+)?$/.test(origin));
+            (process.env.NODE_ENV !== "production" &&
+                /^https?:\/\/localhost(:\d+)?$/.test(origin));
         if (isAllowed) {
             callback(null, true);
         } else {
@@ -70,10 +69,10 @@ app.use(cookieParser());
 // Profile photos are avatars (low-sensitivity, embedded as <img> everywhere) → public.
 // Call recordings and task files are confidential → gated by a signed token or session.
 const uploadAccess = require("./middleware/uploadAccess");
-app.use("/uploads/profiles",   express.static("uploads/profiles"));
+app.use("/uploads/profiles", express.static("uploads/profiles"));
 app.use("/uploads/recordings", uploadAccess, express.static("uploads/recordings"));
-app.use("/uploads/tasks",      uploadAccess, express.static("uploads/tasks"));
-app.use("/uploads",            uploadAccess, express.static("uploads")); // catch-all: gate anything new by default
+app.use("/uploads/tasks", uploadAccess, express.static("uploads/tasks"));
+app.use("/uploads", uploadAccess, express.static("uploads")); // catch-all: gate anything new by default
 
 // Auth rate limit — 20 attempts per 15 minutes (login, etc.)
 const authLimiter = rateLimit({
@@ -153,63 +152,63 @@ app.get("/", (req, res) => {
 // ─── PUBLIC ROUTES ────────────────────────────────────────────────────────────
 // No authentication required. Do NOT add router.use(authMiddleware) inside
 // these routers — they must remain open for unauthenticated callers.
-app.use("/api/auth",        authRoutes);    // login, forgot-password, reset-password
-app.use("/api/webhooks",    webhookRoutes); // external lead ingestion (no user session)
+app.use("/api/auth", authRoutes);    // login, forgot-password, reset-password
+app.use("/api/webhooks", webhookRoutes); // external lead ingestion (no user session)
 app.use("/api/demo-booking", require("./routes/demoBooking")); // public booking form
 
 // Public, unauthenticated callers. These MUST be mounted before the catch-all
 // note/task routers below (which apply authMiddleware at the bare "/api" mount and
 // would otherwise 401 these): email open/click pixels, the Google Ads + website
 // lead webhooks, and the Google OAuth callback.
-app.use("/api/email-track",  require("./routes/emailTrack"));        // email open/click pixels
-app.use("/api/google-ads",   require("./routes/googleAdsWebhook"));  // Google Ads lead webhook (key-verified)
+app.use("/api/email-track", require("./routes/emailTrack"));        // email open/click pixels
+app.use("/api/google-ads", require("./routes/googleAdsWebhook"));  // Google Ads lead webhook (key-verified)
 app.use("/api/public/leads", require("./routes/publicLeads"));       // website embed form (API-key auth)
-app.use("/api/google",       require("./routes/googleCalendar"));    // OAuth callback is public; other routes self-auth
+app.use("/api/google", require("./routes/googleCalendar"));    // OAuth callback is public; other routes self-auth
 
 // ─── PROTECTED ROUTES ─────────────────────────────────────────────────────────
 // Every router listed here MUST call router.use(authMiddleware) at its top.
 // Adding a new router? Ensure it starts with router.use(authMiddleware) before
 // any route definitions — otherwise its endpoints will be publicly accessible.
-app.use("/api/assistant",        require("./routes/assistant"));
-app.use("/api/assistant-usage",  require("./routes/assistantUsage"));
-app.use("/api/users",           userRoutes);
-app.use("/api/leads",           leadRoutes);
-app.use("/api/team",            teamRoutes);
-app.use("/api",                 noteRoutes);
-app.use("/api",                 taskRoutes);
-app.use("/api/integrations",    integrationRoutes);
-app.use("/api/reminders",       reminderRoutes);
-app.use("/api/analytics",       analyticsRoutes);
-app.use("/api/commission",      commissionRoutes);
-app.use("/api/calls",           callLogRoutes);
-app.use("/api/reports",         reportRoutes);
-app.use("/api/export",          exportRoutes);
-app.use("/api/search",          searchRoutes);
-app.use("/api/search-leads",    searchLeadsRoutes);
-app.use("/api/linkedin-leads",  linkedinLeadsRoutes);
-app.use("/api/sprints",         sprintRoutes);
-app.use("/api/audit-logs",      auditRoutes);
-app.use("/api/sessions",        sessionRoutes);
-app.use("/api/chat",            require("./routes/chat"));
-app.use("/api/attendance",      require("./routes/attendance"));
-app.use("/api/leave",           require("./routes/leave"));
-app.use("/api/upload",          require("./routes/upload"));
-app.use("/api/user-status",     require("./routes/userStatus"));
-app.use("/api/invoices",        require("./routes/invoice"));
-app.use("/api/fasterq",         require("./routes/fasterq"));
+app.use("/api/assistant", require("./routes/assistant"));
+app.use("/api/assistant-usage", require("./routes/assistantUsage"));
+app.use("/api/users", userRoutes);
+app.use("/api/leads", leadRoutes);
+app.use("/api/team", teamRoutes);
+app.use("/api", noteRoutes);
+app.use("/api", taskRoutes);
+app.use("/api/integrations", integrationRoutes);
+app.use("/api/reminders", reminderRoutes);
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api/commission", commissionRoutes);
+app.use("/api/calls", callLogRoutes);
+app.use("/api/reports", reportRoutes);
+app.use("/api/export", exportRoutes);
+app.use("/api/search", searchRoutes);
+app.use("/api/search-leads", searchLeadsRoutes);
+app.use("/api/linkedin-leads", linkedinLeadsRoutes);
+app.use("/api/sprints", sprintRoutes);
+app.use("/api/audit-logs", auditRoutes);
+app.use("/api/sessions", sessionRoutes);
+app.use("/api/chat", require("./routes/chat"));
+app.use("/api/attendance", require("./routes/attendance"));
+app.use("/api/leave", require("./routes/leave"));
+app.use("/api/upload", require("./routes/upload"));
+app.use("/api/user-status", require("./routes/userStatus"));
+app.use("/api/invoices", require("./routes/invoice"));
+app.use("/api/fasterq", require("./routes/fasterq"));
 app.use("/api/company-settings", require("./routes/companySettings"));
-app.use("/api/notifications",   require("./routes/notification"));
-app.use("/api/automations",     require("./routes/automation"));
-app.use("/api/whatsapp",        require("./routes/whatsapp"));
-app.use("/api/ai",              require("./routes/ai"));
-app.use("/api/custom-fields",   require("./routes/customField"));
-app.use("/api/facebook",        require("./routes/facebook"));
+app.use("/api/notifications", require("./routes/notification"));
+app.use("/api/automations", require("./routes/automation"));
+app.use("/api/whatsapp", require("./routes/whatsapp"));
+app.use("/api/ai", require("./routes/ai"));
+app.use("/api/custom-fields", require("./routes/customField"));
+app.use("/api/facebook", require("./routes/facebook"));
 app.use("/api/integration-hub", require("./routes/integrationHub"));
-app.use("/api/organization",      require("./routes/organization"));
+app.use("/api/organization", require("./routes/organization"));
 app.use("/api/team-performance", require("./routes/teamPerformance"));
-app.use("/api/employee-report",  require("./routes/employeeReport"));
-app.use("/api/deals",            require("./routes/deal"));
-app.use("/api/email-templates",  require("./routes/emailTemplates"));
+app.use("/api/employee-report", require("./routes/employeeReport"));
+app.use("/api/deals", require("./routes/deal"));
+app.use("/api/email-templates", require("./routes/emailTemplates"));
 app.use("/api/leads/:id/journey", require("./routes/journey"));
 app.use("/api/lead-departments", require("./routes/leadDepartment"));
 // NOTE: public routers (email-track, google, google-ads, public/leads) are mounted
