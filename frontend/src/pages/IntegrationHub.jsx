@@ -191,7 +191,7 @@ const PROVIDERS = [
             { key: "port",     label: "Port",          placeholder: "587",                  type: "text",     width: "w-24" },
             { key: "user",     label: "Username",      placeholder: "you@company.com",      type: "text" },
             { key: "pass",     label: "Password",      placeholder: "App password",          type: "password" },
-            { key: "fromName", label: "From Name",     placeholder: "D-CRM Notifications",  type: "text" },
+            { key: "fromName", label: "From Name",     placeholder: "scholar360 Notifications",  type: "text" },
         ],
         extras: ["secure"],
         metaKeys: [
@@ -566,13 +566,13 @@ function useOAuthPopup(onSuccess) {
 
     const open = (authUrl) => {
         setPending(true);
-        const popup = window.open(authUrl, "dcrm_oauth", "width=600,height=700,scrollbars=yes");
+        const popup = window.open(authUrl, "scholar360_oauth", "width=600,height=700,scrollbars=yes");
         if (!popup) { toast.error("Popup blocked — allow popups for this site"); setPending(false); return; }
 
         const handler = (e) => {
             try {
                 const msg = JSON.parse(e.data);
-                if (msg.type !== "DCRM_OAUTH") return;
+                if (msg.type !== "SCHOLAR360_OAUTH") return;
                 window.removeEventListener("message", handler);
                 setPending(false);
                 if (msg.ok) onSuccess(msg.payload);

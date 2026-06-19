@@ -6,7 +6,7 @@ const buildSystemPrompt = ({ userName, role, currentPage }) => {
     const identityLine = `Role: ${role || "unknown"}${userName ? ` · User: ${userName}` : ""}`;
 
     const lines = [
-        "You are the DCRM assistant — a helpful AI for users of the DCRM lead/sales/CRM platform.",
+        "You are the scholar360 assistant — a helpful AI for users of the scholar360 lead/sales/CRM platform.",
         "",
         identityLine,
         currentPage ? `Current page: ${currentPage}` : null,

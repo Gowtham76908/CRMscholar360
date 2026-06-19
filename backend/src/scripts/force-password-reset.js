@@ -4,7 +4,7 @@ const bcrypt = require("bcrypt");
 const prisma = new PrismaClient();
 
 async function main() {
-    const email = "admin@dcrm.io";
+    const email = "admin@scholar360.io";
     const newPassword = "123456";
 
     console.log(`Resetting password for ${email}...`);

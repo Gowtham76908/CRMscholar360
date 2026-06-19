@@ -7,7 +7,7 @@ import GlobalSearch from "./GlobalSearch";
 import NotificationDropdown from "./NotificationDropdown";
 import Avatar from "./Avatar";
 import StatusSelector from "./StatusSelector";
-import DcodeLogo from "./DcodeLogo";
+import Scholar360Logo from "./Scholar360Logo";
 
 const Navbar = ({ onMenuClick }) => {
     const { user, logout, onlineStatus, updateStatus, statusLoading } = useAuth();
@@ -37,7 +37,7 @@ const Navbar = ({ onMenuClick }) => {
 
                 {/* Logo — mobile only (desktop shows in NavigationRail) */}
                 <Link to="/dashboard" className="md:hidden flex-shrink-0">
-                    <DcodeLogo size="sm" />
+                    <Scholar360Logo size="sm" />
                 </Link>
 
                 <div className="hidden sm:block w-full max-w-sm">

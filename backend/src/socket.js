@@ -23,8 +23,8 @@ function initSocket(server) {
     const allowedOrigins = [
         "http://localhost:5173",
         "http://localhost:5000",
-        "https://dcrm-testing.vercel.app",
-        "https://dcrm-testing.onrender.com"
+        "https://scholar360-testing.vercel.app",
+        "https://scholar360-testing.onrender.com"
     ];
 
     if (process.env.FRONTEND_URL) {

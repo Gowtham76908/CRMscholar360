@@ -1,6 +1,6 @@
-# DCRM — Complete Feature Reference
+# scholar360 — Complete Feature Reference
 
-This document describes every feature in the DCRM system — what it does, how it works, who can use it, and why it exists.
+This document describes every feature in the scholar360 system — what it does, how it works, who can use it, and why it exists.
 
 ---
 

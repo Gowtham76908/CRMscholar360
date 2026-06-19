@@ -7,11 +7,11 @@ async function main() {
     // 1. Update Users
     console.log("\nChecking for users with name/email containing 'dharun'...");
     
-    // Check for dharun@dcrm.io
+    // Check for dharun@scholar360.io
     const superAdmin = await prisma.user.findFirst({
         where: {
             OR: [
-                { email: "dharun@dcrm.io" },
+                { email: "dharun@scholar360.io" },
                 { email: "dharunjayakrishnan@gmail.com" },
                 { name: "Dharun Jayakrishnan" }
             ]
@@ -19,12 +19,12 @@ async function main() {
     });
 
     if (superAdmin) {
-        console.log(`Found Super Admin user: ${superAdmin.email}. Updating to admin@dcrm.io / System Admin...`);
+        console.log(`Found Super Admin user: ${superAdmin.email}. Updating to admin@scholar360.io / System Admin...`);
         await prisma.user.update({
             where: { id: superAdmin.id },
             data: {
                 name: "System Admin",
-                email: "admin@dcrm.io",
+                email: "admin@scholar360.io",
             }
         });
         console.log("  ✓ Updated Super Admin");

@@ -275,7 +275,7 @@ const seedDemoData = async (req, res, next) => {
                 messages: [
                     { text: "Good morning everyone! Hope you all had a great weekend 🌞", pool: null },
                     { text: "Don't forget standup at 10am — let's keep it sharp today.", pool: null },
-                    { text: "New DCRM features are live on staging — please test before EOD.", pool: "Engineering" },
+                    { text: "New scholar360 features are live on staging — please test before EOD.", pool: "Engineering" },
                     { text: "Sales pipeline looking really strong this week 💪", pool: "Sales" },
                     { text: "Team lunch this Friday at 1pm. Who's in? 🍕", pool: "HR" },
                     { text: "Reminder: fill in your attendance by 6pm!", pool: "HR" },

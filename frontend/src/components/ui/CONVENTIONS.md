@@ -1,4 +1,4 @@
-# DCRM UI Conventions
+# scholar360 UI Conventions
 
 Design direction: **Calm Operational** — inspired by Linear, Attio, Stripe, Vercel.
 No decorative flourishes. Every element earns its place.

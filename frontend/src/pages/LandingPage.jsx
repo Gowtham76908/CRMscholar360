@@ -139,8 +139,8 @@ function Navbar({ onDemo }) {
         <header className={`fixed top-0 inset-x-0 z-40 transition-all duration-300 ${scrolled ? "bg-white/95 backdrop-blur shadow-sm border-b border-zinc-100" : "bg-transparent"}`}>
             <div className="max-w-6xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                    <img src="/DCODE.PNG" alt="D-CRM" className="h-8 w-8 object-contain" />
-                    <span className="font-bold text-zinc-900 tracking-tight text-base">D-CRM</span>
+                    <img src="/SCHOLAR360.PNG" alt="scholar360" className="h-8 w-8 object-contain" />
+                    <span className="font-bold text-zinc-900 tracking-tight text-base">scholar360</span>
                 </div>
 
                 <nav className="hidden md:flex items-center gap-7">
@@ -245,8 +245,8 @@ function HeroSection({ onDemo }) {
                         <div className="bg-white border border-zinc-100 rounded-2xl shadow-2xl shadow-zinc-200/60 overflow-hidden">
                             <div className="bg-zinc-50 border-b border-zinc-100 px-5 py-3 flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                    <img src="/DCODE.PNG" alt="D-CRM" className="h-5 w-5 object-contain opacity-70" />
-                                    <span className="text-xs font-semibold text-zinc-400">D-CRM Dashboard</span>
+                                    <img src="/SCHOLAR360.PNG" alt="scholar360" className="h-5 w-5 object-contain opacity-70" />
+                                    <span className="text-xs font-semibold text-zinc-400">scholar360 Dashboard</span>
                                 </div>
                                 <div className="flex gap-1.5">
                                     <div className="w-2 h-2 rounded-full bg-zinc-200" />
@@ -362,7 +362,7 @@ function AutomationSection() {
                     </span>
                     <h2 className="text-3xl sm:text-4xl font-extrabold text-zinc-900 mt-4">Works while you sleep</h2>
                     <p className="mt-4 text-base text-zinc-500 max-w-xl mx-auto">
-                        Set up once. D-CRM handles follow-ups, reminders, and lead nurturing automatically.
+                        Set up once. scholar360 handles follow-ups, reminders, and lead nurturing automatically.
                     </p>
                 </div>
 
@@ -441,7 +441,7 @@ function TestimonialsSection() {
             <div className="max-w-6xl mx-auto px-5 sm:px-8">
                 <div className="text-center mb-14" style={fadeIn(visible)}>
                     <h2 className="text-3xl sm:text-4xl font-extrabold text-zinc-900">What teams say</h2>
-                    <p className="mt-4 text-base text-zinc-500">From sales managers to founders using D-CRM daily.</p>
+                    <p className="mt-4 text-base text-zinc-500">From sales managers to founders using scholar360 daily.</p>
                 </div>
                 <div className="grid sm:grid-cols-3 gap-6">
                     {testimonials.map(({ quote, name, title, initials, color }, i) => (
@@ -489,7 +489,7 @@ function CTASection({ onDemo }) {
                             Start managing relationships smarter.
                         </h2>
                         <p className="text-base text-orange-100 mb-8 max-w-lg mx-auto">
-                            Join teams using D-CRM to close more deals, faster — with less manual work.
+                            Join teams using scholar360 to close more deals, faster — with less manual work.
                         </p>
                         <div className="flex flex-wrap gap-3 justify-center">
                             <button onClick={onDemo}
@@ -515,10 +515,10 @@ function Footer() {
         <footer className="border-t border-zinc-100 bg-white py-10">
             <div className="max-w-6xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
-                    <img src="/DCODE.PNG" alt="D-CRM" className="h-6 w-6 object-contain" />
-                    <span className="text-sm font-bold text-zinc-800">D-CRM</span>
+                    <img src="/SCHOLAR360.PNG" alt="scholar360" className="h-6 w-6 object-contain" />
+                    <span className="text-sm font-bold text-zinc-800">scholar360</span>
                 </div>
-                <p className="text-xs text-zinc-400">© {new Date().getFullYear()} D-CRM. All rights reserved.</p>
+                <p className="text-xs text-zinc-400">© {new Date().getFullYear()} scholar360. All rights reserved.</p>
                 <div className="flex items-center gap-5">
                     {["Privacy", "Terms", "Contact"].map(item => (
                         <a key={item} href="#" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors">{item}</a>

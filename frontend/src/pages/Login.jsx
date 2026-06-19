@@ -12,10 +12,10 @@ const loginSchema = z.object({
 });
 
 const previewCards = [
-    { icon: TrendingUp, label: "Lead Pipeline",  value: "Capture & score every lead",    color: "text-indigo-600", bg: "bg-indigo-50",  delay: "0s",   duration: "5s"   },
-    { icon: Bot,        label: "AI Automation",  value: "Auto follow-ups & reminders",   color: "text-emerald-600",bg: "bg-emerald-50", delay: "1.2s", duration: "6s"   },
-    { icon: Users,      label: "Team Activity",  value: "Tasks, sprints & attendance",   color: "text-violet-600", bg: "bg-violet-50",  delay: "0.6s", duration: "4.5s" },
-    { icon: Inbox,      label: "Unified Inbox",  value: "WhatsApp, email & calls",       color: "text-sky-600",    bg: "bg-sky-50",     delay: "1.8s", duration: "5.5s" },
+    { icon: TrendingUp, label: "Lead Pipeline", value: "Capture & score every lead", color: "text-indigo-600", bg: "bg-indigo-50", delay: "0s", duration: "5s" },
+    { icon: Bot, label: "AI Automation", value: "Auto follow-ups & reminders", color: "text-emerald-600", bg: "bg-emerald-50", delay: "1.2s", duration: "6s" },
+    { icon: Users, label: "Team Activity", value: "Tasks, sprints & attendance", color: "text-violet-600", bg: "bg-violet-50", delay: "0.6s", duration: "4.5s" },
+    { icon: Inbox, label: "Unified Inbox", value: "WhatsApp, email & calls", color: "text-sky-600", bg: "bg-sky-50", delay: "1.8s", duration: "5.5s" },
 ];
 
 function PreviewCard({ icon: Icon, label, value, color, bg, delay, duration }) {
@@ -69,8 +69,7 @@ const Login = () => {
                     style={{ background: "radial-gradient(circle, #8b5cf6 0%, transparent 70%)", filter: "blur(50px)" }} />
 
                 <div className="relative z-10 flex items-center gap-2.5">
-                    <img src="/DCODE.PNG" alt="D-CRM" className="h-9 w-9 object-contain" />
-                    <span className="text-lg font-bold text-zinc-800 tracking-tight">D-CRM</span>
+                    <img src="/SCHOLAR360.PNG" alt="scholar360" className="h-25 w-25 object-contain" />
                 </div>
 
                 <div className="relative z-10 flex-1 flex flex-col justify-center">
@@ -102,14 +101,14 @@ const Login = () => {
             <div className="flex-1 flex items-center justify-center bg-white px-6 py-12">
                 <div className="w-full max-w-md animate-fade-up">
                     <div className="flex lg:hidden items-center gap-2 mb-8">
-                        <img src="/DCODE.PNG" alt="D-CRM" className="h-8 w-8 object-contain" />
-                        <span className="text-base font-bold text-zinc-800">D-CRM</span>
+                        <img src="/SCHOLAR360.PNG" alt="scholar360" className="h-8 w-8 object-contain" />
+                        <span className="text-base font-bold text-zinc-800">scholar360</span>
                     </div>
 
                     <div className="bg-white rounded-2xl border border-zinc-100 shadow-xl shadow-zinc-100/60 p-8">
                         <div className="mb-7">
                             <h2 className="text-2xl font-extrabold text-zinc-900 tracking-tight">Welcome back</h2>
-                            <p className="text-sm text-zinc-400 mt-1">Sign in to your D-CRM workspace</p>
+                            <p className="text-sm text-zinc-400 mt-1">Sign in to your scholar360 workspace</p>
                         </div>
 
                         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

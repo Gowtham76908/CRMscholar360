@@ -141,7 +141,7 @@ export default function AssistantWidget() {
             {!open && (
                 <button
                     onClick={() => setOpen(true)}
-                    aria-label="Open DCRM assistant"
+                    aria-label="Open scholar360 assistant"
                     className="fixed bottom-6 right-6 z-[90] h-14 w-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg flex items-center justify-center transition-all hover:scale-105"
                 >
                     <Bot className="h-6 w-6" />
@@ -151,7 +151,7 @@ export default function AssistantWidget() {
             {open && (
                 <div
                     role="dialog"
-                    aria-label="DCRM assistant"
+                    aria-label="scholar360 assistant"
                     className="fixed bottom-6 right-6 z-[90] w-[380px] max-w-[calc(100vw-2rem)] h-[560px] max-h-[calc(100vh-3rem)] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
                 >
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-indigo-600 to-indigo-700">
@@ -160,7 +160,7 @@ export default function AssistantWidget() {
                                 <Sparkles className="h-4 w-4 text-white" />
                             </div>
                             <div className="min-w-0">
-                                <p className="text-sm font-semibold text-white">DCRM Assistant</p>
+                                <p className="text-sm font-semibold text-white">scholar360 Assistant</p>
                                 <p className="text-[11px] text-white/70 truncate">Ask about leads, tasks, pipeline</p>
                             </div>
                         </div>

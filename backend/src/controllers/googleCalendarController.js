@@ -19,7 +19,7 @@ const verifyOAuthState = (state) => {
 };
 
 const popupResultHtml = (ok, payload) => {
-    const msg = JSON.stringify(JSON.stringify({ type: "DCRM_OAUTH", ok, payload }));
+    const msg = JSON.stringify(JSON.stringify({ type: "SCHOLAR360_OAUTH", ok, payload }));
     return `<!doctype html><meta charset="utf-8"><body><script>
         window.opener && window.opener.postMessage(${msg}, "*");
         window.close();

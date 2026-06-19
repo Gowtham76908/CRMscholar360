@@ -10,6 +10,7 @@ import MobileNav from "../components/nav/MobileNav";
 import Navbar from "../components/Navbar";
 import CommandPalette from "../components/CommandPalette";
 import AssistantWidget from "../components/AssistantWidget";
+import { cn } from "../lib/utils";
 
 export default function AppLayout() {
     const { isAuthenticated, loading } = useAuth();
@@ -51,9 +52,6 @@ export default function AppLayout() {
         return <Navigate to="/login" replace />;
     }
 
-    // Zone 3 left margin: 56px rail + 240px panel (when open)
-    const mainLeft = panelOpen ? 296 : 56;
-
     return (
         <div className="min-h-screen bg-[#f8f6ff] flex">
             {/* Zone 1 — Navigation Rail (56px) */}
@@ -68,8 +66,10 @@ export default function AppLayout() {
 
             {/* Zone 3 — Main Workspace */}
             <div
-                className="flex-1 flex flex-col transition-all duration-300 min-w-0"
-                style={{ marginLeft: mainLeft }}
+                className={cn(
+                    "flex-1 flex flex-col transition-all duration-300 min-w-0",
+                    panelOpen ? "ml-0 md:ml-[296px]" : "ml-0 md:ml-14"
+                )}
             >
                 <Navbar onMenuClick={() => handleModeClick(activeMode, location.pathname)} />
 

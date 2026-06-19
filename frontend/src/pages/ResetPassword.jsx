@@ -76,9 +76,9 @@ const ResetPassword = () => {
             <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg border border-gray-100">
                 <div className="text-center">
                     <div className="mx-auto h-16 w-16 flex items-center justify-center">
-                        <img src="/DCODE.PNG" alt="D-CRM Logo" className="h-14 w-14 object-contain" />
+                        <img src="/SCHOLAR360.PNG" alt="scholar360 Logo" className="h-14 w-14 object-contain" />
                     </div>
-                    <h2 className="mt-4 text-3xl font-extrabold text-gray-900">D-CRM</h2>
+                    <h2 className="mt-4 text-3xl font-extrabold text-gray-900">scholar360</h2>
                     <p className="mt-2 text-sm text-gray-600">Choose a new password</p>
                 </div>
 

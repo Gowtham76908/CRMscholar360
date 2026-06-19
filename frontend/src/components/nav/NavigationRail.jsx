@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Users, MessageSquare, Zap, BarChart, Settings2, Command } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import Avatar from "../Avatar";
-import DcodeLogo from "../DcodeLogo";
+import Scholar360Logo from "../Scholar360Logo";
 import { cn } from "../../lib/utils";
 
 // ─── Mode definitions ─────────────────────────────────────────────────────────
@@ -100,8 +100,8 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
     return (
         <aside className="fixed inset-y-0 left-0 z-30 w-14 bg-white border-r border-gray-200 hidden md:flex flex-col items-center py-3">
             {/* Logo mark */}
-            <div className="mb-2" title="Dcode CRM">
-                <DcodeLogo size="sm" showText={false} />
+            <div className="mb-2" title="scholar360">
+                <Scholar360Logo size="sm" showText={false} />
             </div>
 
             <div className="w-8 h-px bg-gray-100 mb-2" />

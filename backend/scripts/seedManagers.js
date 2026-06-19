@@ -1,39 +1,39 @@
-﻿require("dotenv").config();
+require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcrypt");
 const prisma = new PrismaClient();
 
 const MANAGERS = [
-    { email: "manager1@dcrm.com", name: "Arun Sharma",   dept: "Sales",     jobTitle: "Sales Manager" },
-    { email: "manager2@dcrm.com", name: "Neha Kapoor",   dept: "Marketing", jobTitle: "Marketing Manager" },
+    { email: "manager1@scholar360.com", name: "Arun Sharma",   dept: "Sales",     jobTitle: "Sales Manager" },
+    { email: "manager2@scholar360.com", name: "Neha Kapoor",   dept: "Marketing", jobTitle: "Marketing Manager" },
 ];
 
 const EMPLOYEES_PER_MANAGER = [
     // Manager 1 — Sales
     [
-        { email: "emp1.sales@dcrm.com",  name: "Raj Patel",       jobTitle: "Sales Executive" },
-        { email: "emp2.sales@dcrm.com",  name: "Anita Singh",     jobTitle: "Sales Executive" },
-        { email: "emp3.sales@dcrm.com",  name: "Vikram Das",      jobTitle: "Senior Sales Rep" },
-        { email: "emp4.sales@dcrm.com",  name: "Pooja Reddy",     jobTitle: "Account Executive" },
-        { email: "emp5.sales@dcrm.com",  name: "Sunil Verma",     jobTitle: "Sales Executive" },
-        { email: "emp6.sales@dcrm.com",  name: "Meera Joshi",     jobTitle: "Sales Executive" },
-        { email: "emp7.sales@dcrm.com",  name: "Aryan Mehta",     jobTitle: "Sales Rep" },
-        { email: "emp8.sales@dcrm.com",  name: "Divya Pillai",    jobTitle: "Sales Executive" },
-        { email: "emp9.sales@dcrm.com",  name: "Kiran Rao",       jobTitle: "Sales Associate" },
-        { email: "emp10.sales@dcrm.com", name: "Preethi Nair",    jobTitle: "Sales Executive" },
+        { email: "emp1.sales@scholar360.com",  name: "Raj Patel",       jobTitle: "Sales Executive" },
+        { email: "emp2.sales@scholar360.com",  name: "Anita Singh",     jobTitle: "Sales Executive" },
+        { email: "emp3.sales@scholar360.com",  name: "Vikram Das",      jobTitle: "Senior Sales Rep" },
+        { email: "emp4.sales@scholar360.com",  name: "Pooja Reddy",     jobTitle: "Account Executive" },
+        { email: "emp5.sales@scholar360.com",  name: "Sunil Verma",     jobTitle: "Sales Executive" },
+        { email: "emp6.sales@scholar360.com",  name: "Meera Joshi",     jobTitle: "Sales Executive" },
+        { email: "emp7.sales@scholar360.com",  name: "Aryan Mehta",     jobTitle: "Sales Rep" },
+        { email: "emp8.sales@scholar360.com",  name: "Divya Pillai",    jobTitle: "Sales Executive" },
+        { email: "emp9.sales@scholar360.com",  name: "Kiran Rao",       jobTitle: "Sales Associate" },
+        { email: "emp10.sales@scholar360.com", name: "Preethi Nair",    jobTitle: "Sales Executive" },
     ],
     // Manager 2 — Marketing
     [
-        { email: "emp1.mkt@dcrm.com",  name: "Rohit Iyer",      jobTitle: "Marketing Executive" },
-        { email: "emp2.mkt@dcrm.com",  name: "Sneha Menon",     jobTitle: "Content Strategist" },
-        { email: "emp3.mkt@dcrm.com",  name: "Aditya Kumar",    jobTitle: "Digital Marketer" },
-        { email: "emp4.mkt@dcrm.com",  name: "Lakshmi Babu",    jobTitle: "Marketing Executive" },
-        { email: "emp5.mkt@dcrm.com",  name: "Deepak Nambiar",  jobTitle: "Brand Manager" },
-        { email: "emp6.mkt@dcrm.com",  name: "Ritu Choudhary",  jobTitle: "Marketing Executive" },
-        { email: "emp7.mkt@dcrm.com",  name: "Naveen Suresh",   jobTitle: "SEO Specialist" },
-        { email: "emp8.mkt@dcrm.com",  name: "Kavitha Bose",    jobTitle: "Marketing Associate" },
-        { email: "emp9.mkt@dcrm.com",  name: "Sanjay Krishnan", jobTitle: "Marketing Executive" },
-        { email: "emp10.mkt@dcrm.com", name: "Ananya Pillai",   jobTitle: "Campaign Manager" },
+        { email: "emp1.mkt@scholar360.com",  name: "Rohit Iyer",      jobTitle: "Marketing Executive" },
+        { email: "emp2.mkt@scholar360.com",  name: "Sneha Menon",     jobTitle: "Content Strategist" },
+        { email: "emp3.mkt@scholar360.com",  name: "Aditya Kumar",    jobTitle: "Digital Marketer" },
+        { email: "emp4.mkt@scholar360.com",  name: "Lakshmi Babu",    jobTitle: "Marketing Executive" },
+        { email: "emp5.mkt@scholar360.com",  name: "Deepak Nambiar",  jobTitle: "Brand Manager" },
+        { email: "emp6.mkt@scholar360.com",  name: "Ritu Choudhary",  jobTitle: "Marketing Executive" },
+        { email: "emp7.mkt@scholar360.com",  name: "Naveen Suresh",   jobTitle: "SEO Specialist" },
+        { email: "emp8.mkt@scholar360.com",  name: "Kavitha Bose",    jobTitle: "Marketing Associate" },
+        { email: "emp9.mkt@scholar360.com",  name: "Sanjay Krishnan", jobTitle: "Marketing Executive" },
+        { email: "emp10.mkt@scholar360.com", name: "Ananya Pillai",   jobTitle: "Campaign Manager" },
     ],
 ];
 

@@ -1,5 +1,5 @@
 /**
- * DCRM Complete Seed (multi-department model) — canonical deploy seed.
+ * scholar360 Complete Seed (multi-department model) — canonical deploy seed.
  *
  * Runs from `npm run build` (prisma generate && db push && node prisma/seed.js)
  * and `prisma db seed`. Idempotent: only populates an EMPTY database.
@@ -165,7 +165,7 @@ async function main() {
     console.log("Creating users...");
     const superAdmin = await prisma.user.create({
         data: {
-            email: "admin@dcrm.com", name: "Super Admin", password,
+            email: "admin@scholar360.com", name: "Super Admin", password,
             role: "SUPER_ADMIN", department: "Management", jobTitle: "Director", isActive: true,
         },
     });
@@ -174,8 +174,8 @@ async function main() {
 
     // ── 2. Managers ─────────────────────────────────────────────────────────────
     const managersData = [
-        { email: "arun.manager@dcrm.com",  name: "Arun Pillai",  jobTitle: "Sales Manager",          department: "Sales", departments: ["SALES"] },
-        { email: "meena.manager@dcrm.com", name: "Meena Sharma", jobTitle: "Services & Loan Manager", department: "Services", departments: ["LOAN", "FOREX", "ACCOMMODATION_TICKETS", "MISCELLANEOUS"] },
+        { email: "arun.manager@scholar360.com",  name: "Arun Pillai",  jobTitle: "Sales Manager",          department: "Sales", departments: ["SALES"] },
+        { email: "meena.manager@scholar360.com", name: "Meena Sharma", jobTitle: "Services & Loan Manager", department: "Services", departments: ["LOAN", "FOREX", "ACCOMMODATION_TICKETS", "MISCELLANEOUS"] },
     ];
     const managers = [];
     for (const m of managersData) {
@@ -193,26 +193,26 @@ async function main() {
     // Department per employee index: 0-9 SALES (Team Arun); 10-19 split across the
     // services departments (Team Meena).
     const employeesData = [
-        { email: "rahul.verma@dcrm.com",   name: "Rahul Verma",    jobTitle: "Sales Consultant",         dept: "SALES" },
-        { email: "priya.singh@dcrm.com",   name: "Priya Singh",    jobTitle: "Sales Consultant",         dept: "SALES" },
-        { email: "karthik.raj@dcrm.com",   name: "Karthik Raj",    jobTitle: "Senior Sales Consultant",  dept: "SALES" },
-        { email: "sneha.iyer@dcrm.com",    name: "Sneha Iyer",     jobTitle: "Account Consultant",       dept: "SALES" },
-        { email: "vikram.nair@dcrm.com",   name: "Vikram Nair",    jobTitle: "Sales Consultant",         dept: "SALES" },
-        { email: "pooja.menon@dcrm.com",   name: "Pooja Menon",    jobTitle: "Business Dev Consultant",  dept: "SALES" },
-        { email: "suresh.kumar@dcrm.com",  name: "Suresh Kumar",   jobTitle: "Sales Consultant",         dept: "SALES" },
-        { email: "ananya.das@dcrm.com",    name: "Ananya Das",     jobTitle: "Account Consultant",       dept: "SALES" },
-        { email: "deepak.reddy@dcrm.com",  name: "Deepak Reddy",   jobTitle: "Sales Consultant",         dept: "SALES" },
-        { email: "lavanya.pillai@dcrm.com",name: "Lavanya Pillai", jobTitle: "Senior Sales Consultant",  dept: "SALES" },
-        { email: "arjun.nair@dcrm.com",    name: "Arjun Nair",     jobTitle: "Loan Consultant",          dept: "LOAN" },
-        { email: "divya.nambiar@dcrm.com", name: "Divya Nambiar",  jobTitle: "Loan Consultant",          dept: "LOAN" },
-        { email: "rohit.gupta@dcrm.com",   name: "Rohit Gupta",    jobTitle: "Loan Consultant",          dept: "LOAN" },
-        { email: "kavitha.suresh@dcrm.com",name: "Kavitha Suresh", jobTitle: "Loan Consultant",          dept: "LOAN" },
-        { email: "rajesh.babu@dcrm.com",   name: "Rajesh Babu",    jobTitle: "Forex Consultant",         dept: "FOREX" },
-        { email: "nisha.patel@dcrm.com",   name: "Nisha Patel",    jobTitle: "Forex Consultant",         dept: "FOREX" },
-        { email: "sanjay.kumar@dcrm.com",  name: "Sanjay Kumar",   jobTitle: "Forex Consultant",         dept: "FOREX" },
-        { email: "usha.reddy@dcrm.com",    name: "Usha Reddy",     jobTitle: "Accommodation Consultant", dept: "ACCOMMODATION_TICKETS" },
-        { email: "madhan.kumar@dcrm.com",  name: "Madhan Kumar",   jobTitle: "Accommodation Consultant", dept: "ACCOMMODATION_TICKETS" },
-        { email: "preethi.rao@dcrm.com",   name: "Preethi Rao",    jobTitle: "Services Consultant",      dept: "MISCELLANEOUS" },
+        { email: "rahul.verma@scholar360.com",   name: "Rahul Verma",    jobTitle: "Sales Consultant",         dept: "SALES" },
+        { email: "priya.singh@scholar360.com",   name: "Priya Singh",    jobTitle: "Sales Consultant",         dept: "SALES" },
+        { email: "karthik.raj@scholar360.com",   name: "Karthik Raj",    jobTitle: "Senior Sales Consultant",  dept: "SALES" },
+        { email: "sneha.iyer@scholar360.com",    name: "Sneha Iyer",     jobTitle: "Account Consultant",       dept: "SALES" },
+        { email: "vikram.nair@scholar360.com",   name: "Vikram Nair",    jobTitle: "Sales Consultant",         dept: "SALES" },
+        { email: "pooja.menon@scholar360.com",   name: "Pooja Menon",    jobTitle: "Business Dev Consultant",  dept: "SALES" },
+        { email: "suresh.kumar@scholar360.com",  name: "Suresh Kumar",   jobTitle: "Sales Consultant",         dept: "SALES" },
+        { email: "ananya.das@scholar360.com",    name: "Ananya Das",     jobTitle: "Account Consultant",       dept: "SALES" },
+        { email: "deepak.reddy@scholar360.com",  name: "Deepak Reddy",   jobTitle: "Sales Consultant",         dept: "SALES" },
+        { email: "lavanya.pillai@scholar360.com",name: "Lavanya Pillai", jobTitle: "Senior Sales Consultant",  dept: "SALES" },
+        { email: "arjun.nair@scholar360.com",    name: "Arjun Nair",     jobTitle: "Loan Consultant",          dept: "LOAN" },
+        { email: "divya.nambiar@scholar360.com", name: "Divya Nambiar",  jobTitle: "Loan Consultant",          dept: "LOAN" },
+        { email: "rohit.gupta@scholar360.com",   name: "Rohit Gupta",    jobTitle: "Loan Consultant",          dept: "LOAN" },
+        { email: "kavitha.suresh@scholar360.com",name: "Kavitha Suresh", jobTitle: "Loan Consultant",          dept: "LOAN" },
+        { email: "rajesh.babu@scholar360.com",   name: "Rajesh Babu",    jobTitle: "Forex Consultant",         dept: "FOREX" },
+        { email: "nisha.patel@scholar360.com",   name: "Nisha Patel",    jobTitle: "Forex Consultant",         dept: "FOREX" },
+        { email: "sanjay.kumar@scholar360.com",  name: "Sanjay Kumar",   jobTitle: "Forex Consultant",         dept: "FOREX" },
+        { email: "usha.reddy@scholar360.com",    name: "Usha Reddy",     jobTitle: "Accommodation Consultant", dept: "ACCOMMODATION_TICKETS" },
+        { email: "madhan.kumar@scholar360.com",  name: "Madhan Kumar",   jobTitle: "Accommodation Consultant", dept: "ACCOMMODATION_TICKETS" },
+        { email: "preethi.rao@scholar360.com",   name: "Preethi Rao",    jobTitle: "Services Consultant",      dept: "MISCELLANEOUS" },
     ];
 
     const employees = [];
@@ -530,12 +530,12 @@ async function main() {
     console.log("════════════════════════════════════════");
     console.log("\nLogin credentials (password: Demo@1234)");
     console.log("─────────────────────────────────────────");
-    console.log("  SUPER_ADMIN  admin@dcrm.com          (Director, all departments)");
-    console.log("  ADMIN        arun.manager@dcrm.com   (Sales)");
-    console.log("  ADMIN        meena.manager@dcrm.com  (Loan/Forex/Accommodation/Misc)");
-    console.log("  EMPLOYEE     rahul.verma@dcrm.com    (Sales consultant)");
-    console.log("  EMPLOYEE     arjun.nair@dcrm.com     (Loan consultant)");
-    console.log("  EMPLOYEE     rajesh.babu@dcrm.com    (Forex consultant)");
+    console.log("  SUPER_ADMIN  admin@scholar360.com          (Director, all departments)");
+    console.log("  ADMIN        arun.manager@scholar360.com   (Sales)");
+    console.log("  ADMIN        meena.manager@scholar360.com  (Loan/Forex/Accommodation/Misc)");
+    console.log("  EMPLOYEE     rahul.verma@scholar360.com    (Sales consultant)");
+    console.log("  EMPLOYEE     arjun.nair@scholar360.com     (Loan consultant)");
+    console.log("  EMPLOYEE     rajesh.babu@scholar360.com    (Forex consultant)");
     console.log("─────────────────────────────────────────");
     console.log(`  Users: 23  |  Leads: 100  |  Deals: ${dealCount}  |  Commissions: ${commissionCount}`);
     console.log(`  Calls: ${callCount}  |  Emails: ${emailCount}  |  Tasks: ${taskCount}`);

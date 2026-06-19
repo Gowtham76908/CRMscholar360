@@ -1,5 +1,5 @@
 /**
- * DCRM - Comprehensive System Seed Script (multi-department model)
+ * scholar360 - Comprehensive System Seed Script (multi-department model)
  * Creates realistic operational data for end-to-end QA testing.
  *
  * Model notes:
@@ -181,7 +181,7 @@ const WA_REPLIES = [
 const USER_DEFS = [
     // Director — member of every department, sees everything.
     {
-        name: "System Director", email: "admin@dcrm.io", phone: "+91 9999999999",
+        name: "System Director", email: "admin@scholar360.io", phone: "+91 9999999999",
         role: "SUPER_ADMIN", jobTitle: "Director", department: "Management",
         departments: ["SALES", "LOAN", "ACCOMMODATION_TICKETS", "FOREX", "MISCELLANEOUS"],
         managerEmail: null,
@@ -189,82 +189,82 @@ const USER_DEFS = [
 
     // Managers (ADMIN)
     {
-        name: "Priya Sharma", email: "priya.sharma@dcrm.io", phone: "+91 9876543210",
+        name: "Priya Sharma", email: "priya.sharma@scholar360.io", phone: "+91 9876543210",
         role: "ADMIN", jobTitle: "Sales Manager", department: "Sales",
-        departments: ["SALES"], managerEmail: "admin@dcrm.io",
+        departments: ["SALES"], managerEmail: "admin@scholar360.io",
     },
     {
-        name: "Vikram Patel", email: "vikram.patel@dcrm.io", phone: "+91 9988776655",
+        name: "Vikram Patel", email: "vikram.patel@scholar360.io", phone: "+91 9988776655",
         role: "ADMIN", jobTitle: "Loan & Forex Manager", department: "Loan",
-        departments: ["LOAN", "FOREX"], managerEmail: "admin@dcrm.io",
+        departments: ["LOAN", "FOREX"], managerEmail: "admin@scholar360.io",
     },
     {
-        name: "Ananya Nair", email: "ananya.nair@dcrm.io", phone: "+91 9765432109",
+        name: "Ananya Nair", email: "ananya.nair@scholar360.io", phone: "+91 9765432109",
         role: "ADMIN", jobTitle: "Services Manager", department: "Services",
-        departments: ["ACCOMMODATION_TICKETS", "MISCELLANEOUS"], managerEmail: "admin@dcrm.io",
+        departments: ["ACCOMMODATION_TICKETS", "MISCELLANEOUS"], managerEmail: "admin@scholar360.io",
     },
 
     // SALES consultants
     {
-        name: "Karthik Reddy", email: "karthik.reddy@dcrm.io", phone: "+91 9876512345",
+        name: "Karthik Reddy", email: "karthik.reddy@scholar360.io", phone: "+91 9876512345",
         role: "EMPLOYEE", jobTitle: "Senior Sales Consultant", department: "Sales",
-        departments: ["SALES"], managerEmail: "priya.sharma@dcrm.io",
+        departments: ["SALES"], managerEmail: "priya.sharma@scholar360.io",
     },
     {
-        name: "Rahul Krishnan", email: "rahul.krishnan@dcrm.io", phone: "+91 9654321098",
+        name: "Rahul Krishnan", email: "rahul.krishnan@scholar360.io", phone: "+91 9654321098",
         role: "EMPLOYEE", jobTitle: "Sales Consultant", department: "Sales",
-        departments: ["SALES"], managerEmail: "priya.sharma@dcrm.io",
+        departments: ["SALES"], managerEmail: "priya.sharma@scholar360.io",
     },
     {
-        name: "Sneha Iyer", email: "sneha.iyer@dcrm.io", phone: "+91 9543210987",
+        name: "Sneha Iyer", email: "sneha.iyer@scholar360.io", phone: "+91 9543210987",
         role: "EMPLOYEE", jobTitle: "Business Development Consultant", department: "Sales",
-        departments: ["SALES"], managerEmail: "priya.sharma@dcrm.io",
+        departments: ["SALES"], managerEmail: "priya.sharma@scholar360.io",
     },
     {
-        name: "Arun Venkataraman", email: "arun.venkat@dcrm.io", phone: "+91 9210987654",
+        name: "Arun Venkataraman", email: "arun.venkat@scholar360.io", phone: "+91 9210987654",
         role: "EMPLOYEE", jobTitle: "Sales Consultant", department: "Sales",
-        departments: ["SALES"], managerEmail: "priya.sharma@dcrm.io",
+        departments: ["SALES"], managerEmail: "priya.sharma@scholar360.io",
     },
     {
-        name: "Bala Chandrasekaran", email: "bala.agent@dcrm.io", phone: "+91 8776543210",
+        name: "Bala Chandrasekaran", email: "bala.agent@scholar360.io", phone: "+91 8776543210",
         role: "EMPLOYEE", jobTitle: "Sales Consultant", department: "Sales",
-        departments: ["SALES"], managerEmail: "priya.sharma@dcrm.io",
+        departments: ["SALES"], managerEmail: "priya.sharma@scholar360.io",
     },
 
     // LOAN consultants
     {
-        name: "Deepak Rao", email: "deepak.rao@dcrm.io", phone: "+91 9432109876",
+        name: "Deepak Rao", email: "deepak.rao@scholar360.io", phone: "+91 9432109876",
         role: "EMPLOYEE", jobTitle: "Loan Consultant", department: "Loan",
-        departments: ["LOAN"], managerEmail: "vikram.patel@dcrm.io",
+        departments: ["LOAN"], managerEmail: "vikram.patel@scholar360.io",
     },
     {
-        name: "Kavya Annamalai", email: "kavya.agent@dcrm.io", phone: "+91 9009876543",
+        name: "Kavya Annamalai", email: "kavya.agent@scholar360.io", phone: "+91 9009876543",
         role: "EMPLOYEE", jobTitle: "Loan Consultant", department: "Loan",
-        departments: ["LOAN"], managerEmail: "vikram.patel@dcrm.io",
+        departments: ["LOAN"], managerEmail: "vikram.patel@scholar360.io",
     },
 
     // FOREX (+ ACCOMMODATION) consultants
     {
-        name: "Meera Pillai", email: "meera.pillai@dcrm.io", phone: "+91 9321098765",
+        name: "Meera Pillai", email: "meera.pillai@scholar360.io", phone: "+91 9321098765",
         role: "EMPLOYEE", jobTitle: "Forex Consultant", department: "Forex",
-        departments: ["FOREX"], managerEmail: "vikram.patel@dcrm.io",
+        departments: ["FOREX"], managerEmail: "vikram.patel@scholar360.io",
     },
     {
-        name: "Nikhil Natarajan", email: "nikhil.agent@dcrm.io", phone: "+91 8998765432",
+        name: "Nikhil Natarajan", email: "nikhil.agent@scholar360.io", phone: "+91 8998765432",
         role: "EMPLOYEE", jobTitle: "Multi-service Consultant", department: "Forex",
-        departments: ["FOREX", "ACCOMMODATION_TICKETS"], managerEmail: "vikram.patel@dcrm.io",
+        departments: ["FOREX", "ACCOMMODATION_TICKETS"], managerEmail: "vikram.patel@scholar360.io",
     },
 
     // ACCOMMODATION + MISCELLANEOUS consultants
     {
-        name: "Suresh Murugesan", email: "suresh.agent@dcrm.io", phone: "+91 9109876543",
+        name: "Suresh Murugesan", email: "suresh.agent@scholar360.io", phone: "+91 9109876543",
         role: "EMPLOYEE", jobTitle: "Accommodation Consultant", department: "Accommodation",
-        departments: ["ACCOMMODATION_TICKETS"], managerEmail: "ananya.nair@dcrm.io",
+        departments: ["ACCOMMODATION_TICKETS"], managerEmail: "ananya.nair@scholar360.io",
     },
     {
-        name: "Divya Selvaraj", email: "divya.agent@dcrm.io", phone: "+91 8887654321",
+        name: "Divya Selvaraj", email: "divya.agent@scholar360.io", phone: "+91 8887654321",
         role: "EMPLOYEE", jobTitle: "Services Consultant", department: "Misc",
-        departments: ["MISCELLANEOUS"], managerEmail: "ananya.nair@dcrm.io",
+        departments: ["MISCELLANEOUS"], managerEmail: "ananya.nair@scholar360.io",
     },
 ];
 
@@ -303,7 +303,7 @@ async function cleanup() {
 }
 
 async function main() {
-    console.log("🌱 Starting DCRM seed (multi-department model)...\n");
+    console.log("🌱 Starting scholar360 seed (multi-department model)...\n");
     await cleanup();
 
     // ── Users + department memberships ─────────────────────────────────────────
@@ -347,7 +347,7 @@ async function main() {
     const consultantCount = USER_DEFS.filter(d => d.role === "EMPLOYEE").length;
     console.log(`  ✓ ${users.length} users (1 Director, ${managerCount} managers, ${consultantCount} consultants)`);
 
-    const director = userByEmail.get("admin@dcrm.io");
+    const director = userByEmail.get("admin@scholar360.io");
 
     // dept → consultants (EMPLOYEE members), falling back to any member.
     const deptConsultants = {};
@@ -653,7 +653,7 @@ async function main() {
                     user: { connect: { id: user.id } },
                     phone: lead.phoneNormalized || lead.phone || "919999999999",
                     direction: isInbound ? "INBOUND" : "OUTBOUND",
-                    templateName: !isInbound ? "dcrm_follow_up" : null,
+                    templateName: !isInbound ? "scholar360_follow_up" : null,
                     messageBody: isInbound ? randomFrom(WA_REPLIES) : randomFrom(WA_MESSAGES),
                     status,
                     replyText: isInbound ? randomFrom(WA_REPLIES) : null,
@@ -794,7 +794,7 @@ async function main() {
         await prisma.whatsAppCampaign.create({
             data: {
                 name: "Q3 Product Launch Campaign",
-                templateName: "dcrm_product_launch",
+                templateName: "scholar360_product_launch",
                 parameters: ["Premium Plan", "30% off", "September 2024"],
                 status: "COMPLETED",
                 totalCount: optInLeads.length,
@@ -823,7 +823,7 @@ async function main() {
         await prisma.whatsAppCampaign.create({
             data: {
                 name: "Follow-up October Campaign",
-                templateName: "dcrm_follow_up",
+                templateName: "scholar360_follow_up",
                 parameters: ["Special Offer"],
                 status: "DRAFT",
                 totalCount: 10,
@@ -844,9 +844,9 @@ async function main() {
     console.log("Creating auto-reply rules...");
     await prisma.whatsAppAutoReply.createMany({
         data: [
-            { name: "Price Enquiry Auto-Reply", active: true, triggerType: "KEYWORD", keyword: "price", replyTemplate: "dcrm_pricing_info", replyParams: [], createdById: director.id },
-            { name: "Demo Request Auto-Reply", active: true, triggerType: "KEYWORD", keyword: "demo", replyTemplate: "dcrm_demo_schedule", replyParams: [], createdById: director.id },
-            { name: "48h No-Reply Timeout", active: true, triggerType: "NO_REPLY_TIMEOUT", timeoutHours: 48, replyTemplate: "dcrm_follow_up", replyParams: ["our team"], createdById: director.id },
+            { name: "Price Enquiry Auto-Reply", active: true, triggerType: "KEYWORD", keyword: "price", replyTemplate: "scholar360_pricing_info", replyParams: [], createdById: director.id },
+            { name: "Demo Request Auto-Reply", active: true, triggerType: "KEYWORD", keyword: "demo", replyTemplate: "scholar360_demo_schedule", replyParams: [], createdById: director.id },
+            { name: "48h No-Reply Timeout", active: true, triggerType: "NO_REPLY_TIMEOUT", timeoutHours: 48, replyTemplate: "scholar360_follow_up", replyParams: ["our team"], createdById: director.id },
         ],
         skipDuplicates: true,
     });

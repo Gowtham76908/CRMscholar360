@@ -89,7 +89,7 @@ const oauthCallback = async (req, res, next) => {
 
     // This endpoint is loaded inside a popup — always respond with HTML that postMessages the result
     const closeWithResult = (ok, payload) => {
-        const msg = JSON.stringify({ type: "DCRM_OAUTH", ok, payload });
+        const msg = JSON.stringify({ type: "SCHOLAR360_OAUTH", ok, payload });
         res.send(`<script>
             window.opener && window.opener.postMessage(${JSON.stringify(msg)}, "*");
             window.close();
