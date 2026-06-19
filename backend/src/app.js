@@ -35,8 +35,8 @@ app.set("trust proxy", 1);
 const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:5000",
-    "https://dcrm-testing.vercel.app",
-    "https://dcrm-testing.onrender.com"
+  "https://scholar360.vercel.app",
+  "https://crmscholar360.onrender.com"
 ];
 if (process.env.FRONTEND_URL) {
     allowedOrigins.push(process.env.FRONTEND_URL);
