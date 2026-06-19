@@ -102,6 +102,7 @@ const getMessages = async (req, res, next) => {
     try {
         const messages = await prisma.whatsAppMessage.findMany({
             where: { leadId: req.params.leadId },
+            include: { user: { select: { id: true, name: true, profilePhoto: true } } },
             orderBy: { createdAt: "desc" },
         });
         res.json(messages);

@@ -745,7 +745,7 @@ async function getDepartmentQueue({ department, actor, filters = {} }) {
         where,
         include: {
             lead: { select: { id: true, name: true, email: true, phone: true, source: true, score: true, category: true, enquiryType: true, createdAt: true } },
-            assignedEmployee: { select: { id: true, name: true, email: true } },
+            assignedEmployee: { select: { id: true, name: true, email: true, profilePhoto: true } },
         },
         orderBy: { updatedAt: "desc" },
     });
@@ -789,7 +789,7 @@ async function getDepartmentBoardByStage({ department, actor, filters = {}, page
                     orderBy: { updatedAt: "desc" },
                     include: {
                         lead: { select: LEAD_SELECT_FOR_BOARD },
-                        assignedEmployee: { select: { id: true, name: true, email: true } },
+                        assignedEmployee: { select: { id: true, name: true, email: true, profilePhoto: true } },
                     },
                 }),
             ]);
@@ -852,7 +852,7 @@ async function getDepartmentMembers(department) {
     }
     const rows = await prisma.userDepartment.findMany({
         where: { department, user: { isActive: true } },
-        include: { user: { select: { id: true, name: true, email: true, role: true } } },
+        include: { user: { select: { id: true, name: true, email: true, role: true, profilePhoto: true } } },
         orderBy: { user: { name: "asc" } },
     });
     return rows.map(r => r.user);

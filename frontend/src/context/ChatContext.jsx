@@ -46,10 +46,21 @@ export const ChatProvider = ({ children }) => {
 
         const onConnect    = () => setConnected(true);
         const onDisconnect = () => setConnected(false);
+        const onConnectError = (err) => {
+            if (err.message === "UNAUTHENTICATED") {
+                s.disconnect();
+            }
+        };
 
-        s.on("connect",    onConnect);
-        s.on("disconnect", onDisconnect);
-        if (s.connected) setConnected(true);
+        s.on("connect",       onConnect);
+        s.on("disconnect",     onDisconnect);
+        s.on("connect_error",  onConnectError);
+
+        if (!s.connected) {
+            s.connect();
+        } else {
+            setConnected(true);
+        }
 
         const onMessage = (msg) => {
             // Update sidebar last-message
@@ -79,9 +90,11 @@ export const ChatProvider = ({ children }) => {
         s.on("chat:message", onMessage);
 
         return () => {
-            s.off("connect",      onConnect);
-            s.off("disconnect",   onDisconnect);
+            s.off("connect",       onConnect);
+            s.off("disconnect",     onDisconnect);
+            s.off("connect_error",  onConnectError);
             s.off("chat:message", onMessage);
+            s.disconnect();
         };
     }, [user?.id, navigate]);
 

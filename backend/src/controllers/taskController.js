@@ -246,6 +246,15 @@ const updateTaskStatus = async (req, res, next) => {
 
         res.json({ message: "Task status updated", task: updatedTask });
 
+        if (status === "COMPLETED") {
+            logActivity({
+                leadId:   updatedTask.leadId ?? null,
+                userId:   req.user.userId,
+                action:   "TASK_COMPLETED",
+                metadata: { taskId: id, title: updatedTask.title }
+            }).catch(console.error);
+        }
+
         // Notify the assignee's direct manager when a task is completed
         if (status === "COMPLETED" && updatedTask.assignedTo?.id) {
             const assigneeId = updatedTask.assignedTo.id;
@@ -292,6 +301,15 @@ const updateKanbanStatus = async (req, res, next) => {
             include: taskInclude
         });
         res.json({ message: "Kanban status updated", task });
+
+        if (kanbanStatus === "DONE") {
+            logActivity({
+                leadId:   task.leadId ?? null,
+                userId:   req.user.userId,
+                action:   "TASK_COMPLETED",
+                metadata: { taskId: id, title: task.title }
+            }).catch(console.error);
+        }
     } catch (error) {
         return next(error);
     }

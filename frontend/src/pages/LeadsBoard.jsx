@@ -8,8 +8,40 @@ import { useAuth } from "../context/AuthContext";
 import { useWorkflows, useDepartmentBoard } from "../hooks/useDepartments";
 import { DEPARTMENT_ORDER, departmentLabel, departmentStyle } from "../lib/departments";
 import { getCategoryFromScore, getSLAStatus } from "../utils/leadScore";
+import Avatar from "../components/Avatar";
 
 const PER_STAGE = 10;
+
+const STAGE_THEME = {
+    // Lead Intake
+    ENQUIRY: { border: "border-t-indigo-500" },
+    CONTACTED: { border: "border-t-sky-500" },
+    // Qual & Pitching
+    QUALIFIED: { border: "border-t-blue-500" },
+    PROPOSAL_SENT: { border: "border-t-purple-500" },
+    DEMO_SCHEDULED: { border: "border-t-pink-500" },
+    // Processing
+    IN_PROGRESS: { border: "border-t-amber-500" },
+    DOCUMENT_VERIFICATION: { border: "border-t-teal-500" },
+    VISA_LODGED: { border: "border-t-emerald-500" },
+    // Success / Closed
+    BOOKING_CONFIRMED: { border: "border-t-green-500" },
+    APPROVED: { border: "border-t-green-600" },
+    PROCESS_COMPLETED: { border: "border-t-emerald-600" },
+    COMMISSION_INVOICING: { border: "border-t-green-500" },
+    // Archives / Losses
+    FUTURE_PROSPECT: { border: "border-t-slate-400" },
+    ARCHIVE: { border: "border-t-slate-500" },
+    REJECTED: { border: "border-t-rose-500" },
+};
+
+const TASK_STATUS_DOT = {
+    PENDING: "bg-amber-500",
+    IN_PROGRESS: "bg-blue-500",
+    COMPLETED: "bg-green-500",
+    CANCELLED: "bg-rose-500",
+};
+
 
 // Same windowed-page-number algorithm as the grid/table pagination (Leads.jsx),
 // duplicated locally so this board has no dependency on that page's internals.
@@ -88,24 +120,18 @@ export default function LeadsBoard({ search = "", mine = false, initialDepartmen
         return <div className="py-20 text-center text-sm text-gray-400">Loading workflow…</div>;
     }
 
-    if (categories.length === 0) {
-        return (
-            <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center text-sm text-gray-500">
-                No department workflow configured yet.
-            </div>
-        );
-    }
-
     return (
-        <div className="space-y-3">
+        <div className="space-y-4">
             {/* Category tabs */}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 bg-slate-100/85 backdrop-blur-md border border-slate-200/60 p-1.5 rounded-full w-fit shadow-inner">
                 {categories.map((d) => (
                     <button
                         key={d}
                         onClick={() => changeDepartment(d)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                            department === d ? departmentStyle(d) : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                        className={`px-5 py-2 rounded-full text-xs font-bold transition-all duration-300 relative ${
+                            department === d 
+                                ? "bg-indigo-600 text-white shadow-md shadow-indigo-200/50 scale-[1.03]" 
+                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
                         }`}
                     >
                         {departmentLabel(d)}
@@ -114,21 +140,18 @@ export default function LeadsBoard({ search = "", mine = false, initialDepartmen
             </div>
 
             {stages.length === 0 ? (
-                <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center text-sm text-gray-500">
-                    <Building2 className="h-6 w-6 text-gray-300 mx-auto mb-2" />
-                    {departmentLabel(department)} has no workflow configured yet.
+                <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-sm text-slate-500 shadow-sm">
+                    <Building2 className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+                    <p className="font-semibold text-slate-700">{departmentLabel(department)}</p>
+                    <p className="text-slate-400 mt-1">No department workflow configured yet.</p>
                 </div>
             ) : isLoading ? (
-                <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-indigo-400" /></div>
+                <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-indigo-500" /></div>
             ) : (
                 <>
-                    {/* Bounded height so this row's own scrollbar (horizontal AND vertical)
-                        never falls below the screen — no need to scroll the page down just
-                        to reach the horizontal scrollbar. Columns scroll vertically inside
-                        this box together; the box itself never grows past the viewport. */}
+                    {/* Bounded height so horizontal scrolling columns look like Trello */}
                     <div
-                        className={`flex gap-4 overflow-auto pb-2 transition-opacity duration-150 ${isFetching ? "opacity-60" : ""}`}
-                        style={{ maxHeight: "calc(100vh - 280px)" }}
+                        className={`flex gap-5 overflow-x-auto pb-6 pt-2 items-start transition-opacity duration-150 select-none scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent ${isFetching ? "opacity-60" : ""}`}
                     >
                         {stages.map((stage) => (
                             <StageColumn
@@ -143,31 +166,26 @@ export default function LeadsBoard({ search = "", mine = false, initialDepartmen
                         ))}
                     </div>
 
-                    {/* Pagination — sticky to the bottom of the viewport (not the bottom of the
-                        column content) so it's reachable without scrolling past every card.
-                        `<main>` (AppLayout) is the scrolling ancestor, so sticky bottom-0 here
-                        pins it to the visible screen edge for as long as the board is on screen. */}
-                    <div className="sticky bottom-0 z-10 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2.5 bg-white border-t border-gray-200 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                        <p className="text-xs text-gray-400 truncate">
+                    {/* Pagination — sticky to the bottom of the viewport */}
+                    <div className="sticky bottom-0 z-10 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 bg-white border-t border-slate-200/80 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                        <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
                             {total === 0 ? "0 leads" : `${total} lead${total === 1 ? "" : "s"} in ${departmentLabel(department)}`}
                         </p>
                         <div className="flex items-center gap-1 justify-self-center">
-                            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                                <ChevronLeft className="h-4 w-4" /> Prev
+                            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm">
+                                <ChevronLeft className="h-3.5 w-3.5" /> Prev
                             </button>
-                            <div className="flex items-center gap-1 mx-1">
+                            <div className="flex items-center gap-1.5 mx-1">
                                 {getPageButtons(page, totalPages).map((p, i) =>
                                     p === "..." ? (
-                                        <span key={`e${i}`} className="px-1.5 text-gray-400 text-sm">…</span>
+                                        <span key={`e${i}`} className="px-1 text-slate-400 text-xs">…</span>
                                     ) : (
-                                        <button key={p} onClick={() => setPage(p)} className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${page === p ? "bg-indigo-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}>
-                                            {p}
-                                        </button>
+                                        <button key={p} onClick={() => setPage(p)} className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${page === p ? "bg-indigo-600 text-white shadow-md shadow-indigo-100 border border-indigo-600" : "text-slate-600 hover:bg-slate-100"}`}>{p}</button>
                                     )
                                 )}
                             </div>
-                            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                                Next <ChevronRight className="h-4 w-4" />
+                            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm">
+                                Next <ChevronRight className="h-3.5 w-3.5" />
                             </button>
                         </div>
                     </div>
@@ -194,40 +212,64 @@ function stageColor(code) {
 }
 
 function StageColumn({ stage, rows, totalInStage, slaWarningDays, slaBreachDays, onPreviewTask }) {
+    const theme = STAGE_THEME[stage.code] || { border: "border-t-indigo-500" };
+
     return (
-        <div className="min-w-[280px] w-[280px] flex-shrink-0">
-            <div className="rounded-t-xl border border-b-0 border-gray-200 bg-white sticky top-0 px-3 py-2.5 flex items-center justify-between">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${stageColor(stage.code)}`}>
+        <div className={`w-80 min-w-[320px] flex-shrink-0 flex flex-col bg-slate-50/60 backdrop-blur-md rounded-2xl border border-slate-200/50 overflow-hidden shadow-sm hover:shadow-md hover:border-slate-300/60 transition-all duration-300 border-t-4 ${theme.border}`}>
+            {/* Column Header */}
+            <div className="px-4 py-3.5 flex items-center justify-between border-b border-slate-200/40 bg-white/95 backdrop-blur-md sticky top-0 z-10">
+                <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border whitespace-nowrap shadow-sm ${stageColor(stage.code)}`}>
                     {stage.label}
                 </span>
-                {/* Real total in this stage, not just this page's slice — so a column
-                    showing 10 cards but "30" here tells you there's more on later pages. */}
-                <span className="text-xs text-gray-400">{totalInStage}</span>
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200/30">
+                    {totalInStage}
+                </span>
             </div>
-            <div className="rounded-b-xl border border-gray-200 bg-gray-50/60 p-2 space-y-2">
+            {/* Column Card Container with dynamic height limits */}
+            <div className="p-3.5 space-y-3.5 overflow-y-auto flex-1 min-h-[350px] max-h-[calc(100vh-320px)] scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                 {rows.map((row) => (
                     <LeadCard key={row.id} row={row} slaWarningDays={slaWarningDays} slaBreachDays={slaBreachDays} onPreviewTask={onPreviewTask} />
                 ))}
                 {rows.length === 0 && (
-                    <p className="text-center text-gray-300 text-[11px] py-6">No leads</p>
+                    <div className="flex flex-col items-center justify-center py-16 px-4 bg-white/40 border border-dashed border-slate-200/60 rounded-2xl">
+                        <div className="p-3 bg-white rounded-full shadow-sm border border-slate-100 mb-3 text-slate-400">
+                            <Building2 className="h-6 w-6 stroke-[1.5]" />
+                        </div>
+                        <p className="text-xs font-bold text-slate-700">{stage.label}</p>
+                        <p className="text-[10px] text-slate-400 text-center mt-1 max-w-[180px]">No active leads are currently in this workflow stage.</p>
+                    </div>
                 )}
             </div>
         </div>
     );
 }
 
-// ─── Card ────────────────────────────────────────────────────────────────────
-
-const TASK_STATUS_DOT = {
-    PENDING: "bg-gray-400",
-    IN_PROGRESS: "bg-blue-500",
-    COMPLETED: "bg-green-500",
-    CANCELLED: "bg-red-400",
-};
-
-function fmtDate(d) {
-    if (!d) return "—";
-    return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+// ─── Card ─────────────────────────────────────────────────────────────────
+function formatLastUpdated(date) {
+    if (!date) return "—";
+    const now = new Date();
+    const updated = new Date(date);
+    const diffMs = now - updated;
+    if (diffMs < 0) return "just now";
+    
+    const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+    const isToday = now.toDateString() === updated.toDateString();
+    
+    if (isToday) {
+        if (diffHrs < 1) {
+            return "less than 1 hr";
+        }
+        return `${diffHrs} hr${diffHrs === 1 ? "" : "s"} ago`;
+    }
+    
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) {
+        return "1 day ago";
+    }
+    if (diffDays >= 30) {
+        return "30+ days ago";
+    }
+    return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
 }
 
 function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
@@ -236,79 +278,104 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
     const category = getCategoryFromScore(lead.score ?? 0);
     const task = lead.tasks?.[0];
 
+    const categoryColors = {
+        PREMIUM: "bg-purple-50 text-purple-700 border-purple-100/60 shadow-sm shadow-purple-50",
+        HOT: "bg-rose-50 text-rose-700 border-rose-100/60 shadow-sm shadow-rose-50",
+        WARM: "bg-amber-50 text-amber-700 border-amber-100/60 shadow-sm shadow-amber-50",
+        COLD: "bg-blue-50 text-blue-700 border-blue-100/60 shadow-sm shadow-blue-50",
+    };
+
     return (
         <Link
             to={`/leads/${lead.id}`}
-            className="group block bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all p-3"
+            className={`group block bg-white rounded-2xl border transition-all duration-355 p-4 relative overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-indigo-400/80 ${
+                sla?.level === "breach" 
+                    ? "border-red-200 bg-gradient-to-br from-white to-red-50/5 border-l-4 border-l-red-500" 
+                    : sla?.level === "warning"
+                    ? "border-amber-200 bg-gradient-to-br from-white to-amber-50/5 border-l-4 border-l-amber-500"
+                    : "border-slate-200/75 border-l-4 border-l-indigo-400/30"
+            }`}
         >
             {/* Row 1 — name + SLA badge */}
             <div className="flex items-start justify-between gap-2">
-                <span className="font-semibold text-sm text-gray-900 truncate group-hover:text-indigo-600 transition-colors">
+                <span className="font-bold text-sm text-slate-800 truncate group-hover:text-indigo-650 transition-colors">
                     {lead.name}
                 </span>
                 {sla && (
-                    <span className={`flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
-                        sla.level === "breach" ? "bg-red-100 text-red-600 border-red-200" : "bg-amber-100 text-amber-600 border-amber-200"
+                    <span className={`flex-shrink-0 text-[9px] font-extrabold px-2.5 py-0.5 rounded-full border shadow-sm ${
+                        sla.level === "breach" 
+                            ? "bg-red-100/80 text-red-700 border-red-200" 
+                            : "bg-amber-100/80 text-amber-700 border-amber-200"
                     }`}>
-                        {sla.days}d
+                        {sla.days}d inactive
                     </span>
                 )}
             </div>
 
             {/* Row 2 — contact (phone + email, both when available) */}
-            <div className="mt-1 space-y-0.5">
+            <div className="mt-2.5 space-y-1.5">
                 {lead.phone && (
-                    <p className="flex items-center gap-1 text-[11px] text-gray-400 truncate">
-                        <Phone className="h-3 w-3 shrink-0" /> {lead.phone}
+                    <p className="flex items-center gap-2 text-xs text-slate-500 truncate font-semibold hover:text-slate-800 transition-colors">
+                        <Phone className="h-3.5 w-3.5 text-slate-450 shrink-0" /> {lead.phone}
                     </p>
                 )}
                 {lead.email && (
-                    <p className="flex items-center gap-1 text-[11px] text-gray-400 truncate">
-                        <Mail className="h-3 w-3 shrink-0" /> {lead.email}
+                    <p className="flex items-center gap-2 text-xs text-slate-500 truncate font-semibold hover:text-slate-800 transition-colors">
+                        <Mail className="h-3.5 w-3.5 text-slate-450 shrink-0" /> {lead.email}
                     </p>
                 )}
             </div>
 
             {/* Row 3 — source + enquiry type */}
             {(lead.source || lead.enquiryType) && (
-                <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                <div className="mt-3 flex items-center gap-1.5 flex-wrap">
                     {lead.source && (
-                        <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-100">
-                            <Globe className="h-2.5 w-2.5" /> {lead.source.toLowerCase().replace(/_/g, " ")}
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/40">
+                            <Globe className="h-2.5 w-2.5 shrink-0 text-slate-400" /> {lead.source.toLowerCase().replace(/_/g, " ")}
                         </span>
                     )}
                     {lead.enquiryType && (
-                        <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-100">
-                            <Tag className="h-2.5 w-2.5" /> {lead.enquiryType.toLowerCase().replace(/_/g, " ")}
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-50/70 text-indigo-750 border border-indigo-100/30">
+                            <Tag className="h-2.5 w-2.5 shrink-0 text-indigo-400" /> {lead.enquiryType.toLowerCase().replace(/_/g, " ")}
                         </span>
                     )}
                 </div>
             )}
 
             {/* Row 4 — last activity */}
-            <p className="mt-1.5 flex items-center gap-1 text-[10px] text-gray-400">
-                <Calendar className="h-3 w-3" /> Active {fmtDate(lead.updatedAt)}
-            </p>
+            <div className="mt-3.5 flex items-center gap-1.5 text-[10px] text-slate-450 font-semibold">
+                <Calendar className="h-3.5 w-3.5 text-slate-350" />
+                <span>Active {formatLastUpdated(lead.updatedAt)}</span>
+            </div>
 
             {/* Row 5 — footer */}
-            <div className="flex items-center justify-between border-t border-gray-100 pt-2 mt-2">
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+            <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-3.5">
+                <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border shadow-sm ${categoryColors[category] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
                     {category} · {lead.score ?? 0}
                 </span>
-                <span className="text-[11px] text-gray-400 truncate max-w-[100px]" title={row.assignedEmployee?.name || "Unassigned"}>
-                    {row.assignedEmployee?.name || "Unassigned"}
-                </span>
+                {row.assignedEmployee ? (
+                    <div className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/50 pl-1 pr-2.5 py-0.5 rounded-full shadow-sm max-w-[140px] transition-colors duration-200" title={row.assignedEmployee.name}>
+                        <Avatar user={row.assignedEmployee} size="xs" className="w-5 h-5 ring-2 ring-white" />
+                        <span className="text-[10px] text-slate-655 font-bold truncate">
+                            {row.assignedEmployee.name.split(" ")[0]}
+                        </span>
+                    </div>
+                ) : (
+                    <span className="text-[10px] text-slate-400 font-bold bg-slate-50 border border-slate-200/40 px-2.5 py-0.5 rounded-full shadow-sm" title="Unassigned">
+                        Unassigned
+                    </span>
+                )}
             </div>
 
             {/* Row 6 — most recent task, click opens a read-only preview */}
             {task && (
                 <button
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPreviewTask(task); }}
-                    className="mt-2 w-full flex items-center gap-1.5 text-[10px] text-left px-2 py-1.5 rounded-lg bg-indigo-50/60 text-indigo-700 hover:bg-indigo-100 transition-colors"
+                    className="mt-3 w-full flex items-center gap-2 text-[10px] text-left px-2.5 py-2 rounded-xl bg-slate-50 hover:bg-indigo-50/60 border border-slate-200/40 hover:border-indigo-150/40 text-slate-600 hover:text-indigo-700 transition-all duration-200 font-bold"
                 >
-                    <ClipboardList className="h-3 w-3 shrink-0" />
+                    <ClipboardList className="h-3.5 w-3.5 shrink-0 text-slate-455 group-hover:text-indigo-400" />
                     <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${TASK_STATUS_DOT[task.status] || "bg-gray-400"}`} />
-                    <span className="truncate flex-1">{task.title}</span>
+                    <span className="truncate flex-1 font-semibold">{task.title}</span>
                 </button>
             )}
         </Link>

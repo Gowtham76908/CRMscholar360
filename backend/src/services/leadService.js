@@ -1,4 +1,4 @@
-﻿const prisma = require("../utils/prisma");
+const prisma = require("../utils/prisma");
 const paginate = require("../utils/paginate");
 const { signUploadUrl } = require("../utils/signedUpload");
 const { createSalesAssignment, isMemberOfDepartment, getUserDepartments } = require("./leadDepartmentService");
@@ -211,7 +211,7 @@ const getLeads = async ({
                 leadDepartments: {
                     select: {
                         id: true, department: true, stage: true, assignedEmployeeId: true,
-                        assignedEmployee: { select: { id: true, name: true, email: true } },
+                        assignedEmployee: { select: { id: true, name: true, email: true, profilePhoto: true } },
                     },
                 },
                 // Avoid N+1 and bloated responses: only fetch latest 1 call log

@@ -1,10 +1,11 @@
-﻿import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { LeadDetailSkeleton } from "../components/ui/Skeleton";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext";
 import api from "../api/axios";
+import Avatar from "../components/Avatar";
 import {
     ArrowLeft, Phone, Mail, MessageSquare, Plus, CheckCircle, Circle,
     Calendar, User, Loader2, PhoneCall, FileText, Activity,
@@ -56,6 +57,18 @@ const ACTION_CONFIG = {
     EMAIL_SENT:     { icon: "✉", color: "text-blue-500",    bg: "bg-blue-50 border-blue-100",       label: "Email sent" },
     CALL_INITIATED: { icon: "📞", color: "text-green-500",  bg: "bg-green-50 border-green-100",  label: "Call initiated" },
     CALL_COMPLETED: { icon: "📞", color: "text-green-600",  bg: "bg-green-50 border-green-100",  label: "Call completed" },
+    DEPARTMENTS_ALLOCATED: { icon: "⊞", color: "text-indigo-500", bg: "bg-indigo-50 border-indigo-100", label: "Departments allocated" },
+    CONSULTANT_ASSIGNED:   { icon: "👤", color: "text-violet-500", bg: "bg-violet-50 border-violet-100", label: "Consultant assigned" },
+    REASSIGNMENT_REQUESTED:{ icon: "⇄", color: "text-violet-400", bg: "bg-violet-50 border-violet-100", label: "Reassignment requested" },
+    REASSIGNMENT_REJECTED: { icon: "✕", color: "text-red-500",    bg: "bg-red-50 border-red-100",      label: "Reassignment rejected" },
+    STAGE_UPDATED:         { icon: "⇄", color: "text-indigo-500", bg: "bg-indigo-50 border-indigo-100", label: "Stage updated" },
+    DEPARTMENT_REMOVED:    { icon: "⊟", color: "text-red-400",    bg: "bg-red-50 border-red-100",      label: "Department removed" },
+    DEAL_CREATED:          { icon: "💵", color: "text-green-500",  bg: "bg-green-50 border-green-100",   label: "Deal created" },
+    DEAL_STAGE_CHANGED:    { icon: "⇄", color: "text-green-600",  bg: "bg-green-50 border-green-100",   label: "Deal stage updated" },
+    DEAL_UPDATED:          { icon: "✎", color: "text-green-500",  bg: "bg-green-50 border-green-100",   label: "Deal updated" },
+    INVOICE_CREATED:       { icon: "🧾", color: "text-emerald-500", bg: "bg-emerald-50 border-emerald-100", label: "Invoice created" },
+    INVOICE_UPDATED:       { icon: "✎", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100", label: "Invoice updated" },
+    PAYMENT_RECEIVED:      { icon: "💰", color: "text-emerald-700", bg: "bg-emerald-100 border-emerald-200", label: "Payment received" },
     DEFAULT:        { icon: "·", color: "text-gray-400",   bg: "bg-gray-50 border-gray-100",   label: "Activity" },
 };
 
@@ -118,6 +131,171 @@ function TimelineItem({ item }) {
     const meta = item.metadata ?? {};
 
     const renderDetail = () => {
+        if (item.action === "LEAD_CREATED") {
+            const isImport = meta.source === "FILE_IMPORT";
+            const isFb = meta.source === "FACEBOOK_REALTIME";
+            return (
+                <p className="mt-1 text-xs text-gray-500">
+                    {isImport ? "Created via file import" : isFb ? "Created via Facebook Realtime Webhook" : meta.source ? `Created via ${meta.source.toLowerCase()}` : "Created"}
+                    {meta.category && ` · Category: ${meta.category}`}
+                    {meta.score && ` · Score: ${meta.score}`}
+                </p>
+            );
+        }
+        if (item.action === "DEPARTMENTS_ALLOCATED" && meta.departments) {
+            return (
+                <p className="mt-1 text-xs text-gray-600">
+                    Allocated departments: <span className="font-semibold">{meta.departments.join(", ")}</span>
+                </p>
+            );
+        }
+        if (item.action === "CONSULTANT_ASSIGNED" && meta.department) {
+            const name = meta.consultantName || "Consultant";
+            return (
+                <p className="mt-1 text-xs text-gray-600">
+                    {meta.selfClaim ? "Self-claimed" : "Assigned"} <span className="font-semibold">{name}</span> to department <span className="font-semibold">{meta.department}</span>
+                    {meta.viaRequest && <span className="text-gray-400"> (via request approval)</span>}
+                </p>
+            );
+        }
+        if (item.action === "REASSIGNMENT_REQUESTED" && meta.department) {
+            const from = meta.fromUserName || "Unassigned";
+            const to = meta.toUserName || "Consultant";
+            return (
+                <p className="mt-1 text-xs text-gray-600">
+                    Requested reassignment in <span className="font-semibold">{meta.department}</span> from <span className="font-semibold">{from}</span> to <span className="font-semibold">{to}</span>
+                </p>
+            );
+        }
+        if (item.action === "REASSIGNMENT_REJECTED" && meta.department) {
+            const to = meta.toUserName || "Consultant";
+            return (
+                <p className="mt-1 text-xs text-gray-600">
+                    Reassignment request to <span className="font-semibold">{to}</span> in <span className="font-semibold">{meta.department}</span> was rejected
+                </p>
+            );
+        }
+        if (item.action === "STAGE_UPDATED" && meta.to) {
+            return (
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                    <span className="text-[10px] font-bold text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                        {meta.department}
+                    </span>
+                    {meta.from && (
+                        <span className="text-[10px] font-bold text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                            {meta.from.replace("_", " ")}
+                        </span>
+                    )}
+                    {meta.from && <span className="text-xs text-gray-400">→</span>}
+                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                        {meta.to.replace("_", " ")}
+                    </span>
+                </div>
+            );
+        }
+        if (item.action === "DEPARTMENT_REMOVED" && meta.department) {
+            return (
+                <p className="mt-1 text-xs text-gray-600">
+                    Removed department: <span className="font-semibold">{meta.department}</span>
+                </p>
+            );
+        }
+        if (item.action === "DEAL_CREATED" && meta.title) {
+            return (
+                <div className="mt-1.5 bg-green-50 border border-green-100 rounded-lg px-2.5 py-1.5 space-y-0.5">
+                    <p className="text-xs font-semibold text-green-800">Deal: "{meta.title}"</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white border border-green-200 text-green-700">
+                            {meta.currency || "INR"} {meta.amount ?? 0}
+                        </span>
+                        {meta.stage && (
+                            <span className="text-[10px] font-semibold text-green-600">
+                                Stage: {meta.stage}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+        if (item.action === "DEAL_STAGE_CHANGED" && meta.title) {
+            return (
+                <div className="mt-1.5 bg-green-50 border border-green-100 rounded-lg px-2.5 py-1.5 space-y-0.5">
+                    <p className="text-xs font-semibold text-green-800">Deal: "{meta.title}"</p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        {meta.from && (
+                            <span className="text-[10px] font-semibold text-gray-500 bg-white border px-1.5 py-0.5 rounded">
+                                {meta.from}
+                            </span>
+                        )}
+                        {meta.from && <span className="text-xs text-gray-400">→</span>}
+                        <span className="text-[10px] font-bold text-green-700 bg-white border border-green-200 px-1.5 py-0.5 rounded">
+                            {meta.to}
+                        </span>
+                    </div>
+                </div>
+            );
+        }
+        if (item.action === "DEAL_UPDATED" && meta.title) {
+            const keys = Object.keys(meta.changes ?? {}).filter(k => k !== "updatedAt");
+            return (
+                <div className="mt-1.5 bg-green-50 border border-green-100 rounded-lg px-2.5 py-1.5">
+                    <p className="text-xs font-semibold text-green-800">Deal updated: "{meta.title}"</p>
+                    {keys.length > 0 && (
+                        <p className="text-[10px] text-green-600">Changed: {keys.join(", ")}</p>
+                    )}
+                </div>
+            );
+        }
+        if (item.action === "INVOICE_CREATED" && meta.invoiceNumber) {
+            return (
+                <div className="mt-1.5 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5 space-y-0.5">
+                    <p className="text-xs font-semibold text-emerald-800">Invoice: {meta.invoiceNumber}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white border border-emerald-200 text-emerald-700">
+                            INR {meta.amount ?? 0}
+                        </span>
+                        {meta.dealTitle && (
+                            <span className="text-[10px] text-emerald-600">
+                                Deal: {meta.dealTitle}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+        if (item.action === "INVOICE_UPDATED" && meta.invoiceNumber) {
+            const keys = Object.keys(meta.changes ?? {}).filter(k => k !== "updatedAt");
+            return (
+                <div className="mt-1.5 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5">
+                    <p className="text-xs font-semibold text-emerald-800">Invoice updated: {meta.invoiceNumber}</p>
+                    {keys.length > 0 && (
+                        <p className="text-[10px] text-emerald-600">Changed: {keys.join(", ")}</p>
+                    )}
+                </div>
+            );
+        }
+        if (item.action === "PAYMENT_RECEIVED" && meta.invoiceNumber) {
+            return (
+                <div className="mt-1.5 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5 space-y-0.5">
+                    <p className="text-xs font-semibold text-emerald-800">Payment received for invoice {meta.invoiceNumber}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-600 text-white">
+                            Received: INR {meta.amount ?? 0}
+                        </span>
+                        <span className="text-[10px] font-medium text-emerald-700 bg-white border border-emerald-200 px-1.5 py-0.5 rounded-full">
+                            Status: {meta.status} (Paid: INR {meta.totalPaid ?? 0})
+                        </span>
+                    </div>
+                </div>
+            );
+        }
+        if (item.action === "TASK_COMPLETED" && meta.title) {
+            return (
+                <div className="mt-1.5 bg-green-50 border border-green-100 rounded-lg px-2.5 py-1.5">
+                    <p className="text-xs font-semibold text-green-700">"{meta.title}" was completed</p>
+                </div>
+            );
+        }
         if (item.action === "STATUS_CHANGED" && meta.newStatus) {
             return (
                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
@@ -204,7 +382,7 @@ function TimelineItem({ item }) {
         if (["LEAD_ASSIGNED", "ASSIGNED"].includes(item.action) && meta.assignedTo) {
             return (
                 <p className="mt-1 text-xs text-gray-600">
-                    Assigned to <span className="font-semibold">{meta.assignedTo}</span>
+                    Assigned to <span className="font-semibold">{meta.assignedToName || meta.assignedTo}</span>
                 </p>
             );
         }
@@ -216,11 +394,10 @@ function TimelineItem({ item }) {
                 </p>
             );
         }
-        if (item.action === "LEAD_UPDATED" && meta.changes) {
-            const keys = Object.keys(meta.changes ?? {});
-            return keys.length > 0 ? (
-                <p className="mt-1 text-xs text-gray-500">Changed: {keys.join(", ")}</p>
-            ) : null;
+        if (item.action === "LEAD_UPDATED") {
+            return (
+                <p className="mt-1 text-xs text-gray-500">Updated the contact information</p>
+            );
         }
         if (item.action === "TASK_CREATED" && meta.title) {
             return (
@@ -229,6 +406,7 @@ function TimelineItem({ item }) {
                     <div className="flex items-center gap-2 flex-wrap">
                         {meta.priority && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white border border-teal-200 text-teal-700">{meta.priority}</span>}
                         {meta.dueDate && <span className="text-[10px] text-teal-600">Due {new Date(meta.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>}
+                        {meta.assignedToName && <span className="text-[10px] text-teal-600">Assigned to: {meta.assignedToName}</span>}
                     </div>
                 </div>
             );
@@ -241,6 +419,9 @@ function TimelineItem({ item }) {
                     <p className="text-xs font-semibold text-teal-800">"{meta.taskTitle}"</p>
                     {changeKeys.length > 0 && (
                         <p className="text-[10px] text-teal-600">Changed: {changeKeys.join(", ")}</p>
+                    )}
+                    {changes.assignedTo && meta.assignedToName && (
+                        <p className="text-[10px] text-teal-600">Assigned to: {meta.assignedToName}</p>
                     )}
                 </div>
             );
@@ -257,9 +438,20 @@ function TimelineItem({ item }) {
     };
 
     return (
-        <div className="flex gap-3">
-            <div className={`flex-shrink-0 w-7 h-7 rounded-full border flex items-center justify-center text-sm ${cfg.bg} ${cfg.color}`}>
-                {cfg.icon}
+        <div className="flex items-start gap-3">
+            <div className="relative flex-shrink-0 mt-0.5">
+                {!item.user ? (
+                    <div className={`w-8 h-8 rounded-full border flex items-center justify-center text-xs ${cfg.bg} ${cfg.color}`}>
+                        {cfg.icon}
+                    </div>
+                ) : (
+                    <>
+                        <Avatar user={item.user} size="sm" />
+                        <span className={`absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full border border-white flex items-center justify-center text-[9px] shadow-sm ${cfg.bg} ${cfg.color}`}>
+                            {cfg.icon}
+                        </span>
+                    </>
+                )}
             </div>
             <div className="flex-1 min-w-0 pb-4 border-b border-gray-100 last:border-0">
                 <div className="flex items-start justify-between gap-2">
@@ -408,7 +600,10 @@ function TaskRow({ task, leadId, compact = false }) {
         onError: (_e, _v, ctx) => {
             if (ctx?.prev) queryClient.setQueryData(["lead-tasks", leadId], ctx.prev);
         },
-        onSettled: () => queryClient.invalidateQueries({ queryKey: ["lead-tasks", leadId] }),
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["lead-tasks", leadId] });
+            queryClient.invalidateQueries({ queryKey: ["lead-activities", leadId] });
+        },
     });
 
     const overdue = task.status !== "COMPLETED" && new Date(task.dueDate) < new Date();
@@ -539,6 +734,7 @@ function CustomFieldsPanel({ leadId, lead }) {
         },
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["lead", leadId] });
+            qc.invalidateQueries({ queryKey: ["lead-activities", leadId] });
             setEditing(false);
         },
         onError: () => toast.error("Failed to save fields"),
@@ -1369,14 +1565,28 @@ export default function LeadDetail() {
                                                     item._type === "call" ? (
                                                         <CallItem key={item.id} call={item} leadId={id} />
                                                     ) : item._type === "note" ? (
-                                                        <div key={item.id} className="flex gap-3">
-                                                            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-xs">
-                                                                📝
+                                                        <div key={item.id} className="flex items-start gap-3">
+                                                            <div className="relative flex-shrink-0 mt-0.5">
+                                                                {!item.user ? (
+                                                                    <div className="w-8 h-8 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-xs">
+                                                                        📝
+                                                                    </div>
+                                                                ) : (
+                                                                    <>
+                                                                        <Avatar user={item.user} size="sm" />
+                                                                        <span className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full border border-white flex items-center justify-center text-[9px] shadow-sm bg-amber-50 text-amber-505">
+                                                                            📝
+                                                                        </span>
+                                                                    </>
+                                                                )}
                                                             </div>
                                                             <div className="flex-1 pb-3 border-b border-gray-100 last:border-0">
                                                                 <div className="flex items-start justify-between">
                                                                     <div className="flex-1 min-w-0">
                                                                         <p className="text-sm font-semibold text-gray-800 mb-0.5">Note</p>
+                                                                        {item.user?.name && (
+                                                                            <p className="text-xs text-gray-500 mb-1">by {item.user.name}</p>
+                                                                        )}
                                                                         <p className="text-sm text-gray-600 line-clamp-3">{item.content}</p>
                                                                     </div>
                                                                     <span className="text-[11px] text-gray-400 flex-shrink-0 ml-2">{relTime(item.createdAt)}</span>
@@ -1384,16 +1594,30 @@ export default function LeadDetail() {
                                                             </div>
                                                         </div>
                                                     ) : item._type === "whatsapp" ? (
-                                                        <div key={item.id} className="flex gap-3">
-                                                            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-xs">
-                                                                💬
+                                                        <div key={item.id} className="flex items-start gap-3">
+                                                            <div className="relative flex-shrink-0 mt-0.5">
+                                                                {!item.user ? (
+                                                                    <div className="w-8 h-8 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-xs">
+                                                                        💬
+                                                                    </div>
+                                                                ) : (
+                                                                    <>
+                                                                        <Avatar user={item.user} size="sm" />
+                                                                        <span className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full border border-white flex items-center justify-center text-[9px] shadow-sm bg-emerald-50 text-emerald-505">
+                                                                            💬
+                                                                        </span>
+                                                                    </>
+                                                                )}
                                                             </div>
                                                             <div className="flex-1 pb-3 border-b border-gray-100 last:border-0">
                                                                 <div className="flex items-start justify-between mb-1">
-                                                                    <div className="flex items-center gap-1.5">
+                                                                    <div className="flex items-center gap-1.5 flex-wrap">
                                                                         <p className="text-sm font-semibold text-gray-800">
                                                                             {item.direction === "INBOUND" ? "← Received" : "→ Sent"}
                                                                         </p>
+                                                                        {item.direction === "OUTBOUND" && item.user?.name && (
+                                                                            <span className="text-xs text-gray-400">by {item.user.name}</span>
+                                                                        )}
                                                                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                                                                             item.status === "READ"      ? "bg-blue-50 text-blue-600" :
                                                                             item.status === "DELIVERED" ? "bg-emerald-50 text-emerald-600" :
@@ -1443,6 +1667,9 @@ export default function LeadDetail() {
                         remindersLoading={remindersLoading}
                         leadId={id}
                         hideContact
+                        calls={calls}
+                        notes={notes}
+                        tasks={tasks}
                     />
 
                     {/* ── Departments (multi-department services) ──────────────── */}
@@ -1611,6 +1838,7 @@ export default function LeadDetail() {
                     onClose={() => {
                         setShowEditLead(false);
                         queryClient.invalidateQueries({ queryKey: ["lead", id] });
+                        queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
                     }}
                 />
             </SlidePanel>
@@ -1622,6 +1850,7 @@ export default function LeadDetail() {
                     onClose={() => {
                         setShowTaskModal(false);
                         queryClient.invalidateQueries({ queryKey: ["lead-tasks", id] });
+                        queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
                     }}
                 />
             </SlidePanel>

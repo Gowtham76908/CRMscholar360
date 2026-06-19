@@ -25,7 +25,11 @@ const createNote = async (req, res, next) => {
         const note = await prisma.note.create({
             data: {
                 leadId,
+                userId: req.user.userId,
                 content: content.trim()
+            },
+            include: {
+                user: { select: { id: true, name: true, profilePhoto: true } }
             }
         });
 
@@ -50,7 +54,10 @@ const getNotes = async (req, res, next) => {
 
         const notes = await prisma.note.findMany({
             where: { leadId },
-            orderBy: { createdAt: "desc" }
+            orderBy: { createdAt: "desc" },
+            include: {
+                user: { select: { id: true, name: true, profilePhoto: true } }
+            }
         });
 
         res.json(notes);

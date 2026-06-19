@@ -7,6 +7,7 @@ const crypto = require("crypto");
 const authMiddleware = require("../middleware/authMiddleware");
 const prisma = require("../utils/prisma");
 const { toSafeUser } = require("../utils/safeUser");
+const { uploadToCloudinary } = require("../utils/cloudinary");
 
 // Ensure upload directory exists
 const uploadDir = "uploads/profiles";
@@ -70,13 +71,37 @@ const uploadTask = multer({
 router.use(authMiddleware);
 
 // Upload profile photo
-router.post("/profile-photo", uploadProfile.single("photo"), async (req, res) => {
+router.post("/profile-photo", (req, res, next) => {
+    uploadProfile.single("photo")(req, res, (err) => {
+        if (err) {
+            console.error("Multer profile photo upload error:", err);
+            return res.status(400).json({
+                error: {
+                    code: "UPLOAD_ERROR",
+                    message: err.message || "Failed to upload profile photo."
+                }
+            });
+        }
+        next();
+    });
+}, async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ message: "No file uploaded" });
         }
 
-        const photoUrl = `/uploads/profiles/${req.file.filename}`;
+        // Try uploading to Cloudinary
+        let photoUrl = await uploadToCloudinary(req.file.path, "profiles");
+
+        // If Cloudinary succeeded, delete the local file immediately.
+        // Otherwise, fall back to the relative local URL path.
+        if (photoUrl) {
+            fs.unlink(req.file.path, (err) => {
+                if (err) console.error("Error deleting local file after Cloudinary upload:", err);
+            });
+        } else {
+            photoUrl = `/uploads/profiles/${req.file.filename}`;
+        }
 
         // Update user's profile photo in database
         const updatedUser = await prisma.user.update({
@@ -91,7 +116,7 @@ router.post("/profile-photo", uploadProfile.single("photo"), async (req, res) =>
     } catch (error) {
         console.error("Profile photo upload error:", error);
 
-        // Delete uploaded file if database update fails
+        // Delete uploaded local file if database update fails
         if (req.file) {
             fs.unlink(req.file.path, (err) => {
                 if (err) console.error("Error deleting file:", err);
@@ -103,7 +128,20 @@ router.post("/profile-photo", uploadProfile.single("photo"), async (req, res) =>
 });
 
 // Upload task files
-router.post("/task-files", uploadTask.array("files", 5), async (req, res) => {
+router.post("/task-files", (req, res, next) => {
+    uploadTask.array("files", 5)(req, res, (err) => {
+        if (err) {
+            console.error("Multer task files upload error:", err);
+            return res.status(400).json({
+                error: {
+                    code: "UPLOAD_ERROR",
+                    message: err.message || "Failed to upload task files."
+                }
+            });
+        }
+        next();
+    });
+}, async (req, res) => {
     try {
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({ message: "No files uploaded" });
@@ -135,10 +173,13 @@ router.delete("/profile-photo", authMiddleware, async (req, res) => {
         });
 
         if (user?.profilePhoto) {
-            // Delete file from filesystem
-            const filePath = path.join(__dirname, "../..", user.profilePhoto);
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
+            // Delete file from filesystem only if it is a relative local path
+            const isLocal = !user.profilePhoto.startsWith("http://") && !user.profilePhoto.startsWith("https://") && !user.profilePhoto.startsWith("//");
+            if (isLocal) {
+                const filePath = path.join(__dirname, "../..", user.profilePhoto);
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                }
             }
 
             // Update database

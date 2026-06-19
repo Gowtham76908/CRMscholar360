@@ -1,4 +1,4 @@
-﻿const prisma = require("../utils/prisma");
+const prisma = require("../utils/prisma");
 const { ApiError } = require("../utils/apiError");
 const { istDateKey } = require("../utils/istTime");
 const { signUploadUrl } = require("../utils/signedUpload");
@@ -24,7 +24,7 @@ async function buildJourneyEvents(leadId) {
         await Promise.all([
             prisma.activity.findMany({
                 where: { leadId },
-                include: { user: { select: { id: true, name: true } } },
+                include: { user: { select: { id: true, name: true, profilePhoto: true } } },
                 orderBy: { createdAt: "desc" },
             }),
             prisma.callLog.findMany({
@@ -37,28 +37,29 @@ async function buildJourneyEvents(leadId) {
             }),
             prisma.emailLog.findMany({
                 where: { leadId },
-                include: { sentBy: { select: { id: true, name: true } } },
+                include: { sentBy: { select: { id: true, name: true, profilePhoto: true } } },
                 orderBy: { createdAt: "desc" },
             }),
             prisma.whatsAppMessage.findMany({
                 where: { leadId },
-                include: { user: { select: { id: true, name: true } } },
+                include: { user: { select: { id: true, name: true, profilePhoto: true } } },
                 orderBy: { createdAt: "desc" },
             }),
             prisma.task.findMany({
                 where: { leadId },
-                include: { assignedTo: { select: { id: true, name: true } } },
+                include: { assignedTo: { select: { id: true, name: true, profilePhoto: true } } },
                 orderBy: { updatedAt: "desc" },
             }),
             prisma.note.findMany({
                 where: { leadId },
+                include: { user: { select: { id: true, name: true, profilePhoto: true } } },
                 orderBy: { createdAt: "desc" },
             }),
             prisma.assignmentHistory.findMany({
                 where: { leadId },
                 include: {
-                    employee: { select: { id: true, name: true } },
-                    previousEmployee: { select: { id: true, name: true } },
+                    employee: { select: { id: true, name: true, profilePhoto: true } },
+                    previousEmployee: { select: { id: true, name: true, profilePhoto: true } },
                 },
                 orderBy: { createdAt: "desc" },
             }),
@@ -96,6 +97,7 @@ async function buildJourneyEvents(leadId) {
             title: buildActivityTitle(a),
             description: buildActivityDescription(a),
             actor: a.user?.name ?? null,
+            actorPhoto: a.user?.profilePhoto ?? null,
             metadata: a.metadata ?? {},
             createdAt: a.createdAt,
         });
@@ -163,6 +165,7 @@ async function buildJourneyEvents(leadId) {
             title: "Email sent",
             description: e.subject,
             actor: e.sentBy?.name ?? null,
+            actorPhoto: e.sentBy?.profilePhoto ?? null,
             metadata: {
                 subject: e.subject,
                 toEmail: e.toEmail,
@@ -184,6 +187,7 @@ async function buildJourneyEvents(leadId) {
             title: isSent ? "WhatsApp sent" : "WhatsApp received",
             description: m.messageBody?.slice(0, 120) ?? null,
             actor: isSent ? (m.user?.name ?? null) : null,
+            actorPhoto: isSent ? (m.user?.profilePhoto ?? null) : null,
             metadata: {
                 direction: m.direction,
                 status: m.status,
@@ -204,6 +208,7 @@ async function buildJourneyEvents(leadId) {
             title: "Task created",
             description: t.title,
             actor: t.assignedTo?.name ?? null,
+            actorPhoto: t.assignedTo?.profilePhoto ?? null,
             metadata: { title: t.title, priority: t.priority, dueDate: t.dueDate, status: t.status },
             createdAt: t.updatedAt, // use updatedAt as proxy for creation
         });
@@ -216,6 +221,7 @@ async function buildJourneyEvents(leadId) {
                 title: "Task completed",
                 description: t.title,
                 actor: t.assignedTo?.name ?? null,
+                actorPhoto: t.assignedTo?.profilePhoto ?? null,
                 metadata: { title: t.title, completedAt: t.completedAt },
                 createdAt: t.completedAt,
             });
@@ -231,7 +237,8 @@ async function buildJourneyEvents(leadId) {
             referenceId: n.id,
             title: "Note added",
             description: n.content?.slice(0, 200),
-            actor: null,
+            actor: n.user?.name ?? null,
+            actorPhoto: n.user?.profilePhoto ?? null,
             metadata: { content: n.content },
             createdAt: n.createdAt,
         });
@@ -249,6 +256,7 @@ async function buildJourneyEvents(leadId) {
                 ? `From ${h.previousEmployee.name} → ${h.employee.name}`
                 : `Assigned to ${h.employee.name}`,
             actor: null,
+            actorPhoto: h.employee?.profilePhoto ?? null,
             metadata: {
                 assignedTo: h.employee.name,
                 previousEmployee: h.previousEmployee?.name ?? null,

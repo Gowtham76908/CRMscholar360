@@ -1,4 +1,4 @@
-﻿const prisma = require("../utils/prisma");
+const prisma = require("../utils/prisma");
 const paginate = require("../utils/paginate");
 const calculateLeadScore = require("../utils/leadScorer");
 const logActivity = require("../utils/activityLogger");
@@ -323,10 +323,47 @@ const getLeadActivities = async (req, res, next) => {
                 orderBy: { createdAt: "desc" },
                 skip: (page - 1) * limit,
                 take: limit,
-                include: { user: { select: { id: true, name: true } } },
+                include: { user: { select: { id: true, name: true, profilePhoto: true } } },
             }),
         ]);
-        res.json(paginate(activities, total, page, limit));
+
+        const userIds = new Set();
+        activities.forEach(act => {
+            const meta = act.metadata;
+            if (meta && typeof meta === "object") {
+                if (meta.consultantId) userIds.add(meta.consultantId);
+                if (meta.toUserId) userIds.add(meta.toUserId);
+                if (meta.fromUserId) userIds.add(meta.fromUserId);
+                if (meta.assignedTo && typeof meta.assignedTo === "string" && meta.assignedTo.length === 36) {
+                    userIds.add(meta.assignedTo);
+                }
+            }
+        });
+
+        const userMap = new Map();
+        if (userIds.size > 0) {
+            const users = await prisma.user.findMany({
+                where: { id: { in: Array.from(userIds) } },
+                select: { id: true, name: true },
+            });
+            users.forEach(u => userMap.set(u.id, u.name));
+        }
+
+        const enrichedActivities = activities.map(act => {
+            let meta = act.metadata;
+            if (meta && typeof meta === "object") {
+                meta = { ...meta };
+                if (meta.consultantId) meta.consultantName = userMap.get(meta.consultantId) || null;
+                if (meta.toUserId) meta.toUserName = userMap.get(meta.toUserId) || null;
+                if (meta.fromUserId) meta.fromUserName = userMap.get(meta.fromUserId) || null;
+                if (meta.assignedTo && typeof meta.assignedTo === "string" && meta.assignedTo.length === 36) {
+                    meta.assignedToName = userMap.get(meta.assignedTo) || null;
+                }
+            }
+            return { ...act, metadata: meta };
+        });
+
+        res.json(paginate(enrichedActivities, total, page, limit));
     } catch (error) {
         return next(error);
     }

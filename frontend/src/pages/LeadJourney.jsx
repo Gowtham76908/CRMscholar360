@@ -8,6 +8,7 @@ import {
     RefreshCw, AlertTriangle, Info, StickyNote, GitBranch,
 } from "lucide-react";
 import api from "../api/axios";
+import Avatar from "../components/Avatar";
 import {
     AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
     Tooltip, ResponsiveContainer, Legend,
@@ -96,6 +97,8 @@ function EventCard({ event, index }) {
     const cfg = CHANNEL_CONFIG[event.channel] ?? CHANNEL_CONFIG.activity;
     const Icon = cfg.icon;
 
+    const userObj = event.actor ? { name: event.actor, profilePhoto: event.actorPhoto } : null;
+
     return (
         <motion.div
             initial={{ opacity: 0, x: -8 }}
@@ -103,8 +106,19 @@ function EventCard({ event, index }) {
             transition={{ delay: Math.min(index * 0.04, 0.4) }}
             className={`relative flex gap-3 p-3.5 rounded-xl border ${cfg.bg} transition-all hover:shadow-sm`}
         >
-            <div className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center bg-white border border-gray-100 shadow-sm`}>
-                <Icon className={`h-4 w-4 ${cfg.color}`} />
+            <div className="relative flex-shrink-0">
+                {!userObj ? (
+                    <div className="h-8 w-8 rounded-full flex items-center justify-center bg-white border border-gray-100 shadow-sm">
+                        <Icon className={`h-4 w-4 ${cfg.color}`} />
+                    </div>
+                ) : (
+                    <>
+                        <Avatar user={userObj} size="sm" />
+                        <span className={`absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full border border-white flex items-center justify-center shadow-sm bg-white`}>
+                            <Icon className={`h-2.5 w-2.5 ${cfg.color}`} />
+                        </span>
+                    </>
+                )}
             </div>
             <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">

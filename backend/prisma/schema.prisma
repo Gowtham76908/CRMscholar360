@@ -67,6 +67,7 @@ model User {
   assignmentRequestsFrom     LeadAssignmentRequest[] @relation("AssignmentRequestFrom")
   assignmentRequestsTo       LeadAssignmentRequest[] @relation("AssignmentRequestTo")
   assignmentRequestsDecided  LeadAssignmentRequest[] @relation("AssignmentRequestDecidedBy")
+  notes                      Note[]
 
   @@index([phoneNormalized])
   @@index([managerId])
@@ -208,11 +209,14 @@ model AutomationLog {
 model Note {
   id        String   @id @default(uuid())
   leadId    String?
+  userId    String?
   content   String
   createdAt DateTime @default(now())
   lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([leadId])
+  @@index([userId])
 }
 
 model AssignmentHistory {

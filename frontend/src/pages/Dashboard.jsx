@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDepartmentSelection, useDepartmentDashboard, useDepartmentMembers } from "../hooks/useDepartments";
@@ -493,20 +493,49 @@ const Dashboard = () => {
     // Tab state: overview, analytics, performance
     const [activeTab, setActiveTab] = useState("overview");
 
-    // Filter states (applied values that trigger query fetching)
-    const [startDate, setStartDate] = useState(() => {
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // 1. Read values from searchParams, fallback to defaults
+    const paramStartDate = searchParams.get("startDate");
+    const paramEndDate = searchParams.get("endDate");
+    const paramIntake = searchParams.get("intake");
+    const paramDept = searchParams.get("department");
+    const paramConsultant = searchParams.get("consultantId");
+
+    const defaultStartDate = useMemo(() => {
         const d = new Date();
         d.setDate(d.getDate() - 30);
         return d.toISOString().split("T")[0]; // default: 30 days ago
-    });
-    const [endDate, setEndDate] = useState(() => {
+    }, []);
+
+    const defaultEndDate = useMemo(() => {
         return new Date().toISOString().split("T")[0]; // default: today
-    });
-    const [intake, setIntake] = useState("Winter 2023");
-    const [selectedConsultantId, setSelectedConsultantId] = useState("");
+    }, []);
+
+    // Filter states (applied values that trigger query fetching)
+    const startDate = paramStartDate !== null ? paramStartDate : defaultStartDate;
+    const endDate = paramEndDate !== null ? paramEndDate : defaultEndDate;
+    const intake = paramIntake !== null ? paramIntake : "Winter 2023";
+    const selectedConsultantId = paramConsultant !== null ? paramConsultant : "";
 
     // Department selection hook
     const { department, setDepartment, options } = useDepartmentSelection();
+
+    // Sync department with search param initially (when it loads/resolves)
+    useEffect(() => {
+        if (paramDept && options.includes(paramDept) && department !== paramDept) {
+            setDepartment(paramDept);
+        }
+    }, [paramDept, options, department, setDepartment]);
+
+    // If paramDept is not in URL, but department hook initializes it, update URL
+    useEffect(() => {
+        if (!paramDept && department) {
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.set("department", department);
+            setSearchParams(nextParams, { replace: true });
+        }
+    }, [department, paramDept, searchParams, setSearchParams]);
 
     // Temporary/local filter states (unapplied until clicking Proceed)
     const [tempStartDate, setTempStartDate] = useState(startDate);
@@ -515,6 +544,14 @@ const Dashboard = () => {
     const [tempDepartment, setTempDepartment] = useState(null);
     const [tempSelectedConsultantId, setTempSelectedConsultantId] = useState(selectedConsultantId);
 
+    // Sync temp states with URL query params when they change
+    useEffect(() => {
+        setTempStartDate(startDate);
+        setTempEndDate(endDate);
+        setTempIntake(intake);
+        setTempSelectedConsultantId(selectedConsultantId);
+    }, [startDate, endDate, intake, selectedConsultantId]);
+
     // Sync tempDepartment with department once it loads/resolves initially
     useEffect(() => {
         if (department && tempDepartment === null) {
@@ -522,21 +559,95 @@ const Dashboard = () => {
         }
     }, [department]);
 
+    // Custom handlers for Intake selection vs Manual Date selection
+    const handleIntakeChange = (val) => {
+        setTempIntake(val);
+        if (val === "Winter 2023") {
+            setTempStartDate("2023-12-01");
+            setTempEndDate("2024-02-29");
+        } else if (val === "Summer 2023") {
+            setTempStartDate("2023-06-01");
+            setTempEndDate("2023-08-31");
+        } else if (val === "Fall 2023") {
+            setTempStartDate("2023-09-01");
+            setTempEndDate("2023-11-30");
+        } else if (val === "Winter 2024") {
+            setTempStartDate("2024-12-01");
+            setTempEndDate("2025-02-28");
+        } else if (val === "Summer 2024") {
+            setTempStartDate("2024-06-01");
+            setTempEndDate("2024-08-31");
+        } else if (val === "All Intakes") {
+            setTempStartDate("");
+            setTempEndDate("");
+        }
+    };
+
+    const handleStartDateChange = (val) => {
+        setTempStartDate(val);
+        setTempIntake("All Intakes");
+    };
+
+    const handleEndDateChange = (val) => {
+        setTempEndDate(val);
+        setTempIntake("All Intakes");
+    };
+
     const handleApplyFilters = () => {
-        setStartDate(tempStartDate);
-        setEndDate(tempEndDate);
-        setIntake(tempIntake);
+        const nextParams = new URLSearchParams(searchParams);
+
+        if (tempStartDate !== null && tempStartDate !== undefined) nextParams.set("startDate", tempStartDate);
+        else nextParams.delete("startDate");
+
+        if (tempEndDate !== null && tempEndDate !== undefined) nextParams.set("endDate", tempEndDate);
+        else nextParams.delete("endDate");
+
+        if (tempIntake !== null && tempIntake !== undefined) nextParams.set("intake", tempIntake);
+        else nextParams.delete("intake");
+
         if (tempDepartment) {
+            nextParams.set("department", tempDepartment);
             setDepartment(tempDepartment);
         }
-        setSelectedConsultantId(tempSelectedConsultantId);
+
+        if (tempSelectedConsultantId !== null && tempSelectedConsultantId !== undefined) {
+            nextParams.set("consultantId", tempSelectedConsultantId);
+        } else {
+            nextParams.delete("consultantId");
+        }
+
+        setSearchParams(nextParams);
     };
 
     const handlePillClick = (deptKey) => {
         setDepartment(deptKey);
         setTempDepartment(deptKey);
         setTempSelectedConsultantId("");
-        setSelectedConsultantId("");
+        
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.set("department", deptKey);
+        nextParams.delete("consultantId");
+        setSearchParams(nextParams);
+    };
+
+    const handleClearFilters = () => {
+        const activeDept = department || options[0] || "SALES";
+        
+        setTempStartDate("");
+        setTempEndDate("");
+        setTempIntake("All Intakes");
+        setTempSelectedConsultantId("");
+        setTempDepartment(activeDept);
+        
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.set("startDate", "");
+        nextParams.set("endDate", "");
+        nextParams.set("intake", "All Intakes");
+        nextParams.delete("consultantId");
+        nextParams.set("department", activeDept);
+        
+        setSearchParams(nextParams);
+        setDepartment(activeDept);
     };
 
     // Snooze state
@@ -646,6 +757,25 @@ const Dashboard = () => {
         onError: () => toast.error("Failed to update task"),
     });
 
+    const hasActiveFilters = useMemo(() => {
+        const isTempCleared = 
+            (tempStartDate === "" || tempStartDate === null) &&
+            (tempEndDate === "" || tempEndDate === null) &&
+            (tempIntake === "All Intakes") &&
+            (tempSelectedConsultantId === "");
+            
+        const isTempDefault = 
+            (tempStartDate === defaultStartDate) &&
+            (tempEndDate === defaultEndDate) &&
+            (tempIntake === "Winter 2023") &&
+            (tempSelectedConsultantId === "");
+            
+        if (isTempCleared || isTempDefault) {
+            return false;
+        }
+        return true;
+    }, [tempStartDate, tempEndDate, tempIntake, tempSelectedConsultantId, defaultStartDate, defaultEndDate]);
+
     const isLoading = statsLoading || leadsLoading || tasksLoading || remindersLoading || dashLoading;
     if (isLoading) return <DashboardSkeleton />;
 
@@ -677,6 +807,7 @@ const Dashboard = () => {
         UNIVERSITY_SHORTLISTING: GraduationCap,
         APPLICATION: FileText,
         AWAITING_STATUS: Hourglass,
+        DEPOSIT_STATUS: Landmark,
         VISA_DOCUMENTATION: FolderOpen,
         VISA_STATUS: Target,
         VISA_APPROVAL: BadgeCheck,
@@ -743,7 +874,7 @@ const Dashboard = () => {
                                 <input
                                     type="date"
                                     value={tempStartDate}
-                                    onChange={(e) => setTempStartDate(e.target.value)}
+                                    onChange={(e) => handleStartDateChange(e.target.value)}
                                     className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 bg-gray-50/50 text-gray-700 w-36 cursor-pointer"
                                 />
                             </div>
@@ -752,7 +883,7 @@ const Dashboard = () => {
                                 <input
                                     type="date"
                                     value={tempEndDate}
-                                    onChange={(e) => setTempEndDate(e.target.value)}
+                                    onChange={(e) => handleEndDateChange(e.target.value)}
                                     className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 bg-gray-50/50 text-gray-700 w-36 cursor-pointer"
                                 />
                             </div>
@@ -763,7 +894,7 @@ const Dashboard = () => {
                                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Intake</span>
                                 <select
                                     value={tempIntake}
-                                    onChange={(e) => setTempIntake(e.target.value)}
+                                    onChange={(e) => handleIntakeChange(e.target.value)}
                                     className="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 bg-gray-50/50 text-gray-700 min-w-[130px] cursor-pointer"
                                 >
                                     <option value="All Intakes">All Intakes</option>
@@ -775,20 +906,7 @@ const Dashboard = () => {
                                 </select>
                             </div>
 
-                            <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Team</span>
-                                <select
-                                    value={tempDepartment || ""}
-                                    onChange={(e) => setTempDepartment(e.target.value)}
-                                    className="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 bg-gray-50/50 text-gray-700 min-w-[140px] cursor-pointer"
-                                >
-                                    {options.map((opt) => (
-                                        <option key={opt} value={opt}>
-                                            {opt.replace(/_/g, " ")}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+
 
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Consultant</span>
@@ -806,13 +924,22 @@ const Dashboard = () => {
                                 </select>
                             </div>
 
-                            <div className="flex flex-col justify-end pt-5">
+                            <div className="flex items-end gap-2 pt-5">
                                 <button
                                     onClick={handleApplyFilters}
                                     className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all duration-200 shadow-md shadow-indigo-100 flex items-center gap-1.5 h-9"
                                 >
                                     Proceed
                                 </button>
+                                {hasActiveFilters && (
+                                    <button
+                                        onClick={handleClearFilters}
+                                        type="button"
+                                        className="px-4 py-2 border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700 text-xs font-bold rounded-xl transition-all duration-200 h-9"
+                                    >
+                                        Clear All
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>

@@ -18,6 +18,7 @@ import { getCategoryFromScore, getSLAStatus } from "../utils/leadScore";
 import { useWorkflows, useMyDepartments, useClaimService } from "../hooks/useDepartments";
 import { DEPARTMENT_ORDER, departmentLabel } from "../lib/departments";
 import LeadsBoard from "./LeadsBoard";
+import Avatar from "../components/Avatar";
 
 
 const getPages = (current, total) => {
@@ -31,6 +32,33 @@ const getPages = (current, total) => {
     if (current < total - delta - 1) result.push("...");
     result.push(total);
     return result;
+};
+
+const formatLastUpdated = (date) => {
+    if (!date) return "—";
+    const now = new Date();
+    const updated = new Date(date);
+    const diffMs = now - updated;
+    if (diffMs < 0) return "just now";
+    
+    const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+    const isToday = now.toDateString() === updated.toDateString();
+    
+    if (isToday) {
+        if (diffHrs < 1) {
+            return "less than 1 hr";
+        }
+        return `${diffHrs} hr${diffHrs === 1 ? "" : "s"} ago`;
+    }
+    
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) {
+        return "1 day ago";
+    }
+    if (diffDays >= 30) {
+        return "30+ days ago";
+    }
+    return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
 };
 
 function FilterChip({ label, onRemove }) {
@@ -50,10 +78,17 @@ function DeptChips({ leadDepartments = [], stageLabel, max = 2 }) {
     }
     const shown = leadDepartments.slice(0, max);
     return (
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1.5">
             {shown.map(ld => (
-                <span key={ld.id} className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-indigo-50 text-indigo-700 border-indigo-100 whitespace-nowrap">
-                    {departmentLabel(ld.department)} · {stageLabel(ld.department, ld.stage)}
+                <span key={ld.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border bg-indigo-50 text-indigo-700 border-indigo-100 text-[10px] font-semibold whitespace-nowrap">
+                    {ld.assignedEmployee ? (
+                        <Avatar user={ld.assignedEmployee} size="xs" className="w-3.5 h-3.5 border border-indigo-200" />
+                    ) : (
+                        <div className="w-3.5 h-3.5 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-[8px] font-bold" title="Unassigned">U</div>
+                    )}
+                    <span>
+                        {departmentLabel(ld.department)} · {stageLabel(ld.department, ld.stage)}
+                    </span>
                 </span>
             ))}
             {leadDepartments.length > max && (
@@ -719,6 +754,10 @@ const Leads = () => {
                                     {lead.biodata && (
                                         <p className="text-xs text-gray-400 line-clamp-2 pt-0.5">{lead.biodata}</p>
                                     )}
+                                    <div className="flex items-center gap-2 text-xs text-gray-400 pt-0.5">
+                                        <Calendar className="h-3.5 w-3.5 text-gray-300 flex-shrink-0" />
+                                        <span>Active {formatLastUpdated(lead.updatedAt)}</span>
+                                    </div>
                                 </div>
 
                                 {/* Footer — score, source, assigned */}

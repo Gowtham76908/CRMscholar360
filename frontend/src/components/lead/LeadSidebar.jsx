@@ -37,7 +37,7 @@ const formatRemindAt = (dt) => {
     return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + ` ${timeStr}`;
 };
 
-export default function LeadSidebar({ lead, reminders, remindersLoading, leadId, hideContact = false }) {
+export default function LeadSidebar({ lead, reminders, remindersLoading, leadId, hideContact = false, calls, notes, tasks }) {
     const queryClient = useQueryClient();
     const [showReminderForm, setShowReminderForm] = useState(false);
     const [reminderMsg, setReminderMsg] = useState("");
@@ -61,6 +61,7 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId,
         }),
         onSuccess: (_, value) => {
             queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+            queryClient.invalidateQueries({ queryKey: ["lead-activities", leadId] });
             toast.success(value ? "WhatsApp opt-in enabled" : "WhatsApp opt-in removed");
         },
         onError: () => toast.error("Failed to update WhatsApp opt-in"),
@@ -335,9 +336,9 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId,
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Quick Stats</h3>
                 <div className="grid grid-cols-3 gap-2 text-center">
                     {[
-                        { label: "Calls",  value: lead.callLogs?.length ?? 0 },
-                        { label: "Notes",  value: lead.notes?.length ?? 0 },
-                        { label: "Tasks",  value: lead.tasks?.length ?? 0 },
+                        { label: "Calls",  value: calls?.length ?? lead.callLogs?.length ?? 0 },
+                        { label: "Notes",  value: notes?.length ?? lead.notes?.length ?? 0 },
+                        { label: "Tasks",  value: tasks?.length ?? lead.tasks?.length ?? 0 },
                     ].map(({ label, value }) => (
                         <div key={label} className="bg-gray-50 rounded-lg py-2 border border-gray-100">
                             <p className="text-lg font-black text-gray-900">{value}</p>

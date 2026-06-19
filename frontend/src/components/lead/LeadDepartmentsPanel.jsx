@@ -51,6 +51,7 @@ export default function LeadDepartmentsPanel({ leadId }) {
     const invalidate = () => {
         qc.invalidateQueries({ queryKey: ["lead-departments", leadId] });
         qc.invalidateQueries({ queryKey: ["lead", leadId] });
+        qc.invalidateQueries({ queryKey: ["lead-activities", leadId] });
     };
 
     const sorted = [...assignments].sort(
@@ -199,6 +200,7 @@ function DepartmentServiceRow({ assignment, user, isDirector, isManager, myDepar
                     department={a.department}
                     currentId={a.assignedEmployeeId}
                     onClose={() => setRequesting(false)}
+                    onDone={onChanged}
                 />
             )}
 
@@ -341,7 +343,7 @@ function AssignConsultant({ leadDepartmentId, department, currentId, onClose, on
 
 // ── Request reassignment (consultant → manager approval) ───────────────────────
 
-function RequestReassign({ leadDepartmentId, department, currentId, onClose }) {
+function RequestReassign({ leadDepartmentId, department, currentId, onClose, onDone }) {
     const { data: members = [], isLoading } = useDepartmentMembers(department);
     const mut = useRequestReassignment();
 
@@ -349,7 +351,7 @@ function RequestReassign({ leadDepartmentId, department, currentId, onClose }) {
         mut.mutate(
             { leadDepartmentId, toUserId, reason: null },
             {
-                onSuccess: () => { toast.success("Reassignment requested — sent to the manager for approval"); onClose(); },
+                onSuccess: () => { toast.success("Reassignment requested — sent to the manager for approval"); onDone(); onClose(); },
                 onError: (e) => toast.error(e.response?.data?.error?.message || "Could not send request"),
             }
         );

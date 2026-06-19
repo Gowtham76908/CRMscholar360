@@ -35,13 +35,18 @@ const Avatar = ({ user, size = "md", className = "", status = null }) => {
     };
 
     const backendUrl = import.meta.env.VITE_API_BASE_URL;
+    const photoUrl = user?.profilePhoto
+        ? (user.profilePhoto.startsWith("http://") || user.profilePhoto.startsWith("https://") || user.profilePhoto.startsWith("//")
+            ? user.profilePhoto
+            : `${backendUrl}${user.profilePhoto}`)
+        : null;
 
     return (
         <div className={`relative ${sizes[size]} rounded-full overflow-visible flex-shrink-0 ${className}`}>
             <div className={`${sizes[size]} rounded-full overflow-hidden`}>
-                {user?.profilePhoto ? (
+                {photoUrl ? (
                     <img
-                        src={`${backendUrl}${user.profilePhoto}`}
+                        src={photoUrl}
                         alt={user.name || "User"}
                         className="w-full h-full object-cover"
                         onError={(e) => {
