@@ -20,6 +20,7 @@ import AddTaskForm from "../components/AddTaskForm";
 import AddLeadForm from "../components/AddLeadForm";
 import LeadSidebar from "../components/lead/LeadSidebar";
 import LeadDepartmentsPanel from "../components/lead/LeadDepartmentsPanel";
+import StudentJourneyPanel from "../components/lead/StudentJourneyPanel";
 import SmartSuggestions from "../components/lead/SmartSuggestions";
 import WhatsAppModal from "../components/lead/WhatsAppModal";
 import PostCallPanel from "../components/lead/PostCallPanel";
@@ -1672,6 +1673,17 @@ export default function LeadDetail() {
                         tasks={tasks}
                     />
 
+                    {lead.leadDepartments?.some(ld => ld.department === "SALES") && (
+                        <StudentJourneyPanel
+                            lead={lead}
+                            onChanged={() => {
+                                queryClient.invalidateQueries({ queryKey: ["lead", id] });
+                                queryClient.invalidateQueries({ queryKey: ["lead-departments", id] });
+                                queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
+                            }}
+                        />
+                    )}
+
                     {/* ── Departments (multi-department services) ──────────────── */}
                     <LeadDepartmentsPanel leadId={id} />
 
@@ -1831,17 +1843,13 @@ export default function LeadDetail() {
                 )}
             </div>
 
-            {/* Edit Lead SlidePanel */}
-            <SlidePanel isOpen={showEditLead} onClose={() => setShowEditLead(false)} title="Edit Lead">
+            {/* Edit Lead Dialog */}
+            {showEditLead && (
                 <AddLeadForm
                     lead={lead}
-                    onClose={() => {
-                        setShowEditLead(false);
-                        queryClient.invalidateQueries({ queryKey: ["lead", id] });
-                        queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
-                    }}
+                    onClose={() => setShowEditLead(false)}
                 />
-            </SlidePanel>
+            )}
 
             {/* Create Task SlidePanel */}
             <SlidePanel isOpen={showTaskModal} onClose={() => setShowTaskModal(false)} title="Create Task">

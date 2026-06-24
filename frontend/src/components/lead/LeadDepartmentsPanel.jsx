@@ -115,6 +115,11 @@ export default function LeadDepartmentsPanel({ leadId }) {
 
 function DepartmentServiceRow({ assignment, user, isDirector, isManager, myDepartments, canAllocate, stageLabel, onChanged }) {
     const a = assignment;
+    const { getStages } = useWorkflows();
+    const stages = getStages(a.department);
+    const currentIndex = stages.findIndex((s) => s.code === a.stage);
+    const nextStage = currentIndex !== -1 && currentIndex < stages.length - 1 ? stages[currentIndex + 1] : null;
+
     const managesDept = isDirector || (isManager && myDepartments.includes(a.department));
     const canAssign = managesDept;
     const canUpdateStage = isDirector || managesDept || a.assignedEmployeeId === user?.id;
@@ -205,17 +210,24 @@ function DepartmentServiceRow({ assignment, user, isDirector, isManager, myDepar
             )}
 
             {/* Stage */}
-            <div className="mt-2">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Stage</p>
-                {canUpdateStage ? (
-                    <StageSelect
-                        department={a.department}
-                        value={a.stage}
+            <div className="mt-2 flex flex-col gap-1">
+                <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Stage</p>
+                    <span className="text-xs font-semibold text-gray-700">{stageLabel(a.department, a.stage)}</span>
+                </div>
+                {canUpdateStage && nextStage && (
+                    <button
+                        onClick={() => stageMut.mutate(nextStage.code)}
                         disabled={stageMut.isPending}
-                        onChange={(stage) => stageMut.mutate(stage)}
-                    />
-                ) : (
-                    <span className="text-xs font-medium text-gray-700">{stageLabel(a.department, a.stage)}</span>
+                        className="w-full mt-1.5 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 rounded-md transition-all shadow-sm shadow-indigo-100 hover:scale-[1.01]"
+                    >
+                        {stageMut.isPending ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                            <ArrowRight className="h-3.5 w-3.5" />
+                        )}
+                        Move to {nextStage.label}
+                    </button>
                 )}
             </div>
 
@@ -282,29 +294,7 @@ function StageTimeline({ leadDepartmentId, stageLabel, department }) {
     );
 }
 
-// ── Stage dropdown (options from the workflow config) ──────────────────────────
 
-function StageSelect({ department, value, onChange, disabled }) {
-    const { getStages } = useWorkflows();
-    const stages = getStages(department);
-
-    return (
-        <div className="relative">
-            <select
-                value={value || ""}
-                disabled={disabled || stages.length === 0}
-                onChange={(e) => e.target.value && e.target.value !== value && onChange(e.target.value)}
-                className="w-full appearance-none text-xs font-medium border border-gray-200 rounded-md pl-2 pr-7 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:opacity-60"
-            >
-                {stages.length === 0 && <option value="">No workflow</option>}
-                {stages.map((s) => (
-                    <option key={s.code} value={s.code}>{s.label}</option>
-                ))}
-            </select>
-            <ChevronDown className="h-3.5 w-3.5 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-        </div>
-    );
-}
 
 // ── Inline consultant picker (loads department members on open) ────────────────
 

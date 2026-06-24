@@ -921,13 +921,9 @@ const Leads = () => {
                 </button>
             </div>
 
-            <SlidePanel
-                isOpen={isAddModalOpen}
-                onClose={() => setIsAddModalOpen(false)}
-                title="Add New Lead"
-            >
+            {isAddModalOpen && (
                 <AddLeadForm onClose={() => setIsAddModalOpen(false)} />
-            </SlidePanel>
+            )}
 
             {isMergeModalOpen && (
                 <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
@@ -958,16 +954,10 @@ const Leads = () => {
             )}
 
             {editingLead && (
-                <SlidePanel
-                    isOpen={!!editingLead}
+                <AddLeadForm
+                    lead={editingLead}
                     onClose={() => setEditingLead(null)}
-                    title="Edit Lead"
-                >
-                    <AddLeadForm
-                        lead={editingLead}
-                        onClose={() => setEditingLead(null)}
-                    />
-                </SlidePanel>
+                />
             )}
 
             {selectedLeadForActivity && (

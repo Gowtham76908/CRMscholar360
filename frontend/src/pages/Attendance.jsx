@@ -694,91 +694,97 @@ const AdminReportsPanel = () => {
             </div>
 
             {selectedEmployee && (
-                <div className="bg-white rounded-2xl border border-[#E4E4E7] overflow-hidden shadow-sm">
-                    <div className="px-6 py-4 border-b border-[#E4E4E7] bg-indigo-50/50 flex items-center justify-between">
-                        <div>
-                            <h2 className="font-semibold text-[#18181B]">{selectedEmployee.name}</h2>
-                            <p className="text-sm text-[#71717A]">{MONTHS[month - 1]} {year} · Day-wise attendance</p>
-                        </div>
-                        <button onClick={() => setSelectedEmployee(null)} className="text-[#71717A] hover:text-gray-900 text-sm px-3 py-1 rounded-lg hover:bg-gray-100">Close ✕</button>
-                    </div>
-                    {empLoading ? (
-                        <div className="flex justify-center py-12"><Loader2 className="h-7 w-7 animate-spin text-indigo-600" /></div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="border-b border-[#E4E4E7] bg-gray-50">
-                                        {["Date", "Day", "Check In", "Check Out", "Hours", "Location", "Status"].map(h => (
-                                            <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[#71717A] uppercase tracking-wider">{h}</th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-[#E4E4E7]">
-                                    {generateMonthDays(year, month).map((day) => {
-                                        const rec = empDetail?.attendance?.find(a => {
-                                            const d = new Date(a.date);
-                                            return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}` === day.dateStr;
-                                        });
-                                        const hours = rec?.checkIn && rec?.checkOut
-                                            ? ((new Date(rec.checkOut) - new Date(rec.checkIn)) / 36e5).toFixed(1) : null;
-
-                                        if (day.isSunday) return (
-                                            <tr key={day.d} className="bg-indigo-50/20">
-                                                <td className="px-4 py-2 text-indigo-700 font-medium">{String(day.d).padStart(2, "0")} {MONTHS[month - 1].slice(0, 3)}</td>
-                                                <td className="px-4 py-2 text-indigo-600 font-semibold">Sunday</td>
-                                                <td colSpan="4" className="px-4 py-2 text-indigo-400 text-xs">— Weekly Holiday —</td>
-                                                <td className="px-4 py-2"><span className="px-2 py-0.5 text-xs rounded-full bg-indigo-100 text-indigo-700">Holiday</span></td>
-                                            </tr>
-                                        );
-
-                                        return (
-                                            <tr key={day.d} className={`hover:bg-gray-50 ${day.isToday ? "bg-indigo-50/30" : ""}`}>
-                                                <td className="px-4 py-2 font-medium text-[#18181B]">{String(day.d).padStart(2, "0")} {MONTHS[month - 1].slice(0, 3)}</td>
-                                                <td className="px-4 py-2 text-[#71717A]">{day.dayName}</td>
-                                                <td className="px-4 py-2 text-[#71717A]">{rec?.checkIn ? formatTime(rec.checkIn) : "—"}</td>
-                                                <td className="px-4 py-2 text-[#71717A]">{rec?.checkOut ? formatTime(rec.checkOut) : "—"}</td>
-                                                <td className="px-4 py-2 text-[#71717A]">{hours ? `${hours} hrs` : "—"}</td>
-                                                <td className="px-4 py-2">
-                                                    {rec?.location?.latitude ? (
-                                                        <a href={`https://www.google.com/maps?q=${rec.location.latitude},${rec.location.longitude}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:underline text-xs">
-                                                            <MapPin className="h-3 w-3" /> View
-                                                        </a>
-                                                    ) : "—"}
-                                                </td>
-                                                <td className="px-4 py-2 text-center">
-                                                    <StatusCell userId={selectedEmployee.id} date={day.dateStr} status={rec?.status}
-                                                        isPast={day.isPast && (!empDetail.employee?.createdAt || day.date >= new Date(new Date(empDetail.employee.createdAt).setHours(0,0,0,0)))} />
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-
-                    {empDetail?.leaves?.length > 0 && (
-                        <div className="p-6 border-t border-[#E4E4E7]">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="font-semibold text-[#18181B]">Leave / WFH Applications this month</h3>
-                                <div className="text-sm bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-bold">
-                                    Comp Off Balance: {empDetail?.compOffBalance || 0}
-                                </div>
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100] backdrop-blur-sm p-4" onClick={() => setSelectedEmployee(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="px-6 py-4 border-b border-[#E4E4E7] bg-indigo-50/50 flex items-center justify-between shrink-0">
+                            <div>
+                                <h2 className="font-semibold text-[#18181B] text-lg">{selectedEmployee.name}</h2>
+                                <p className="text-sm text-[#71717A]">{MONTHS[month - 1]} {year} · Day-wise attendance</p>
                             </div>
-                            <div className="space-y-2">
-                                {empDetail.leaves.map(l => (
-                                    <div key={l.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-2.5 text-sm">
-                                        <span className="text-[#71717A]">{formatDate(l.fromDate)} → {formatDate(l.toDate)} ({l.totalDays} days)</span>
-                                        <div className="flex items-center gap-2">
-                                            <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${l.leaveType === "WFH" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{l.leaveType}</span>
-                                            <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${l.status === "APPROVED" ? "bg-green-100 text-green-700" : l.status === "REJECTED" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"}`}>{l.status}</span>
+                            <button onClick={() => setSelectedEmployee(null)} className="text-[#71717A] hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100 transition">
+                                <XCircle className="h-5 w-5" />
+                            </button>
+                        </div>
+                        {empLoading ? (
+                            <div className="flex justify-center py-12"><Loader2 className="h-7 w-7 animate-spin text-indigo-600" /></div>
+                        ) : (
+                            <div className="overflow-y-auto flex-1">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="sticky top-0 bg-white z-10">
+                                            <tr className="border-b border-[#E4E4E7] bg-gray-50">
+                                                {["Date", "Day", "Check In", "Check Out", "Hours", "Location", "Status"].map(h => (
+                                                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[#71717A] uppercase tracking-wider">{h}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-[#E4E4E7]">
+                                            {generateMonthDays(year, month).map((day) => {
+                                                const rec = empDetail?.attendance?.find(a => {
+                                                    const d = new Date(a.date);
+                                                    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}` === day.dateStr;
+                                                });
+                                                const hours = rec?.checkIn && rec?.checkOut
+                                                    ? ((new Date(rec.checkOut) - new Date(rec.checkIn)) / 36e5).toFixed(1) : null;
+
+                                                if (day.isSunday) return (
+                                                    <tr key={day.d} className="bg-indigo-50/20">
+                                                        <td className="px-4 py-2 text-indigo-700 font-medium">{String(day.d).padStart(2, "0")} {MONTHS[month - 1].slice(0, 3)}</td>
+                                                        <td className="px-4 py-2 text-indigo-600 font-semibold">Sunday</td>
+                                                        <td colSpan="4" className="px-4 py-2 text-indigo-400 text-xs">— Weekly Holiday —</td>
+                                                        <td className="px-4 py-2"><span className="px-2 py-0.5 text-xs rounded-full bg-indigo-100 text-indigo-700">Holiday</span></td>
+                                                    </tr>
+                                                );
+
+                                                return (
+                                                    <tr key={day.d} className={`hover:bg-gray-50 ${day.isToday ? "bg-indigo-50/30" : ""}`}>
+                                                        <td className="px-4 py-2 font-medium text-[#18181B]">{String(day.d).padStart(2, "0")} {MONTHS[month - 1].slice(0, 3)}</td>
+                                                        <td className="px-4 py-2 text-[#71717A]">{day.dayName}</td>
+                                                        <td className="px-4 py-2 text-[#71717A]">{rec?.checkIn ? formatTime(rec.checkIn) : "—"}</td>
+                                                        <td className="px-4 py-2 text-[#71717A]">{rec?.checkOut ? formatTime(rec.checkOut) : "—"}</td>
+                                                        <td className="px-4 py-2 text-[#71717A]">{hours ? `${hours} hrs` : "—"}</td>
+                                                        <td className="px-4 py-2">
+                                                            {rec?.location?.latitude ? (
+                                                                <a href={`https://www.google.com/maps?q=${rec.location.latitude},${rec.location.longitude}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:underline text-xs">
+                                                                    <MapPin className="h-3 w-3" /> View
+                                                                </a>
+                                                            ) : "—"}
+                                                        </td>
+                                                        <td className="px-4 py-2 text-center">
+                                                            <StatusCell userId={selectedEmployee.id} date={day.dateStr} status={rec?.status}
+                                                                isPast={day.isPast && (!empDetail.employee?.createdAt || day.date >= new Date(new Date(empDetail.employee.createdAt).setHours(0,0,0,0)))} />
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {empDetail?.leaves?.length > 0 && (
+                                    <div className="p-6 border-t border-[#E4E4E7]">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="font-semibold text-[#18181B]">Leave / WFH Applications this month</h3>
+                                            <div className="text-sm bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-bold">
+                                                Comp Off Balance: {empDetail?.compOffBalance || 0}
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {empDetail.leaves.map(l => (
+                                                <div key={l.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-2.5 text-sm">
+                                                    <span className="text-[#71717A]">{formatDate(l.fromDate)} → {formatDate(l.toDate)} ({l.totalDays} days)</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${l.leaveType === "WFH" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{l.leaveType}</span>
+                                                        <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${l.status === "APPROVED" ? "bg-green-100 text-green-700" : l.status === "REJECTED" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"}`}>{l.status}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
-                                ))}
+                                )}
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             )}
         </div>

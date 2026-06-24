@@ -20,16 +20,21 @@ const { getInitialStage } = require("../config/departmentWorkflows");
  *                                  bypassing the membership check. Used by
  *                                  prospecting sources (LinkedIn/Search) where the
  *                                  scraper claims the lead regardless of department.
+ * @param {boolean} [opts.forceAssignToCreator] If true, assigns to creator regardless
+ *                                  of department membership (for lead form creation).
  * @returns {Promise<object>} the created Lead
  */
-async function createLead(data, { createdByUserId, salesAssigneeId } = {}) {
+async function createLead(data, { createdByUserId, salesAssigneeId, forceAssignToCreator = false } = {}) {
     // Resolve who owns the SALES service:
     //   1. an explicit assignee (prospecting self-claim), else
-    //   2. the creator, but only if they actually work in Sales, else
-    //   3. nobody — programmatic sources stay unassigned for a manager to allocate.
+    //   2. force assign to creator (lead form creation), else
+    //   3. the creator, but only if they actually work in Sales, else
+    //   4. nobody — programmatic sources stay unassigned for a manager to allocate.
     let assigneeId = null;
     if (salesAssigneeId) {
         assigneeId = salesAssigneeId;
+    } else if (forceAssignToCreator && createdByUserId) {
+        assigneeId = createdByUserId;
     } else if (createdByUserId && (await isMemberOfDepartment(createdByUserId, "SALES"))) {
         assigneeId = createdByUserId;
     }

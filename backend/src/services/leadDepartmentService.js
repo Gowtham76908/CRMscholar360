@@ -593,6 +593,11 @@ async function updateStage({ leadDepartmentId, stage, actor }) {
 
     if (stage === leadDept.stage) return leadDept; // no-op (no event for a non-move)
 
+    // Validation gates for SALES department stage transitions
+    if (leadDept.department === "SALES") {
+        await validateSalesStageMove(leadDept, leadDept.stage, stage, prisma);
+    }
+
     // Atomic: the stage update and its ledger row succeed or fail together, so a
     // stage change can never exist without the historical event that records it.
     const updated = await prisma.$transaction(async (tx) => {
@@ -622,6 +627,47 @@ async function updateStage({ leadDepartmentId, stage, actor }) {
     // there is no global "lead converted" commission any more.
     if (isCommissionStage(updated.department, stage)) {
         await awardServiceCommission(updated);
+    }
+
+    // System Actions for SALES department transitions
+    if (leadDept.department === "SALES") {
+        if (stage === "VISA_APPROVAL") {
+            try {
+                // Instantly pushes data to Loans, Accommodations, Forex by allocating these departments
+                await allocateDepartments({
+                    leadId: leadDept.leadId,
+                    departments: ["LOAN", "ACCOMMODATION_TICKETS", "FOREX"],
+                    actor
+                });
+            } catch (err) {
+                console.error("Failed to auto-allocate post-visa departments:", err);
+            }
+        }
+        if (stage === "COMMISSION_INVOICING") {
+            try {
+                const lead = await prisma.lead.findUnique({
+                    where: { id: leadDept.leadId },
+                    select: { name: true }
+                });
+                const admins = await prisma.user.findMany({
+                    where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, isActive: true },
+                    select: { id: true }
+                });
+                await Promise.all(
+                    admins.map(admin =>
+                        createNotification({
+                            userId: admin.id,
+                            title: "Accounts Alert: Send Invoice to University",
+                            message: `Lead "${lead.name}" has reached Commission Invoicing stage. Please send invoice to university.`,
+                            type: "ACCOUNTS_ALERT",
+                            link: `/leads/${leadDept.leadId}`
+                        }).catch(console.error)
+                    )
+                );
+            } catch (err) {
+                console.error("Failed to push alert to Accounts Team:", err);
+            }
+        }
     }
 
     // Single source of truth for stage transitions → fire department automation.
@@ -856,6 +902,72 @@ async function getDepartmentMembers(department) {
         orderBy: { user: { name: "asc" } },
     });
     return rows.map(r => r.user);
+}
+
+async function validateSalesStageMove(leadDept, currentStage, targetStage, txOrPrisma = prisma) {
+    if (currentStage === targetStage) return;
+
+    // Load lead to check its customFields, nextFollowUpAt, etc.
+    const lead = await txOrPrisma.lead.findUnique({
+        where: { id: leadDept.leadId },
+        select: { id: true, nextFollowUpAt: true, customFields: true }
+    });
+    if (!lead) return;
+
+    const cf = lead.customFields || {};
+
+    if (currentStage === "ENQUIRY") {
+        const callCount = await txOrPrisma.callLog.count({ where: { leadId: leadDept.leadId } });
+        const noteCount = await txOrPrisma.note.count({ where: { leadId: leadDept.leadId } });
+        if (callCount === 0 && noteCount === 0) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Enquiry stage: Must log at least one call note first.");
+        }
+    }
+
+    // Verify that next follow-up date and time is scheduled before moving out of Follow-Up stage
+    if (currentStage === "FOLLOW_UP") {
+        if (!lead.nextFollowUpAt) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Follow-Up stage: Next follow-up date and time must be scheduled.");
+        }
+    }
+
+    if (currentStage === "PROSPECT") {
+        const testScore = cf.ielts_toefl_score;
+        const gpa = cf.academic_gpa;
+        const backlogs = cf.backlogs;
+        const hasScore = testScore !== undefined && testScore !== null && String(testScore).trim() !== "";
+        const hasGpa = gpa !== undefined && gpa !== null && String(gpa).trim() !== "";
+        const hasBacklogs = backlogs !== undefined && backlogs !== null && String(backlogs).trim() !== "";
+        if (!hasScore || !hasGpa || !hasBacklogs) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Prospect stage: Academic fields (IELTS/TOEFL Score, Academic GPA, Backlogs) must be filled.");
+        }
+    }
+
+    if (currentStage === "UNIVERSITY_SHORTLISTING") {
+        const targetUniv = cf.target_universities;
+        const hasTarget = targetUniv !== undefined && targetUniv !== null && String(targetUniv).trim() !== "";
+        if (!hasTarget) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of University Shortlisting stage: Target Universities Chosen must be filled.");
+        }
+    }
+
+    if (currentStage === "APPLICATION") {
+        if (cf.sop_status !== "Uploaded" || cf.lor_status !== "Uploaded" || cf.transcripts_status !== "Uploaded") {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Application Process stage: All mandatory docs (SOP, LOR, Transcripts) must be checked 'Uploaded'.");
+        }
+    }
+
+    if (currentStage === "DEPOSIT_STATUS") {
+        if (cf.deposit_receipt_uploaded !== "Uploaded") {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Deposit Payment stage: Deposit receipt status must be 'Uploaded'.");
+        }
+    }
+
+    if (currentStage === "VISA_DOCUMENTATION") {
+        if (cf.visa_manager_approved !== true && cf.visa_manager_approved !== "true") {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Visa Documentation stage: Manager approval checkbox must be ticked.");
+        }
+    }
 }
 
 module.exports = {

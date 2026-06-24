@@ -1,4 +1,4 @@
-﻿const { z } = require("zod");
+const { z } = require("zod");
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 const loginSchema = z.object({
@@ -41,6 +41,7 @@ const createLeadSchema = z.object({
     source: z.enum(leadSources, { errorMap: () => ({ message: "Invalid source" }) }),
     enquiryType: z.enum(enquiryTypes, { errorMap: () => ({ message: "Invalid enquiry type" }) }),
     email: z.string().email("Invalid email").optional().or(z.literal("")),
+    customFields: z.record(z.any()).optional(),
 });
 
 const updateLeadSchema = z.object({
@@ -50,6 +51,7 @@ const updateLeadSchema = z.object({
     source: z.enum(leadSources).optional(),
     enquiryType: z.enum(enquiryTypes).optional(),
     nextFollowUpAt: z.string().datetime().optional().or(z.literal("")).or(z.null()),
+    customFields: z.record(z.any()).optional(),
 }).refine(data => Object.keys(data).length > 0, { message: "At least one field is required" });
 
 const mergeLeadsSchema = z.object({

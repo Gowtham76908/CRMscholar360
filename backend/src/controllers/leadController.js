@@ -75,8 +75,8 @@ const getLeads = async (req, res, next) => {
 // Create Lead (Admin/Super Admin)
 const createLead = async (req, res, next) => {
     try {
-        const { userId } = req.user;
-        const { name, email, phone, source, enquiryType } = req.body;
+        const { userId, role } = req.user;
+        const { name, email, phone, source, enquiryType, customFields } = req.body;
 
         if (!name || !phone || !source || !enquiryType) {
             throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Name, phone, source, and enquiry type are required");
@@ -86,7 +86,7 @@ const createLead = async (req, res, next) => {
         const { score, category } = calculateLeadScore({ source, phone, email });
 
         // Centralized creation: atomically creates the Lead + its SALES LeadDepartment.
-        // Never call prisma.lead.create directly (would orphan the lead).
+        // Force assign the creator to the SALES department.
         const newLead = await leadService.createLead(
             {
                 name,
@@ -96,9 +96,13 @@ const createLead = async (req, res, next) => {
                 source,
                 enquiryType,
                 score,
-                category
+                category,
+                customFields
             },
-            { createdByUserId: userId }
+            { 
+                createdByUserId: userId,
+                forceAssignToCreator: true // Always assign to the creator
+            }
         );
 
         // Log Activity
@@ -106,12 +110,10 @@ const createLead = async (req, res, next) => {
             leadId: newLead.id,
             userId,
             action: "LEAD_CREATED",
-            metadata: { source, score, category }
+            metadata: { source, score, category, assignedToCreator: true }
         });
 
-        // Fire automation rules async — don't block the response. Auto-distribution
-        // is retired; the SALES service is assigned by leadService.createLead (the
-        // creator if a Sales member) or left for a manager to allocate.
+        // Fire automation rules async — don't block the response.
         runRulesForLead("LEAD_CREATED", newLead).catch(console.error);
 
         res.status(201).json({ message: "Lead created successfully", lead: newLead });
@@ -127,7 +129,7 @@ const updateLead = async (req, res, next) => {
     try {
         const { userId, role } = req.user;
         const { id } = req.params;
-        const { name, email, phone, source, enquiryType, nextFollowUpAt } = req.body;
+        const { name, email, phone, source, enquiryType, nextFollowUpAt, customFields } = req.body;
 
         const currentLead = await prisma.lead.findUnique({ where: { id } });
         if (!currentLead) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Lead not found");
@@ -142,6 +144,10 @@ const updateLead = async (req, res, next) => {
             ? (nextFollowUpAt ? new Date(nextFollowUpAt) : null)
             : undefined;
 
+        const resolvedCustomFields = customFields !== undefined
+            ? { ...(currentLead.customFields || {}), ...customFields }
+            : undefined;
+
         const updateData = {
             ...(name !== undefined && { name }),
             ...(email !== undefined && { email }),
@@ -149,12 +155,58 @@ const updateLead = async (req, res, next) => {
             ...(source !== undefined && { source }),
             ...(enquiryType !== undefined && { enquiryType }),
             ...(resolvedFollowUpAt !== undefined && { nextFollowUpAt: resolvedFollowUpAt }),
+            ...(resolvedCustomFields !== undefined && { customFields: resolvedCustomFields }),
         };
 
         const updatedLead = await prisma.lead.update({
             where: { id },
             data: updateData,
         });
+
+        // Check for stage auto-advancement based on custom field changes
+        if (customFields !== undefined && currentLead.customFields) {
+            const oldCf = currentLead.customFields || {};
+            const newCf = resolvedCustomFields || {};
+
+            let targetStage = null;
+
+            // 1. University Response
+            if (newCf.university_response !== oldCf.university_response && newCf.university_response) {
+                if (newCf.university_response === "Conditional Offer" || newCf.university_response === "Unconditional Offer") {
+                    targetStage = "DEPOSIT_STATUS";
+                } else if (newCf.university_response === "Reject") {
+                    targetStage = "ARCHIVE";
+                }
+            }
+
+            // 2. Embassy Result
+            if (newCf.embassy_result !== oldCf.embassy_result && newCf.embassy_result) {
+                if (newCf.embassy_result === "Approved") {
+                    targetStage = "VISA_APPROVAL";
+                } else if (newCf.embassy_result === "Refused") {
+                    targetStage = "ARCHIVE";
+                }
+            }
+
+            if (targetStage) {
+                try {
+                    // Find SALES department record for this lead
+                    const salesDept = await prisma.leadDepartment.findUnique({
+                        where: { leadId_department: { leadId: id, department: "SALES" } }
+                    });
+                    if (salesDept && salesDept.stage !== targetStage) {
+                        const leadDeptService = require("../services/leadDepartmentService");
+                        await leadDeptService.updateStage({
+                            leadDepartmentId: salesDept.id,
+                            stage: targetStage,
+                            actor: { userId, role }
+                        });
+                    }
+                } catch (err) {
+                    console.error("Failed to auto-advance SALES department stage:", err);
+                }
+            }
+        }
 
         await logActivity({
             leadId: updatedLead.id,
