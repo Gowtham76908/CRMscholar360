@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(perl -0pi -e 's/p-3 space-y-1\\\\.5 max-h-80 overflow-y-auto/p-3 space-y-1.5 min-h-\\\\[32rem\\\\] max-h-\\\\[36rem\\\\] overflow-y-auto/g' src/pages/MyDay.jsx)"
+    ]
+  }
+}

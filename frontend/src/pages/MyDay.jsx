@@ -191,10 +191,26 @@ const MyDay = () => {
                         <p className="text-sm text-gray-500 mt-0.5">Your tasks and follow-up actions for today</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <Link 
-                        to="/dashboard" 
-                        className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold transition-colors"
+                {/* Stats — top-right corner */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                    {[
+                        { label: "Follow-ups", value: actionQueue.length, icon: ClipboardList, tint: "bg-indigo-50 text-indigo-600" },
+                        { label: "Pending", value: pendingTasks.length, icon: CheckCircle, tint: "bg-amber-50 text-amber-600" },
+                        { label: "Reminders", value: upcomingReminders.length, icon: Bell, tint: "bg-violet-50 text-violet-600" },
+                    ].map(({ label, value, icon: Icon, tint }) => (
+                        <div key={label} className="flex items-center gap-2.5 rounded-xl border border-gray-200/70 bg-white px-3.5 py-2 shadow-sm">
+                            <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", tint)}>
+                                <Icon className="h-4 w-4" />
+                            </div>
+                            <div className="leading-none">
+                                <p className="text-lg font-black text-gray-900 leading-none">{value}</p>
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mt-1">{label}</p>
+                            </div>
+                        </div>
+                    ))}
+                    <Link
+                        to="/dashboard"
+                        className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold transition-colors ml-1"
                     >
                         View Dashboard →
                     </Link>
@@ -208,39 +224,58 @@ const MyDay = () => {
                     <h2 className="text-lg font-bold text-indigo-950">Tasks & Follow-up Actions</h2>
                 </div>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                     {/* Action Queue */}
-                    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                            <h2 className="text-sm font-semibold text-gray-900">Action Queue</h2>
+                    <div className="flex flex-col bg-white border border-gray-200/70 rounded-2xl shadow-sm overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 bg-gradient-to-b from-gray-50/60 to-transparent">
+                            <div className="flex items-center gap-2.5">
+                                <div className="h-7 w-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                                    <ClipboardList className="h-4 w-4" />
+                                </div>
+                                <h2 className="text-sm font-bold text-gray-900">Action Queue</h2>
+                            </div>
                             <Badge variant="warning" size="sm">{actionQueue.length}</Badge>
                         </div>
-                        <div className="p-3 space-y-1.5 max-h-80 overflow-y-auto">
+                        <div className="p-3 space-y-1.5 min-h-[32rem] max-h-[36rem] overflow-y-auto">
                             {actionQueue.length > 0
                                 ? actionQueue.map(lead => (
                                     <ActionItem key={lead.id} lead={lead} snoozed={isSnoozed(lead.id)} onSnooze={handleSnooze} />
                                 ))
-                                : <p className="text-xs text-gray-400 text-center py-6">No leads need action right now</p>
+                                : (
+                                    <div className="flex flex-col items-center justify-center h-full py-12 gap-2.5 text-center">
+                                        <div className="h-12 w-12 rounded-full bg-gray-50 flex items-center justify-center">
+                                            <ClipboardList className="h-6 w-6 text-gray-300" />
+                                        </div>
+                                        <p className="text-xs text-gray-400">No leads need action right now</p>
+                                    </div>
+                                )
                             }
                         </div>
                     </div>
 
                     {/* My Tasks */}
-                    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                            <h2 className="text-sm font-semibold text-gray-900">My Tasks</h2>
+                    <div className="flex flex-col bg-white border border-gray-200/70 rounded-2xl shadow-sm overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 bg-gradient-to-b from-gray-50/60 to-transparent">
+                            <div className="flex items-center gap-2.5">
+                                <div className="h-7 w-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                                    <CheckCircle className="h-4 w-4" />
+                                </div>
+                                <h2 className="text-sm font-bold text-gray-900">My Tasks</h2>
+                            </div>
                             <Badge variant={pendingTasks.length > 0 ? "error" : "success"} size="sm">
                                 {pendingTasks.length} pending
                             </Badge>
                         </div>
-                        <div className="p-3 space-y-1.5 max-h-80 overflow-y-auto">
+                        <div className="p-3 space-y-1.5 min-h-[32rem] max-h-[36rem] overflow-y-auto">
                             {pendingTasks.length > 0
                                 ? pendingTasks.slice(0, 8).map(task => (
                                     <TaskItem key={task.id} task={task} onComplete={(id) => completeTask.mutate(id)} />
                                 ))
                                 : (
-                                    <div className="flex flex-col items-center justify-center py-8 gap-2">
-                                        <CheckCircle className="h-8 w-8 text-emerald-300" />
+                                    <div className="flex flex-col items-center justify-center h-full py-12 gap-2.5 text-center">
+                                        <div className="h-12 w-12 rounded-full bg-emerald-50 flex items-center justify-center">
+                                            <CheckCircle className="h-6 w-6 text-emerald-400" />
+                                        </div>
                                         <p className="text-xs text-gray-400">All tasks done!</p>
                                     </div>
                                 )
@@ -249,38 +284,33 @@ const MyDay = () => {
                     </div>
 
                     {/* Reminders */}
-                    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                            <h2 className="text-sm font-semibold text-gray-900">Reminders</h2>
-                            <Bell className="h-3.5 w-3.5 text-gray-400" />
+                    <div className="flex flex-col bg-white border border-gray-200/70 rounded-2xl shadow-sm overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 bg-gradient-to-b from-gray-50/60 to-transparent">
+                            <div className="flex items-center gap-2.5">
+                                <div className="h-7 w-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+                                    <Bell className="h-4 w-4" />
+                                </div>
+                                <h2 className="text-sm font-bold text-gray-900">Reminders</h2>
+                            </div>
+                            <Badge variant="ai" size="sm">{upcomingReminders.length}</Badge>
                         </div>
-                        <div className="p-3 space-y-1.5 max-h-80 overflow-y-auto">
+                        <div className="p-3 space-y-1.5 min-h-[32rem] max-h-[36rem] overflow-y-auto">
                             {upcomingReminders.length > 0
                                 ? upcomingReminders.map(r => <ReminderItem key={r.id} reminder={r} />)
-                                : <p className="text-xs text-gray-400 text-center py-6">No upcoming reminders</p>
+                                : (
+                                    <div className="flex flex-col items-center justify-center h-full py-12 gap-2.5 text-center">
+                                        <div className="h-12 w-12 rounded-full bg-gray-50 flex items-center justify-center">
+                                            <Bell className="h-6 w-6 text-gray-300" />
+                                        </div>
+                                        <p className="text-xs text-gray-400">No upcoming reminders</p>
+                                    </div>
+                                )
                             }
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Quick Stats Summary */}
-            <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-100 rounded-xl p-6 flex items-center justify-around">
-                <div className="text-center">
-                    <p className="text-3xl font-black text-indigo-950">{actionQueue.length}</p>
-                    <p className="text-xs text-gray-600 font-medium mt-1">Follow-ups</p>
-                </div>
-                <div className="h-12 w-px bg-indigo-200"></div>
-                <div className="text-center">
-                    <p className="text-3xl font-black text-indigo-950">{pendingTasks.length}</p>
-                    <p className="text-xs text-gray-600 font-medium mt-1">Pending Tasks</p>
-                </div>
-                <div className="h-12 w-px bg-indigo-200"></div>
-                <div className="text-center">
-                    <p className="text-3xl font-black text-indigo-950">{upcomingReminders.length}</p>
-                    <p className="text-xs text-gray-600 font-medium mt-1">Reminders</p>
-                </div>
-            </div>
         </div>
     );
 };

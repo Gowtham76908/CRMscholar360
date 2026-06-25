@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
     Building2, Loader2, Mail, Phone, Globe, Tag, Calendar,
-    ClipboardList, ChevronLeft, ChevronRight, X, ChevronDown,
+    ClipboardList, X, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useWorkflows, useDepartmentBoard } from "../hooks/useDepartments";
@@ -10,7 +10,8 @@ import { DEPARTMENT_ORDER, departmentLabel } from "../lib/departments";
 import { getCategoryFromScore, getSLAStatus } from "../utils/leadScore";
 import Avatar from "../components/Avatar";
 
-const PER_STAGE = 10;
+// Show all leads in single page - set high limit
+const PER_STAGE = 9999;
 
 const fmtDate = (d) => {
     if (!d) return "—";
@@ -47,30 +48,12 @@ const TASK_STATUS_DOT = {
     CANCELLED: "bg-rose-500",
 };
 
-
-// Same windowed-page-number algorithm as the grid/table pagination (Leads.jsx),
-// duplicated locally so this board has no dependency on that page's internals.
-function getPageButtons(current, total) {
-    const delta = 2;
-    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-    const result = [1];
-    if (current > delta + 2) result.push("...");
-    const start = Math.max(2, current - delta);
-    const end = Math.min(total - 1, current + delta);
-    for (let i = start; i <= end; i++) result.push(i);
-    if (current < total - delta - 1) result.push("...");
-    result.push(total);
-    return result;
-}
-
 /**
- * Leads Board — a read-only, category-scoped Kanban backed by a server-paginated
- * per-department fetch (useDepartmentBoard → GET /lead-departments/board), so it
- * stays fast no matter how many leads a department has — no bulk "load everything"
- * fetch, no client-side filtering of a huge list.
+ * Leads Board — a read-only, category-scoped Kanban that displays all leads
+ * in a single view per department (useDepartmentBoard → GET /lead-departments/board).
  *
- * Columns are that department's workflow stages; cards are built from the current
- * page only. There is no drag-and-drop and no stage-mutation here on purpose —
+ * Columns are that department's workflow stages; cards show all leads in each stage.
+ * There is no drag-and-drop and no stage-mutation here on purpose —
  * moving a lead's stage happens from Lead Detail. Cards are plain links, except
  * the task preview chip which opens a read-only popup.
  */
@@ -92,7 +75,6 @@ export default function LeadsBoard({
     );
 
     const [department, setDepartment] = useState(initialDepartment && categories.includes(initialDepartment) ? initialDepartment : null);
-    const [page, setPage] = useState(1);
     const [previewTask, setPreviewTask] = useState(null);
 
     // Auto-initialize department when categories load
@@ -101,17 +83,8 @@ export default function LeadsBoard({
         setDepartment(defaultDept);
     }
 
-    // Reset page to 1 if search/mine filters change
-    const [prevSearch, setPrevSearch] = useState(search);
-    const [prevMine, setPrevMine] = useState(mine);
-    if (search !== prevSearch || mine !== prevMine) {
-        setPrevSearch(search);
-        setPrevMine(mine);
-        setPage(1);
-    }
-
-    // Changing tabs starts back at page 1.
-    const changeDepartment = (d) => { setDepartment(d); setPage(1); };
+    // Changing tabs reloads data
+    const changeDepartment = (d) => { setDepartment(d); };
 
     const filters = useMemo(() => {
         const f = {};
@@ -120,11 +93,10 @@ export default function LeadsBoard({
         return f;
     }, [search, mine, user]);
 
-    const { data, isLoading, isFetching } = useDepartmentBoard(department, filters, page, PER_STAGE);
+    const { data, isLoading, isFetching } = useDepartmentBoard(department, filters, 1, PER_STAGE);
     // Already split server-side, one entry per stage: { [stageCode]: { rows, total, totalPages } }.
     const columns = data?.columns || {};
     const total = data?.total ?? 0;
-    const totalPages = data?.totalPages ?? 1;
 
     const stages = department ? getStages(department) : [];
 
@@ -190,28 +162,11 @@ export default function LeadsBoard({
                         ))}
                     </div>
 
-                    {/* Pagination — sticky to the bottom of the viewport */}
-                    <div className="sticky bottom-0 z-10 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 bg-white border-t border-slate-200/80 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                    {/* Total leads count */}
+                    <div className="sticky bottom-0 z-10 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 bg-white border-t border-slate-200/80 flex items-center justify-center">
                         <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
                             {total === 0 ? "0 leads" : `${total} lead${total === 1 ? "" : "s"} in ${departmentLabel(department)}`}
                         </p>
-                        <div className="flex items-center gap-1 justify-self-center">
-                            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm">
-                                <ChevronLeft className="h-3.5 w-3.5" /> Prev
-                            </button>
-                            <div className="flex items-center gap-1.5 mx-1">
-                                {getPageButtons(page, totalPages).map((p, i) =>
-                                    p === "..." ? (
-                                        <span key={`e${i}`} className="px-1 text-slate-400 text-xs">…</span>
-                                    ) : (
-                                        <button key={p} onClick={() => setPage(p)} className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${page === p ? "bg-indigo-600 text-white shadow-md shadow-indigo-100 border border-indigo-600" : "text-slate-600 hover:bg-slate-100"}`}>{p}</button>
-                                    )
-                                )}
-                            </div>
-                            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm">
-                                Next <ChevronRight className="h-3.5 w-3.5" />
-                            </button>
-                        </div>
                     </div>
                 </>
             )}
