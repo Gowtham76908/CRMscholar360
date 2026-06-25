@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(perl -0pi -e 's/p-3 space-y-1\\\\.5 max-h-80 overflow-y-auto/p-3 space-y-1.5 min-h-\\\\[32rem\\\\] max-h-\\\\[36rem\\\\] overflow-y-auto/g' src/pages/MyDay.jsx)"
+      "Bash(perl -0pi -e 's/p-3 space-y-1\\\\.5 max-h-80 overflow-y-auto/p-3 space-y-1.5 min-h-\\\\[32rem\\\\] max-h-\\\\[36rem\\\\] overflow-y-auto/g' src/pages/MyDay.jsx)",
+      "Bash(node -e \"require\\('./src/controllers/leadController.js'\\); require\\('./src/utils/signedUpload.js'\\); console.log\\('backend OK'\\)\")",
+      "Bash(node --check src/utils/signedUpload.js)",
+      "Bash(node --check src/controllers/leadController.js)",
+      "Bash(node --check scripts/seedAttendance.js)",
+      "Bash(node scripts/seedAttendance.js)",
+      "Bash(node -e ' *)",
+      "Bash(node --check src/services/leadDepartmentService.js)"
     ]
   }
 }

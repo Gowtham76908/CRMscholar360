@@ -55,7 +55,7 @@ export const MODES = [
         icon: Settings2,
         label: "Admin",
         defaultPath: "/team",
-        paths: ["/team", "/team-management", "/department-staffing", "/department-queue", "/invoices", "/fasterq", "/integrations", "/settings", "/attendance", "/leave"],
+        paths: ["/team", "/team-management", "/department-staffing", "/department-queue", "/invoices", "/fasterq", "/integrations", "/settings", "/attendance", "/team-attendance", "/leave"],
         shortcut: "6",
         adminOnly: true,
     },
@@ -76,11 +76,11 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
     const location = useLocation();
     const { user, onlineStatus } = useAuth();
     const isSuperAdmin = user?.role === "SUPER_ADMIN";
-    const isManager = isSuperAdmin || user?.role === "ADMIN";
+    const isManager = isSuperAdmin || user?.role === "ADMIN" || user?.role === "TEAM_LEADER";
     const activeMode = getModeFromPath(location.pathname);
 
-    // The Admin mode is shown to managers too; AdminPanel gates individual links
-    // so managers only see what they're allowed to manage.
+    // The Admin mode is shown to managers and team leaders too; AdminPanel gates individual links
+    // so managers/team leaders only see what they're allowed to manage.
     const visibleModes = MODES.filter(m => !m.adminOnly || isManager);
 
     // Keyboard shortcuts 1–5 for mode switching

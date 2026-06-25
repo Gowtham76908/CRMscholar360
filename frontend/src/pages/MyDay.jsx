@@ -1,13 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import api from "../api/axios";
 import { DashboardSkeleton } from "../components/ui/Skeleton";
 import Badge from "../components/ui/Badge";
 import {
     CheckCircle, Circle, Bell, Phone, MessageSquare, X,
-    ClipboardList, Calendar
+    ClipboardList, Calendar, Search, ChevronDown, Check, Users, Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../lib/utils";
@@ -125,6 +125,95 @@ function ReminderItem({ reminder }) {
     );
 }
 
+// ─── Consultant Filter (searchable dropdown) ───────────────────────────────────
+
+function ConsultantFilter({ consultants, selected, onSelect }) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState("");
+    const ref = useRef(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [open]);
+
+    const filtered = consultants.filter(c =>
+        c.name?.toLowerCase().includes(query.trim().toLowerCase())
+    );
+
+    const choose = (c) => { onSelect(c); setOpen(false); setQuery(""); };
+
+    return (
+        <div className="relative" ref={ref}>
+            <button
+                onClick={() => setOpen(o => !o)}
+                className={cn(
+                    "inline-flex items-center gap-2 h-9 pl-2.5 pr-2 rounded-xl border bg-white text-sm font-semibold transition-colors shadow-sm",
+                    selected
+                        ? "border-indigo-200 text-indigo-700"
+                        : "border-gray-200/70 text-gray-600 hover:border-indigo-300 hover:text-indigo-600"
+                )}
+            >
+                <Users className="h-4 w-4 text-indigo-500" />
+                <span className="max-w-[10rem] truncate">{selected ? selected.name : "All Consultants"}</span>
+                <ChevronDown className={cn("h-3.5 w-3.5 text-gray-400 transition-transform", open && "rotate-180")} />
+            </button>
+
+            {open && (
+                <div className="absolute right-0 mt-2 w-72 rounded-xl border border-gray-200/70 bg-white shadow-lg shadow-gray-200/50 z-30 overflow-hidden">
+                    {/* Search box */}
+                    <div className="p-2 border-b border-gray-100">
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                            <input
+                                autoFocus
+                                value={query}
+                                onChange={e => setQuery(e.target.value)}
+                                placeholder="Search consultant…"
+                                className="w-full h-9 pl-8 pr-3 text-sm rounded-lg border border-gray-200 bg-gray-50 focus:bg-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none placeholder:text-gray-400"
+                            />
+                        </div>
+                    </div>
+                    {/* Options */}
+                    <div className="max-h-64 overflow-y-auto p-1">
+                        <button
+                            onClick={() => choose(null)}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                        >
+                            <span className="h-7 w-7 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                                <Users className="h-3.5 w-3.5 text-gray-500" />
+                            </span>
+                            <span className="flex-1 text-left font-semibold text-gray-700">All Consultants</span>
+                            {!selected && <Check className="h-4 w-4 text-indigo-600 shrink-0" />}
+                        </button>
+                        {filtered.map(c => (
+                            <button
+                                key={c.id}
+                                onClick={() => choose(c)}
+                                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                            >
+                                <span className="h-7 w-7 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 text-xs font-bold text-indigo-700">
+                                    {c.name?.charAt(0).toUpperCase()}
+                                </span>
+                                <span className="flex-1 text-left min-w-0">
+                                    <span className="block font-semibold text-gray-800 truncate">{c.name}</span>
+                                    {c.role && <span className="block text-[10px] text-gray-400 truncate">{c.role.replace(/_/g, " ")}</span>}
+                                </span>
+                                {selected?.id === c.id && <Check className="h-4 w-4 text-indigo-600 shrink-0" />}
+                            </button>
+                        ))}
+                        {filtered.length === 0 && (
+                            <p className="text-xs text-gray-400 text-center py-6">No consultants found</p>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── My Day Page ──────────────────────────────────────────────────────────────
 
 const MyDay = () => {
@@ -140,11 +229,28 @@ const MyDay = () => {
     };
     const isSnoozed = (leadId) => snoozed[leadId] && snoozed[leadId] > Date.now();
 
-    // Fetch action queue (leads needing follow-up)
+    // Consultant filter
+    const [consultant, setConsultant] = useState(null);
+
+    const { data: consultants = [] } = useQuery({
+        queryKey: ["team", "consultants"],
+        queryFn: () => api.get("/team").then(r => {
+            const list = r.data?.members || r.data || [];
+            return (Array.isArray(list) ? list : [])
+                .filter(u => u.isActive !== false)
+                .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        }),
+        staleTime: 300_000,
+    });
+
+    // Fetch action queue (leads needing follow-up) — scoped to consultant when selected
     const { data: leadsData, isLoading: leadsLoading } = useQuery({
-        queryKey: ["leads", "action-queue"],
+        queryKey: ["leads", "action-queue", consultant?.id ?? "all"],
         queryFn: () => api.get("/leads", {
-            params: { limit: 10, status: "FOLLOW_UP,CONTACTED,NEW", sortBy: "updatedAt", sortOrder: "asc" }
+            params: {
+                limit: 10, status: "FOLLOW_UP,CONTACTED,NEW", sortBy: "updatedAt", sortOrder: "asc",
+                ...(consultant ? { assignedTo: consultant.id } : {}),
+            }
         }).then(r => r.data.data || r.data),
         staleTime: 120_000,
     });
@@ -173,11 +279,18 @@ const MyDay = () => {
         onError: () => toast.error("Failed to update task"),
     });
 
-    const isLoading = leadsLoading || tasksLoading || remindersLoading;
+    // Only gate the page on the filter-independent queries; the Action Queue card
+    // shows its own loading state when the consultant filter re-fetches leads.
+    const isLoading = tasksLoading || remindersLoading;
     if (isLoading) return <DashboardSkeleton />;
 
-    const pendingTasks = (tasks || []).filter(t => t.status === "PENDING");
-    const upcomingReminders = (reminders || []).filter(r => !r.isSent).slice(0, 5);
+    const pendingTasks = (tasks || [])
+        .filter(t => t.status === "PENDING")
+        .filter(t => !consultant || t.assignedTo?.id === consultant.id);
+    const upcomingReminders = (reminders || [])
+        .filter(r => !r.isSent)
+        .filter(r => !consultant || r.userId === consultant.id)
+        .slice(0, 5);
     const actionQueue = (leadsData || []).slice(0, 8);
 
     return (
@@ -219,11 +332,22 @@ const MyDay = () => {
 
             {/* Tasks & Follow-up Actions Section */}
             <div>
-                <div className="flex items-center gap-2 mb-4">
-                    <ClipboardList className="h-5 w-5 text-indigo-600" />
-                    <h2 className="text-lg font-bold text-indigo-950">Tasks & Follow-up Actions</h2>
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <div className="flex items-center gap-2">
+                        <ClipboardList className="h-5 w-5 text-indigo-600" />
+                        <h2 className="text-lg font-bold text-indigo-950">Tasks & Follow-up Actions</h2>
+                        {consultant && (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-full pl-2 pr-1 py-0.5">
+                                {consultant.name}
+                                <button onClick={() => setConsultant(null)} className="hover:bg-indigo-100 rounded-full p-0.5" title="Clear filter">
+                                    <X className="h-3 w-3" />
+                                </button>
+                            </span>
+                        )}
+                    </div>
+                    <ConsultantFilter consultants={consultants} selected={consultant} onSelect={setConsultant} />
                 </div>
-                
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                     {/* Action Queue */}
                     <div className="flex flex-col bg-white border border-gray-200/70 rounded-2xl shadow-sm overflow-hidden">
@@ -237,7 +361,13 @@ const MyDay = () => {
                             <Badge variant="warning" size="sm">{actionQueue.length}</Badge>
                         </div>
                         <div className="p-3 space-y-1.5 min-h-[32rem] max-h-[36rem] overflow-y-auto">
-                            {actionQueue.length > 0
+                            {leadsLoading
+                                ? (
+                                    <div className="flex items-center justify-center h-full py-12">
+                                        <Loader2 className="h-5 w-5 animate-spin text-indigo-400" />
+                                    </div>
+                                )
+                                : actionQueue.length > 0
                                 ? actionQueue.map(lead => (
                                     <ActionItem key={lead.id} lead={lead} snoozed={isSnoozed(lead.id)} onSnooze={handleSnooze} />
                                 ))
@@ -246,7 +376,9 @@ const MyDay = () => {
                                         <div className="h-12 w-12 rounded-full bg-gray-50 flex items-center justify-center">
                                             <ClipboardList className="h-6 w-6 text-gray-300" />
                                         </div>
-                                        <p className="text-xs text-gray-400">No leads need action right now</p>
+                                        <p className="text-xs text-gray-400">
+                                            {consultant ? `No action items for ${consultant.name}` : "No leads need action right now"}
+                                        </p>
                                     </div>
                                 )
                             }

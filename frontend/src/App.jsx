@@ -39,6 +39,7 @@ const DepartmentBoard        = lazy(() => import("./pages/DepartmentBoard"));
 const DepartmentStaffing     = lazy(() => import("./pages/DepartmentStaffing"));
 const Messages               = lazy(() => import("./pages/Messages"));
 const Attendance             = lazy(() => import("./pages/Attendance"));
+const TeamAttendance         = lazy(() => import("./pages/TeamAttendance"));
 const Leave                  = lazy(() => import("./pages/Leave"));
 const Leaderboard            = lazy(() => import("./pages/Leaderboard"));
 const InvoiceBilling         = lazy(() => import("./pages/InvoiceBilling"));
@@ -113,6 +114,7 @@ function App() {
               <Route path="/department-staffing"      element={<DepartmentStaffing />} />
               <Route path="/messages"                 element={<Messages />} />
               <Route path="/attendance"               element={<Attendance />} />
+              <Route path="/team-attendance"          element={<TeamAttendance />} />
               <Route path="/leave"                    element={<Leave />} />
               <Route path="/leaderboard"              element={<Leaderboard />} />
               <Route path="/settings"                 element={<Settings />} />

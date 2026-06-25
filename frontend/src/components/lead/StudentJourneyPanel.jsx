@@ -347,7 +347,12 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                     academic_gpa: formValues.academic_gpa || "",
                     backlogs: parseInt(formValues.backlogs, 10) || 0
                 });
-                await moveStageMut.mutateAsync("UNIVERSITY_SHORTLISTING");
+                // Stage progression is manual — save the education details but do NOT
+                // auto-advance to University Shortlisting. The user moves it forward
+                // explicitly via the "Move to next stage" control.
+                toast.success("Education details saved");
+                onChanged();
+                setActionModal(null);
             }
             else if (currentStage === "UNIVERSITY_SHORTLISTING") {
                 const rawList = formValues.universities || [];
@@ -407,7 +412,12 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                 });
                 
                 await saveCustomFieldsMut.mutateAsync(patchPayload);
-                await moveStageMut.mutateAsync("APPLICATION");
+                // Stage progression is manual — save the shortlisted universities but do
+                // NOT auto-advance to Application. The user moves it forward explicitly
+                // via the "Move to next stage" control.
+                toast.success("University shortlist saved");
+                onChanged();
+                setActionModal(null);
             }
             else if (currentStage === "APPLICATION") {
                 const rawList = formValues.universities || [];
@@ -473,7 +483,12 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                     deposit_amount_due: formValues.deposit_amount_due || "",
                     deposit_receipt_uploaded: formValues.deposit_receipt_uploaded ? "Uploaded" : "Pending"
                 });
-                await moveStageMut.mutateAsync("VISA_DOCUMENTATION");
+                // Stage progression is manual — save the deposit details but do NOT
+                // auto-advance to Visa Documentation. The user moves it forward
+                // explicitly via the "Move to next stage" control.
+                toast.success("Deposit details saved");
+                onChanged();
+                setActionModal(null);
             }
             else if (currentStage === "VISA_DOCUMENTATION") {
                 await saveCustomFieldsMut.mutateAsync({

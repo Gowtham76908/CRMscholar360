@@ -1,6 +1,7 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { createPortal } from "react-dom";
 import { LeadDetailSkeleton } from "../components/ui/Skeleton";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext";
@@ -12,11 +13,12 @@ import {
     ChevronDown, ChevronRight, Play, Clock, AlertCircle, ChevronLeft,
     Zap, Users, Save, SlidersHorizontal, Eye, MousePointerClick, GitBranch,
     TrendingUp, IndianRupee, Pencil, Paperclip, ArrowRight,
-    PanelRightOpen, PanelRightClose,
+    PanelRightOpen, PanelRightClose, Archive, MoreVertical, RefreshCw, RotateCcw,
 } from "lucide-react";
 import { Modal } from "../components/Modal";
 import SlidePanel from "../components/SlidePanel";
 import { getScoreLabel } from "../utils/leadScore";
+import { fileUrl } from "../utils/fileUrl";
 import AddTaskForm from "../components/AddTaskForm";
 import AddLeadForm from "../components/AddLeadForm";
 import LeadSidebar from "../components/lead/LeadSidebar";
@@ -77,13 +79,14 @@ const ACTION_CONFIG = {
 };
 
 const FILTER_PILLS = [
-    { id: "all",      label: "All" },
-    { id: "note",     label: "Notes" },
-    { id: "call",     label: "Calls" },
-    { id: "whatsapp", label: "WhatsApp" },
-    { id: "email",    label: "Email" },
-    { id: "activity", label: "Activity" },
-    { id: "task",     label: "Tasks" },
+    { id: "all",         label: "All" },
+    { id: "note",        label: "Notes" },
+    { id: "call",        label: "Calls" },
+    { id: "whatsapp",    label: "WhatsApp" },
+    { id: "email",       label: "Email" },
+    { id: "activity",    label: "Activity" },
+    { id: "task",        label: "Tasks" },
+    { id: "attachment",  label: "Attachments" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -152,7 +155,7 @@ function TimelineItem({ item }) {
                         </div>
                     </div>
                     <a
-                        href={meta.resumeUrl}
+                        href={fileUrl(meta.resumeUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center justify-center px-3.5 py-1.5 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 text-xs font-bold rounded-lg shadow-sm transition-all flex-shrink-0 cursor-pointer"
@@ -1057,12 +1060,15 @@ export default function LeadDetail() {
     const [expandedGroups, setExpandedGroups] = useState(new Set());
     const noteRef = useRef(null);
     const fileInputRef = useRef(null);
+    const dropdownButtonRef = useRef(null);
     const [uploadingFile, setUploadingFile] = useState(false);
+    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
 
-    const [composerTab, setComposerTab] = useState("note");
+    const [composerTab, setComposerTab] = useState("reminder");
     const [reminderMsg, setReminderMsg] = useState("");
     const [reminderAt, setReminderAt] = useState("");
     const [addToGcal, setAddToGcal] = useState(false);
+    const [showStageDropdown, setShowStageDropdown] = useState(false);
 
     // ─── Queries (all parallel) ───────────────────────────────────────────────
     const { data: lead, isLoading: leadLoading, error: leadError } = useQuery({
@@ -1143,14 +1149,22 @@ export default function LeadDetail() {
     const { data: assignments = [] } = useLeadDepartments(id);
     const { stageLabel, getStages, hasWorkflow } = useWorkflows();
 
-    // Get primary (first) department for the "Move to next status" button
+    // Get primary (first) department for stage actions
     const primaryDept = assignments.length > 0 ? assignments[0] : null;
     const canUpdateStage = primaryDept && hasWorkflow(primaryDept.department);
     
-    // Calculate next stage
+    // Calculate next and previous stages
     const stages = primaryDept ? getStages(primaryDept.department) : [];
     const currentIndex = stages.findIndex((s) => s.code === primaryDept?.stage);
     const nextStage = currentIndex !== -1 && currentIndex < stages.length - 1 ? stages[currentIndex + 1] : null;
+    const prevStage = currentIndex > 0 ? stages[currentIndex - 1] : null;
+    
+    // Check if user can move to previous (Manager or Director only)
+    const canMoveToPrevious = (user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && prevStage;
+    
+    // Check current stage for special actions
+    const isArchived = primaryDept?.stage === "ARCHIVE";
+    const isFutureProspect = primaryDept?.stage === "FUTURE_PROSPECT";
 
     const stageMut = useMutation({
         mutationFn: ({ leadDepartmentId, newStage }) => 
@@ -1164,6 +1178,7 @@ export default function LeadDetail() {
 
     const handleMoveToNextStage = () => {
         if (!primaryDept || !nextStage) return;
+        setShowStageDropdown(false);
         stageMut.mutate(
             { leadDepartmentId: primaryDept.id, newStage: nextStage.code },
             {
@@ -1176,6 +1191,97 @@ export default function LeadDetail() {
             }
         );
     };
+
+    const handleMoveToPreviousStage = () => {
+        if (!primaryDept || !prevStage) return;
+        setShowStageDropdown(false);
+        stageMut.mutate(
+            { leadDepartmentId: primaryDept.id, newStage: prevStage.code },
+            {
+                onSuccess: () => {
+                    toast.success(`Moved back to ${prevStage.label}`);
+                },
+                onError: (err) => {
+                    toast.error(err.response?.data?.message || "Failed to update stage");
+                }
+            }
+        );
+    };
+
+    const handleArchive = () => {
+        if (!primaryDept) return;
+        setShowStageDropdown(false);
+        stageMut.mutate(
+            { leadDepartmentId: primaryDept.id, newStage: "ARCHIVE" },
+            {
+                onSuccess: () => {
+                    toast.success("Lead archived");
+                },
+                onError: (err) => {
+                    toast.error(err.response?.data?.message || "Failed to archive lead");
+                }
+            }
+        );
+    };
+
+    const handleFutureProspect = () => {
+        if (!primaryDept) return;
+        setShowStageDropdown(false);
+        stageMut.mutate(
+            { leadDepartmentId: primaryDept.id, newStage: "FUTURE_PROSPECT" },
+            {
+                onSuccess: () => {
+                    toast.success("Moved to Future Prospect");
+                },
+                onError: (err) => {
+                    toast.error(err.response?.data?.message || "Failed to move to future prospect");
+                }
+            }
+        );
+    };
+
+    const handleUnarchive = () => {
+        if (!primaryDept) return;
+        setShowStageDropdown(false);
+        stageMut.mutate(
+            { leadDepartmentId: primaryDept.id, newStage: "ENQUIRY" },
+            {
+                onSuccess: () => {
+                    toast.success("Lead unarchived and moved to Enquiry");
+                },
+                onError: (err) => {
+                    toast.error(err.response?.data?.message || "Failed to unarchive lead");
+                }
+            }
+        );
+    };
+
+    const handleMoveToEnquiry = () => {
+        if (!primaryDept) return;
+        setShowStageDropdown(false);
+        stageMut.mutate(
+            { leadDepartmentId: primaryDept.id, newStage: "ENQUIRY" },
+            {
+                onSuccess: () => {
+                    toast.success("Moved to Enquiry");
+                },
+                onError: (err) => {
+                    toast.error(err.response?.data?.message || "Failed to move to enquiry");
+                }
+            }
+        );
+    };
+
+    // Calculate dropdown position when it opens
+    useEffect(() => {
+        if (showStageDropdown && dropdownButtonRef.current) {
+            const rect = dropdownButtonRef.current.getBoundingClientRect();
+            setDropdownPosition({
+                top: rect.bottom + window.scrollY + 8,
+                right: window.innerWidth - rect.right + window.scrollX,
+            });
+        }
+    }, [showStageDropdown]);
 
     const calls = Array.isArray(callsData) ? callsData : (callsData?.data ?? []);
     const tasks = tasksData?.data ?? [];
@@ -1284,9 +1390,11 @@ export default function LeadDetail() {
         ].sort((a, b) => b._date - a._date);
 
         const isTaskAction = (i) => i._type === "activity" && i.action?.startsWith("TASK_");
-        const filtered = timelineFilter === "all"      ? allItems
-            : timelineFilter === "task"     ? allItems.filter(i => isTaskAction(i))
-            : timelineFilter === "activity" ? allItems.filter(i => i._type === "activity" && !isTaskAction(i))
+        const isAttachment = (i) => i.action === "RESUME_UPLOADED" && i.metadata?.resumeUrl;
+        const filtered = timelineFilter === "all"        ? allItems
+            : timelineFilter === "task"       ? allItems.filter(i => isTaskAction(i))
+            : timelineFilter === "attachment" ? allItems.filter(i => isAttachment(i))
+            : timelineFilter === "activity"   ? allItems.filter(i => i._type === "activity" && !isTaskAction(i))
             : allItems.filter(i => i._type === timelineFilter);
 
         const now = Date.now();
@@ -1457,6 +1565,21 @@ export default function LeadDetail() {
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2.5 flex-wrap mb-1">
                                         <h1 className="text-2xl font-black text-gray-900 truncate leading-tight">{lead.name}</h1>
+                                        {primaryDept?.stage && (
+                                            <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide ${
+                                                primaryDept.stage === "ARCHIVE" 
+                                                    ? "bg-gray-100 text-gray-700 border border-gray-200"
+                                                    : primaryDept.stage === "FUTURE_PROSPECT"
+                                                    ? "bg-blue-100 text-blue-700 border border-blue-200"
+                                                    : primaryDept.stage === "COMMISSION_INVOICING"
+                                                    ? "bg-green-100 text-green-700 border border-green-200"
+                                                    : primaryDept.stage === "ENQUIRY"
+                                                    ? "bg-amber-100 text-amber-700 border border-amber-200"
+                                                    : "bg-indigo-100 text-indigo-700 border border-indigo-200"
+                                            }`}>
+                                                {stageLabel(primaryDept.stage)}
+                                            </span>
+                                        )}
                                     </div>
                                     {(lead.company || lead.jobTitle) && (
                                         <p className="text-sm text-gray-600 truncate">
@@ -1483,6 +1606,12 @@ export default function LeadDetail() {
 
                             {/* Source / Enquiry / Category chips */}
                             <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                                {primaryDept && (
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                                        {stageLabel(primaryDept.department, primaryDept.stage)}
+                                    </span>
+                                )}
                                 <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">
                                     {SOURCE_LABEL[lead.source] ?? lead.source}
                                 </span>
@@ -1617,19 +1746,101 @@ export default function LeadDetail() {
                             >
                                 <GitBranch className="h-3.5 w-3.5" /> Journey
                             </Link>
-                            {canUpdateStage && nextStage && (
-                                <button
-                                    onClick={handleMoveToNextStage}
-                                    disabled={stageMut.isPending}
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-semibold rounded-lg shadow-sm transition-all"
-                                >
-                                    {stageMut.isPending ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                        <ArrowRight className="h-3.5 w-3.5" />
+                            {canUpdateStage && (
+                                <div className="relative">
+                                    <button
+                                        ref={dropdownButtonRef}
+                                        onClick={() => setShowStageDropdown(!showStageDropdown)}
+                                        disabled={stageMut.isPending}
+                                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-semibold rounded-lg shadow-sm transition-all"
+                                    >
+                                        {stageMut.isPending ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                            <MoreVertical className="h-3.5 w-3.5" />
+                                        )}
+                                        Stage Actions
+                                        <ChevronDown className="h-3.5 w-3.5" />
+                                    </button>
+                                    {showStageDropdown && createPortal(
+                                        <>
+                                            <div 
+                                                className="fixed inset-0 z-40" 
+                                                onClick={() => setShowStageDropdown(false)}
+                                            />
+                                            <div 
+                                                className="fixed w-56 bg-white border border-gray-200 rounded-lg shadow-xl z-50"
+                                                style={{
+                                                    top: `${dropdownPosition.top}px`,
+                                                    right: `${dropdownPosition.right}px`,
+                                                }}
+                                            >
+                                                {/* Show Unarchive if currently archived */}
+                                                {isArchived ? (
+                                                    <button
+                                                        onClick={handleUnarchive}
+                                                        disabled={stageMut.isPending}
+                                                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-green-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
+                                                    >
+                                                        <RotateCcw className="h-4 w-4 text-green-600" />
+                                                        <span className="font-semibold text-green-700">Unarchive (Move to Enquiry)</span>
+                                                    </button>
+                                                ) : isFutureProspect ? (
+                                                    /* Show Move to Enquiry if in future prospect */
+                                                    <button
+                                                        onClick={handleMoveToEnquiry}
+                                                        disabled={stageMut.isPending}
+                                                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-indigo-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
+                                                    >
+                                                        <ArrowRight className="h-4 w-4 text-indigo-600" />
+                                                        <span>Move to <span className="font-semibold text-indigo-700">Enquiry</span></span>
+                                                    </button>
+                                                ) : (
+                                                    /* Normal workflow options */
+                                                    <>
+                                                        {nextStage && (
+                                                            <button
+                                                                onClick={handleMoveToNextStage}
+                                                                disabled={stageMut.isPending}
+                                                                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-indigo-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-b border-gray-100 rounded-t-lg"
+                                                            >
+                                                                <ArrowRight className="h-4 w-4 text-indigo-600" />
+                                                                <span>Move to <span className="font-semibold text-indigo-700">{nextStage.label}</span></span>
+                                                            </button>
+                                                        )}
+                                                        {canMoveToPrevious && (
+                                                            <button
+                                                                onClick={handleMoveToPreviousStage}
+                                                                disabled={stageMut.isPending}
+                                                                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-amber-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-b border-gray-100"
+                                                            >
+                                                                <ArrowLeft className="h-4 w-4 text-amber-600" />
+                                                                <span>Move to <span className="font-semibold text-amber-700">{prevStage.label}</span></span>
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={handleArchive}
+                                                            disabled={stageMut.isPending}
+                                                            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-b border-gray-100"
+                                                        >
+                                                            <Archive className="h-4 w-4 text-gray-600" />
+                                                            <span>Archive</span>
+                                                        </button>
+                                                        <button
+                                                            onClick={handleFutureProspect}
+                                                            disabled={stageMut.isPending}
+                                                            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed rounded-b-lg"
+                                                        >
+                                                            <RefreshCw className="h-4 w-4 text-blue-600" />
+                                                            <span>Future Prospect</span>
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </>,
+                                        document.body
                                     )}
-                                    Move to {nextStage.label}
-                                </button>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -1670,17 +1881,6 @@ export default function LeadDetail() {
                             <div className="flex gap-1.5 px-4 pt-3 pb-1.5 border-b border-gray-100 bg-gray-50/50">
                                 <button
                                     type="button"
-                                    onClick={() => setComposerTab("note")}
-                                    className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                                        composerTab === "note"
-                                            ? "bg-white text-indigo-700 shadow-sm border border-gray-200"
-                                            : "text-gray-500 hover:text-gray-800"
-                                    }`}
-                                >
-                                    📝 Add Note
-                                </button>
-                                <button
-                                    type="button"
                                     onClick={() => setComposerTab("reminder")}
                                     className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                                         composerTab === "reminder"
@@ -1689,6 +1889,17 @@ export default function LeadDetail() {
                                     }`}
                                 >
                                     ⏰ Set Reminder
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setComposerTab("note")}
+                                    className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                                        composerTab === "note"
+                                            ? "bg-white text-indigo-700 shadow-sm border border-gray-200"
+                                            : "text-gray-500 hover:text-gray-800"
+                                    }`}
+                                >
+                                    📝 Add Note
                                 </button>
                             </div>
 

@@ -23,7 +23,7 @@ import DepartmentSection from "../components/department/DepartmentSection";
 import HistoricalActivity from "../components/department/HistoricalActivity";
 
 const isSuperAdmin = (role) => role === "SUPER_ADMIN";
-const isManager    = (role) => role === "SUPER_ADMIN" || role === "ADMIN" || role === "TEAM_LEADER";
+const isManager    = (role) => role === "SUPER_ADMIN" || role === "ADMIN";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -630,7 +630,7 @@ const Dashboard = () => {
 
     // Check-in mutation
     const checkInMut = useMutation({
-        mutationFn: () => api.post("/attendance/check-in", {}),
+        mutationFn: () => api.post("/attendance/check-in"),
         onSuccess: () => {
             toast.success("Checked in successfully!");
             refetchMyAttendance();
@@ -642,7 +642,16 @@ const Dashboard = () => {
 
     // Check-out mutation
     const checkOutMut = useMutation({
-        mutationFn: () => api.post("/attendance/check-out", {}),
+        mutationFn: () => api.post("/attendance/check-out"),
+        onSuccess: () => {
+            toast.success("Checked out successfully!");
+            refetchMyAttendance();
+        },
+        onError: (error) => {
+            toast.error(error.response?.data?.message || "Failed to check out");
+        },
+    });
+        mutationFn: () => api.post("/attendance/check-out"),
         onSuccess: () => {
             toast.success("Checked out successfully!");
             refetchMyAttendance();
@@ -749,6 +758,7 @@ const Dashboard = () => {
     });
 
     // ── Today's Attendance (Admin/Manager only) ────────────────────────────────
+    const todayDate = useMemo(() => new Date().toISOString().split('T')[0], []);
     const { data: todayAttendance = [] } = useQuery({
         queryKey: ["attendance-today", todayDate],
         queryFn: () => api.get(`/attendance/all?date=${todayDate}`).then(r => r.data),
@@ -1527,7 +1537,7 @@ const Dashboard = () => {
                             </div>
                             <div className="flex items-center gap-3">
                                 <Link
-                                    to={isManager(user?.role) ? "/team-attendance" : "/attendance"}
+                                    to="/attendance"
                                     onClick={() => setShowAttendanceModal(false)}
                                     className="text-xs text-indigo-600 hover:text-indigo-700 font-bold hover:underline"
                                 >

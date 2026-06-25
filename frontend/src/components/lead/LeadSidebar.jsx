@@ -3,6 +3,7 @@ import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import api from "../../api/axios";
 import { toast } from "sonner";
 import { getScoreStyle } from "../../utils/leadScore";
+import { fileUrl } from "../../utils/fileUrl";
 import {
     Phone, Mail, Building2, Briefcase, Linkedin,
     Plus, Loader2, MessageCircle, CheckCircle, XCircle,
@@ -204,7 +205,7 @@ export default function LeadSidebar({ lead, leadId, hideContact = false, calls, 
                         <div className="flex justify-between text-sm pt-2 border-t border-gray-100 items-center">
                             <dt className="text-gray-500">Resume</dt>
                             <dd className="font-medium text-indigo-600 hover:underline truncate max-w-[70%]">
-                                <a href={lead.resumeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1" title={lead.resumeName || "View Resume"}>
+                                <a href={fileUrl(lead.resumeUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1" title={lead.resumeName || "View Resume"}>
                                     📄 {lead.resumeName || "View Resume"}
                                 </a>
                             </dd>

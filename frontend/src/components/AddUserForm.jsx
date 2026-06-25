@@ -13,7 +13,7 @@ const addUserSchema = z.object({
     email: z.string().email("Invalid email"),
     phone: z.string().min(10, "Phone number is required"),
     password: z.string().min(6, "Password must be at least 6 characters"),
-    role: z.enum(["SUPER_ADMIN", "ADMIN", "EMPLOYEE"]),
+    role: z.enum(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER", "EMPLOYEE"]),
     jobTitle: z.string().optional(),
 });
 
@@ -109,6 +109,7 @@ const AddUserForm = ({ onClose }) => {
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                 >
                     <option value="EMPLOYEE">Consultant</option>
+                    <option value="TEAM_LEADER">Team Leader</option>
                     {user?.role === "SUPER_ADMIN" && (
                         <>
                             <option value="ADMIN">Manager</option>

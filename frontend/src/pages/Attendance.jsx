@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import api from "../api/axios";
@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import {
     Clock, CheckCircle, XCircle, Calendar, MapPin, Loader2,
     ChevronLeft, ChevronRight, Users, CalendarDays,
-    Home, UserX, Timer, LogIn, LogOut, ArrowRight,
+    Home, UserX, Timer, LogIn, LogOut, ArrowRight, Search,
 } from "lucide-react";
 
 const MONTHS = [
@@ -568,6 +568,8 @@ const AdminReportsPanel = () => {
     const [year, setYear] = useState(today.getFullYear());
     const [selectedEmployee, setSelectedEmployee] = useState(null);
     const [showPicker, setShowPicker] = useState(false);
+    const [search, setSearch] = useState("");
+    const [teamFilter, setTeamFilter] = useState("ALL");
 
     const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); setSelectedEmployee(null); };
     const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); setSelectedEmployee(null); };
@@ -608,6 +610,30 @@ const AdminReportsPanel = () => {
         queryKey: ["admin-monthly-report", month, year],
         queryFn: async () => (await api.get(`/attendance/admin/monthly-report?month=${month}&year=${year}`)).data
     });
+
+    // Department values are stored inconsistently (e.g. "FOREX" vs "Forex").
+    // Normalize to one key so the same team isn't listed twice.
+    const normTeam = (d) => (d || "").trim().toUpperCase().replace(/_/g, " ").replace(/\s+/g, " ");
+    const prettyTeam = (key) => key.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
+    // Distinct teams, deduped case-insensitively → [key, label].
+    const teams = useMemo(() => {
+        const map = new Map();
+        (reportData?.report || []).forEach(r => {
+            const key = normTeam(r.user?.department);
+            if (key && !map.has(key)) map.set(key, prettyTeam(key));
+        });
+        return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    }, [reportData]);
+
+    // Apply team + name filters to the report rows.
+    const filteredReport = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        return (reportData?.report || []).filter(r =>
+            (teamFilter === "ALL" || normTeam(r.user?.department) === teamFilter) &&
+            (!q || r.user?.name?.toLowerCase().includes(q))
+        );
+    }, [reportData, search, teamFilter]);
 
     const { data: empDetail, isLoading: empLoading } = useQuery({
         queryKey: ["employee-attendance", selectedEmployee?.id, month, year],
@@ -651,10 +677,46 @@ const AdminReportsPanel = () => {
             )}
 
             <div className="bg-white rounded-2xl border border-[#E4E4E7] overflow-hidden shadow-sm">
-                <div className="px-6 py-4 border-b border-[#E4E4E7] bg-indigo-50/50 flex items-center gap-2">
-                    <Users className="h-4 w-4 text-indigo-600" />
-                    <h2 className="font-semibold text-[#18181B]">Employee Monthly Summary</h2>
-                    <span className="text-xs text-[#71717A] ml-1">· click a row to view details</span>
+                <div className="px-6 py-4 border-b border-[#E4E4E7] bg-indigo-50/50 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-indigo-600" />
+                        <h2 className="font-semibold text-[#18181B]">Employee Monthly Summary</h2>
+                        <span className="text-xs text-[#71717A] ml-1 hidden sm:inline">· click a row to view details</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {/* Name search */}
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                            <input
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                placeholder="Search by name…"
+                                className="h-9 w-44 pl-8 pr-3 text-sm rounded-lg border border-gray-200 bg-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none placeholder:text-gray-400"
+                            />
+                        </div>
+                        {/* Team filter */}
+                        <div className="relative">
+                            <select
+                                value={teamFilter}
+                                onChange={e => setTeamFilter(e.target.value)}
+                                className={`h-9 pl-3 pr-8 text-sm font-semibold rounded-lg border bg-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none cursor-pointer appearance-none ${
+                                    teamFilter === "ALL" ? "border-gray-200 text-gray-600" : "border-indigo-300 text-indigo-700"
+                                }`}
+                            >
+                                <option value="ALL">All Teams</option>
+                                {teams.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                            </select>
+                            <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 rotate-90 pointer-events-none" />
+                        </div>
+                        {(search || teamFilter !== "ALL") && (
+                            <button
+                                onClick={() => { setSearch(""); setTeamFilter("ALL"); }}
+                                className="text-xs font-semibold text-indigo-600 hover:underline"
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
                 </div>
                 {reportLoading ? (
                     <div className="flex justify-center py-12"><Loader2 className="h-7 w-7 animate-spin text-indigo-600" /></div>
@@ -669,7 +731,7 @@ const AdminReportsPanel = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-[#E4E4E7]">
-                                {reportData?.report?.map((row) => (
+                                {filteredReport.map((row) => (
                                     <tr key={row.user.id} onClick={() => setSelectedEmployee(row.user)}
                                         className={`cursor-pointer transition-colors hover:bg-indigo-50/30 ${selectedEmployee?.id === row.user.id ? "bg-indigo-50/40" : ""}`}>
                                         <td className="px-4 py-3">
@@ -684,7 +746,7 @@ const AdminReportsPanel = () => {
                                         <td className="px-4 py-3 text-center font-bold text-indigo-600">{row.compOffBalance || 0}</td>
                                     </tr>
                                 ))}
-                                {(!reportData?.report || reportData.report.length === 0) && (
+                                {filteredReport.length === 0 && (
                                     <tr><td colSpan="7" className="px-6 py-10 text-center text-[#71717A]">No employees found</td></tr>
                                 )}
                             </tbody>

@@ -36,7 +36,7 @@ export default function LeadDepartmentsPanel({ leadId }) {
     const [showAllocate, setShowAllocate] = useState(false);
 
     const isDirector = user?.role === "SUPER_ADMIN";
-    const isManager = user?.role === "ADMIN";
+    const isManager = user?.role === "ADMIN" || user?.role === "TEAM_LEADER";
 
     // Best-effort client gating (server is the source of truth):
     // allocation is for the Director, a Sales manager, or the assigned Sales consultant.
@@ -323,7 +323,10 @@ function AssignConsultant({ leadDepartmentId, department, currentId, onClose, on
                 >
                     <option value="" disabled>Select consultant…</option>
                     {members.map((m) => (
-                        <option key={m.id} value={m.id}>{m.name}{m.role === "ADMIN" ? " (Manager)" : ""}</option>
+                        <option key={m.id} value={m.id}>
+                            {m.name}
+                            {m.role === "ADMIN" ? " (Manager)" : m.role === "TEAM_LEADER" ? " (Team Leader)" : ""}
+                        </option>
                     ))}
                 </select>
             )}
@@ -368,7 +371,10 @@ function RequestReassign({ leadDepartmentId, department, currentId, onClose, onD
                     >
                         <option value="" disabled>Reassign to…</option>
                         {options.map((m) => (
-                            <option key={m.id} value={m.id}>{m.name}{m.role === "ADMIN" ? " (Manager)" : ""}</option>
+                            <option key={m.id} value={m.id}>
+                                {m.name}
+                                {m.role === "ADMIN" ? " (Manager)" : m.role === "TEAM_LEADER" ? " (Team Leader)" : ""}
+                            </option>
                         ))}
                     </select>
                 </>

@@ -209,6 +209,7 @@ function AdminPanel() {
                 <PanelLink to="/team"        icon={UserCog}    label="Team" />
                 {isSuperAdmin && <PanelLink to="/department-staffing" icon={Building} label="Dept. Staffing" />}
                 <PanelLink to="/attendance"  icon={Clock}      label="Attendance" />
+                {isManager && <PanelLink to="/team-attendance" icon={Users} label="Team Attendance" />}
                 <PanelLink to="/leave"       icon={Calendar}   label="Leave" />
             </PanelSection>
 

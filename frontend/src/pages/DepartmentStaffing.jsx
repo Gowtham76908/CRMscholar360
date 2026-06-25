@@ -114,6 +114,16 @@ export default function DepartmentStaffing() {
                     Managers ({users.filter(u => u.role === "ADMIN").length})
                 </button>
                 <button
+                    onClick={() => setRoleTab("TEAM_LEADER")}
+                    className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer -mb-[2px] ${
+                        roleTab === "TEAM_LEADER"
+                            ? "border-indigo-600 text-indigo-600"
+                            : "border-transparent text-gray-400 hover:text-gray-600"
+                    }`}
+                >
+                    Team Leaders ({users.filter(u => u.role === "TEAM_LEADER").length})
+                </button>
+                <button
                     onClick={() => setRoleTab("EMPLOYEE")}
                     className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer -mb-[2px] ${
                         roleTab === "EMPLOYEE"
@@ -149,7 +159,9 @@ export default function DepartmentStaffing() {
                                 <tr key={u.id} className="hover:bg-gray-50/40">
                                     <td className="px-4 py-2.5 sticky left-0 bg-white">
                                         <div className="font-medium text-gray-900">{u.name}</div>
-                                        <div className="text-[11px] text-gray-400">{u.role === "SUPER_ADMIN" ? "Director" : u.role === "ADMIN" ? "Manager" : "Consultant"}</div>
+                                        <div className="text-[11px] text-gray-400">
+                                            {u.role === "SUPER_ADMIN" ? "Director" : u.role === "ADMIN" ? "Manager" : u.role === "TEAM_LEADER" ? "Team Leader" : "Consultant"}
+                                        </div>
                                     </td>
                                     {DEPARTMENT_ORDER.map((d) => {
                                         const isMember = memberSets[d]?.has(u.id);
@@ -162,12 +174,20 @@ export default function DepartmentStaffing() {
                                                 {pending ? (
                                                     <Loader2 className="h-4 w-4 animate-spin text-gray-400 mx-auto" />
                                                 ) : (
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={Boolean(isMember)}
-                                                        onChange={() => toggleMut.mutate({ userId: u.id, department: d, isMember })}
-                                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-200 cursor-pointer"
-                                                    />
+                                                    <button
+                                                        onClick={() => toggleMut.mutate({ userId: u.id, department: d, isMember })}
+                                                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                                                            isMember ? "bg-indigo-600" : "bg-gray-200"
+                                                        }`}
+                                                        role="switch"
+                                                        aria-checked={isMember}
+                                                    >
+                                                        <span
+                                                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                                                                isMember ? "translate-x-4" : "translate-x-0.5"
+                                                            }`}
+                                                        />
+                                                    </button>
                                                 )}
                                             </td>
                                         );
