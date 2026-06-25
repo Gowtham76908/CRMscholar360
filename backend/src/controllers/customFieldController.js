@@ -115,48 +115,9 @@ const saveLeadCustomFields = async (req, res, next) => {
             data: { customFields: { ...(lead.customFields || {}), ...fields } },
         });
 
-        // Check for stage auto-advancement based on custom field changes
-        const oldCf = lead.customFields || {};
-        const newCf = updated.customFields || {};
-
-        let targetStage = null;
-
-        // 1. University Response
-        if (newCf.university_response !== oldCf.university_response && newCf.university_response) {
-            if (newCf.university_response === "Conditional Offer" || newCf.university_response === "Unconditional Offer") {
-                targetStage = "DEPOSIT_STATUS";
-            } else if (newCf.university_response === "Reject") {
-                targetStage = "ARCHIVE";
-            }
-        }
-
-        // 2. Embassy Result
-        if (newCf.embassy_result !== oldCf.embassy_result && newCf.embassy_result) {
-            if (newCf.embassy_result === "Approved") {
-                targetStage = "VISA_APPROVAL";
-            } else if (newCf.embassy_result === "Refused") {
-                targetStage = "ARCHIVE";
-            }
-        }
-
-        if (targetStage) {
-            try {
-                // Find SALES department record for this lead
-                const salesDept = await prisma.leadDepartment.findUnique({
-                    where: { leadId_department: { leadId, department: "SALES" } }
-                });
-                if (salesDept && salesDept.stage !== targetStage) {
-                    const leadDeptService = require("../services/leadDepartmentService");
-                    await leadDeptService.updateStage({
-                        leadDepartmentId: salesDept.id,
-                        stage: targetStage,
-                        actor: { userId, role }
-                    });
-                }
-            } catch (err) {
-                console.error("Failed to auto-advance SALES department stage:", err);
-            }
-        }
+        // NOTE: SALES stage progression is intentionally manual. Saving custom fields
+        // (e.g. university_response, embassy_result) no longer auto-advances the stage —
+        // users move the lead forward explicitly via the "Move to next stage" control.
 
         res.json({ customFields: updated.customFields });
     } catch (e) {

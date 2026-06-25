@@ -907,6 +907,17 @@ async function getDepartmentMembers(department) {
 async function validateSalesStageMove(leadDept, currentStage, targetStage, txOrPrisma = prisma) {
     if (currentStage === targetStage) return;
 
+    // Determine if moving forward or backward in the workflow
+    const stages = getStages(leadDept.department);
+    const currentIndex = stages.indexOf(currentStage);
+    const targetIndex = stages.indexOf(targetStage);
+    const isMovingForward = targetIndex > currentIndex;
+
+    // Skip validation when moving backwards (to previous stages)
+    if (!isMovingForward) {
+        return;
+    }
+
     // Load lead to check its customFields, resumeUrl, etc.
     const lead = await txOrPrisma.lead.findUnique({
         where: { id: leadDept.leadId },
@@ -961,6 +972,16 @@ async function validateSalesStageMove(leadDept, currentStage, targetStage, txOrP
 
         if (!hasCountry || !hasName || !hasCourse || !hasLink || !hasScore || !hasGpa || !hasBacklogs) {
             throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of University Shortlisting stage: Both education details (IELTS/TOEFL, GPA, Backlogs) and university details (Country, Name, Course, Link) must be filled.");
+        }
+    }
+
+    if (currentStage === "AWAITING_STATUS") {
+        const list = cf.shortlisted_universities || [];
+        const hasOffer = Array.isArray(list) && list.some(u =>
+            u?.university_response === "Conditional Offer" || u?.university_response === "Unconditional Offer"
+        );
+        if (!hasOffer) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Awaiting Status stage: at least one university must have a Conditional or Unconditional Offer before progressing.");
         }
     }
 

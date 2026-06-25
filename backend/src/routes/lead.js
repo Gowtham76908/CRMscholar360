@@ -29,15 +29,15 @@ router.use(authMiddleware);
 // in favour of per-department analytics (/lead-departments/dashboard).
 router.get("/overdue-followups", leadController.getOverdueFollowUps);
 router.get("/sla-alerts",        leadController.getSLAAlerts);
-router.get("/duplicates",  roleMiddleware(["SUPER_ADMIN", "ADMIN"]), leadController.getDuplicates);
+router.get("/duplicates",  roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), leadController.getDuplicates);
 
 // Export Leads (admin/team_lead only — prevents bulk data leakage)
-router.get("/export", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), leadController.exportLeads);
+router.get("/export", roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), leadController.exportLeads);
 
 // Import Leads — preview (parse only, no DB writes), actual import, and status polling
-router.post("/import/preview",        roleMiddleware(["SUPER_ADMIN", "ADMIN"]), fileUpload.single("file"), leadController.previewImport);
-router.post("/import",                roleMiddleware(["SUPER_ADMIN", "ADMIN"]), fileUpload.single("file"), leadController.importLeads);
-router.get("/import/status/:jobId",   roleMiddleware(["SUPER_ADMIN", "ADMIN"]), leadController.getImportStatus);
+router.post("/import/preview",        roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), fileUpload.single("file"), leadController.previewImport);
+router.post("/import",                roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), fileUpload.single("file"), leadController.importLeads);
+router.get("/import/status/:jobId",   roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), leadController.getImportStatus);
 
 // Check Duplicates
 router.post("/check-duplicate", validate(checkDuplicateSchema), leadController.checkDuplicate);

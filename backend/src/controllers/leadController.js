@@ -13,6 +13,7 @@ const { canAccessLead } = require("../services/permissionService");
 const { getUserDepartments } = require("../services/leadDepartmentService");
 const { csvField } = require("../utils/csv");
 const { getInitialStage } = require("../config/departmentWorkflows");
+const { signUploadUrl } = require("../utils/signedUpload");
 
 // Get Leads
 const getLeads = async (req, res, next) => {
@@ -163,50 +164,9 @@ const updateLead = async (req, res, next) => {
             data: updateData,
         });
 
-        // Check for stage auto-advancement based on custom field changes
-        if (customFields !== undefined && currentLead.customFields) {
-            const oldCf = currentLead.customFields || {};
-            const newCf = resolvedCustomFields || {};
-
-            let targetStage = null;
-
-            // 1. University Response
-            if (newCf.university_response !== oldCf.university_response && newCf.university_response) {
-                if (newCf.university_response === "Conditional Offer" || newCf.university_response === "Unconditional Offer") {
-                    targetStage = "DEPOSIT_STATUS";
-                } else if (newCf.university_response === "Reject") {
-                    targetStage = "ARCHIVE";
-                }
-            }
-
-            // 2. Embassy Result
-            if (newCf.embassy_result !== oldCf.embassy_result && newCf.embassy_result) {
-                if (newCf.embassy_result === "Approved") {
-                    targetStage = "VISA_APPROVAL";
-                } else if (newCf.embassy_result === "Refused") {
-                    targetStage = "ARCHIVE";
-                }
-            }
-
-            if (targetStage) {
-                try {
-                    // Find SALES department record for this lead
-                    const salesDept = await prisma.leadDepartment.findUnique({
-                        where: { leadId_department: { leadId: id, department: "SALES" } }
-                    });
-                    if (salesDept && salesDept.stage !== targetStage) {
-                        const leadDeptService = require("../services/leadDepartmentService");
-                        await leadDeptService.updateStage({
-                            leadDepartmentId: salesDept.id,
-                            stage: targetStage,
-                            actor: { userId, role }
-                        });
-                    }
-                } catch (err) {
-                    console.error("Failed to auto-advance SALES department stage:", err);
-                }
-            }
-        }
+        // NOTE: SALES stage progression is intentionally manual. Saving custom fields
+        // (e.g. university_response, embassy_result) no longer auto-advances the stage —
+        // users move the lead forward explicitly via the "Move to next stage" control.
 
         await logActivity({
             leadId: updatedLead.id,
@@ -347,6 +307,9 @@ const getLead = async (req, res, next) => {
         if (!(await canAccessLead(userId, role, lead))) {
             throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Access denied");
         }
+        // Sign locally-stored resumes so the cross-origin <a> link can fetch them
+        // without relying on third-party cookies (Cloudinary URLs pass through unchanged).
+        if (lead.resumeUrl) lead.resumeUrl = signUploadUrl(lead.resumeUrl);
         res.json(lead);
     } catch (error) {
         return next(error);
@@ -411,6 +374,8 @@ const getLeadActivities = async (req, res, next) => {
                 if (meta.assignedTo && typeof meta.assignedTo === "string" && meta.assignedTo.length === 36) {
                     meta.assignedToName = userMap.get(meta.assignedTo) || null;
                 }
+                // Sign locally-stored resume links in RESUME_UPLOADED activities
+                if (meta.resumeUrl) meta.resumeUrl = signUploadUrl(meta.resumeUrl);
             }
             return { ...act, metadata: meta };
         });

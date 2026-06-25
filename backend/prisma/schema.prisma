@@ -595,6 +595,7 @@ model Notification {
 enum Role {
   SUPER_ADMIN
   ADMIN
+  TEAM_LEADER
   EMPLOYEE
 }
 

@@ -13,9 +13,10 @@ router.get("/my", attendanceController.getMyAttendance);
 router.get("/stats", attendanceController.getAttendanceStats);
 
 // Admin routes
-router.get("/all", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), attendanceController.getAllAttendance);
-router.get("/admin/monthly-report", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), attendanceController.getAdminMonthlyReport);
-router.get("/admin/employee/:employeeId", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), attendanceController.getEmployeeMonthlyAttendance);
-router.post("/admin/update-status", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), attendanceController.updateAttendanceStatus);
+router.get("/all", roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), attendanceController.getAllAttendance);
+router.get("/admin/monthly-report", roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), attendanceController.getAdminMonthlyReport);
+router.get("/admin/employee/:employeeId", roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), attendanceController.getEmployeeMonthlyAttendance);
+router.post("/admin/update-status", roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), attendanceController.updateAttendanceStatus);
+router.post("/admin/mark-absent", roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), attendanceController.manualMarkAbsent);
 
 module.exports = router;

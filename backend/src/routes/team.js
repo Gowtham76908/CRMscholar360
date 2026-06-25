@@ -9,7 +9,7 @@ router.use(authMiddleware);
 
 // Managers may manage their own team (scoped inside teamController); hard-delete
 // and Manager-role assignment stay SUPER_ADMIN-only (enforced in the controller).
-router.use(roleMiddleware(["SUPER_ADMIN", "ADMIN"]));
+router.use(roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]));
 
 // Get all users
 router.get("/", teamController.getTeam);

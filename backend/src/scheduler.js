@@ -2,6 +2,7 @@ const cron = require("node-cron");
 const { processReminders } = require("./services/reminderService");
 const autoCheckout = require("./jobs/autoCheckout");
 const autoBreakOffline = require("./jobs/autoBreakOffline");
+const autoMarkAbsent = require("./jobs/autoMarkAbsent");
 const { notifyLeaderboardWinner, notifyTasksDueSoon, notifyOverdueTasks } = require("./services/notificationService");
 const { runNoReplyTimeoutCheck } = require("./services/whatsappAutoReplyService");
 const { runNoActivityRules } = require("./services/automationEngine");
@@ -32,6 +33,7 @@ const startScheduler = () => {
     // NOTE: leads are no longer auto-marked LOST after 7 days. Going-cold leads are
     // surfaced as a pull-based follow-up suggestion (followUpSuggestionService →
     // detectNoActivity), so reps get nudged without notification spam or losing the lead.
+    cron.schedule("0 12 * * *",  () => withRetry("autoMarkAbsent", autoMarkAbsent), { timezone: "Asia/Kolkata" });
     cron.schedule("0 22 * * *",  () => withRetry("autoCheckout", autoCheckout), { timezone: "Asia/Kolkata" });
     cron.schedule("0 9 * * *",   () => withRetry("notifyTasksDueSoon", notifyTasksDueSoon), { timezone: "Asia/Kolkata" });
     cron.schedule("0 9 * * *",   () => withRetry("notifyOverdueTasks", notifyOverdueTasks), { timezone: "Asia/Kolkata" });

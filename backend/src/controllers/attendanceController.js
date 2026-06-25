@@ -33,29 +33,34 @@ async function scopedUserIds(user) {
 const checkIn = async (req, res, next) => {
     try {
         const userId = req.user.userId;
-        const { latitude, longitude } = req.body;
+        const { latitude, longitude } = req.body || {};
 
         // Deadline check in IST — server runs UTC, business is IST (UTC+5:30).
         // The window is configurable per tenant in Company Settings; can be disabled.
-        const settings = await prisma.companySettings.findFirst({
-            select: { attendanceDeadlineEnabled: true, attendanceDeadlineWeekday: true, attendanceDeadlineSunday: true },
-        });
-        if (settings?.attendanceDeadlineEnabled !== false) {
-            const ist = nowIST();
-            const isSunday = ist.getUTCDay() === 0;
-            const currentTimeInMinutes = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+        try {
+            const settings = await prisma.companySettings.findFirst({
+                select: { attendanceDeadlineEnabled: true, attendanceDeadlineWeekday: true, attendanceDeadlineSunday: true },
+            });
+            if (settings?.attendanceDeadlineEnabled !== false) {
+                const ist = nowIST();
+                const isSunday = ist.getUTCDay() === 0;
+                const currentTimeInMinutes = ist.getUTCHours() * 60 + ist.getUTCMinutes();
 
-            const deadlineMins = isSunday
-                ? parseHHMM(settings?.attendanceDeadlineSunday,  12 * 60 + 30)
-                : parseHHMM(settings?.attendanceDeadlineWeekday, 11 * 60 + 50);
+                const deadlineMins = isSunday
+                    ? parseHHMM(settings?.attendanceDeadlineSunday,  12 * 60 + 30)
+                    : parseHHMM(settings?.attendanceDeadlineWeekday, 11 * 60 + 50);
 
-            if (currentTimeInMinutes > deadlineMins) {
-                return res.status(400).json({
-                    message: `Check-in deadline has passed. You must check in before ${fmtHHMM(deadlineMins)} IST`,
-                    code: "LATE_CHECK_IN",
-                    deadline: fmtHHMM(deadlineMins),
-                });
+                if (currentTimeInMinutes > deadlineMins) {
+                    return res.status(400).json({
+                        message: `Check-in deadline has passed. You must check in before ${fmtHHMM(deadlineMins)} IST`,
+                        code: "LATE_CHECK_IN",
+                        deadline: fmtHHMM(deadlineMins),
+                    });
+                }
             }
+        } catch (settingsError) {
+            // CompanySettings table doesn't exist or other error - skip deadline check
+            console.log('[Check-in] Company settings not available, skipping deadline check');
         }
 
         // IST calendar date — avoids wrong-day storage after midnight IST (still previous UTC day)
@@ -441,6 +446,23 @@ const updateAttendanceStatus = async (req, res, next) => {
     }
 };
 
+// Manual trigger for auto-mark absent (Admin only, for testing)
+const manualMarkAbsent = async (req, res, next) => {
+    try {
+        // Only SUPER_ADMIN or ADMIN can trigger this
+        if (req.user.role !== 'SUPER_ADMIN' && req.user.role !== 'ADMIN') {
+            return res.status(403).json({ message: "Access denied: Admin only" });
+        }
+
+        const autoMarkAbsent = require("../jobs/autoMarkAbsent");
+        await autoMarkAbsent();
+        
+        res.json({ message: "Auto-mark absent job executed successfully" });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 module.exports = {
     checkIn,
     checkOut,
@@ -449,5 +471,6 @@ module.exports = {
     getAttendanceStats,
     getAdminMonthlyReport,
     getEmployeeMonthlyAttendance,
-    updateAttendanceStatus
+    updateAttendanceStatus,
+    manualMarkAbsent
 };

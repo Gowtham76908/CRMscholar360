@@ -12,7 +12,7 @@ const registerUserSchema = z.object({
     email: z.string().email("Invalid email"),
     password: z.string().min(6, "Password must be at least 6 characters"),
     phone: z.string().optional(),
-    role: z.enum(["SUPER_ADMIN", "ADMIN", "EMPLOYEE"]).optional(),
+    role: z.enum(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER", "EMPLOYEE"]).optional(),
     department: z.string().optional(),
 });
 

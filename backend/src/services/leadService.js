@@ -70,12 +70,14 @@ const getLeads = async ({
     // A lead is visible when the actor is assigned to, or manages, one of its
     // department services (LeadDepartment). Expressed as a single `leadDepartments.some`
     // relation filter (`visScope`) so it composes with the filters below.
-    //   EMPLOYEE (Consultant) — leads where they are the assigned consultant on some service
-    //   ADMIN    (Manager)    — leads with a service in a department they belong to,
-    //                           plus anything assigned directly to them
-    //   SUPER_ADMIN (Director)— everything
+    //   EMPLOYEE (Consultant)  — leads where they are the assigned consultant on some service
+    //   TEAM_LEADER            — leads with a service in a department they belong to,
+    //                            plus anything assigned directly to them
+    //   ADMIN (Manager)        — leads with a service in a department they belong to,
+    //                            plus anything assigned directly to them
+    //   SUPER_ADMIN (Director) — everything
     const visScope = {};
-    const managed = role === "ADMIN" ? await getUserDepartments(userId) : [];
+    const managed = (role === "ADMIN" || role === "TEAM_LEADER") ? await getUserDepartments(userId) : [];
     const managedSet = new Set(managed);
 
     if (filters.mine) {
@@ -90,9 +92,9 @@ const getLeads = async ({
             .filter((b) => b.stage) // skip departments with no configured workflow
             .map((b) => ({ department: b.department, assignedEmployeeId: null, stage: b.stage }));
         visScope.OR = [{ assignedEmployeeId: userId }, ...claimable];
-    } else if (role === "ADMIN") {
+    } else if (role === "ADMIN" || role === "TEAM_LEADER") {
         if (filters.assignedTo) {
-            // Manager filtering to a single consultant — constrained to the departments
+            // Manager/Team Leader filtering to a single consultant — constrained to the departments
             // they manage so it can't be used to read another department's leads.
             visScope.department = { in: managed };
             visScope.assignedEmployeeId = filters.assignedTo;
@@ -102,7 +104,7 @@ const getLeads = async ({
                 { assignedEmployeeId: userId },
             ];
         } else {
-            // Manager with no department membership: only their own assignments.
+            // Manager/Team Leader with no department membership: only their own assignments.
             visScope.assignedEmployeeId = userId;
         }
     } else if (filters.assignedTo) {
@@ -115,11 +117,11 @@ const getLeads = async ({
     if (filters.department) {
         if (role === "SUPER_ADMIN" || role === "EMPLOYEE" || filters.mine) {
             visScope.department = filters.department;
-        } else if (role === "ADMIN" && managedSet.has(filters.department)) {
+        } else if ((role === "ADMIN" || role === "TEAM_LEADER") && managedSet.has(filters.department)) {
             // A managed department is a subset of the visible scope — safe to pin.
             visScope.department = filters.department;
         }
-        // ADMIN filtering by an unmanaged department: ignored (would widen/leak).
+        // ADMIN/TEAM_LEADER filtering by an unmanaged department: ignored (would widen/leak).
     }
     if (filters.stage) {
         visScope.stage = filters.stage;

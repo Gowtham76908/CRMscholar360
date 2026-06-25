@@ -13,10 +13,10 @@ const {
 
 router.use(authMiddleware);
 
-router.get("/stats",           roleMiddleware(["SUPER_ADMIN", "ADMIN"]), getStats);
-router.get("/managers",        roleMiddleware(["SUPER_ADMIN", "ADMIN"]), getManagers);
-router.get("/team",            roleMiddleware(["SUPER_ADMIN", "ADMIN"]), getOrgTeam);
-router.get("/team/:id",        roleMiddleware(["SUPER_ADMIN", "ADMIN"]), requireHierarchyAccess(), getEmployeeProfile);
+router.get("/stats",           roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), getStats);
+router.get("/managers",        roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), getManagers);
+router.get("/team",            roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), getOrgTeam);
+router.get("/team/:id",        roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), requireHierarchyAccess(), getEmployeeProfile);
 router.patch("/team/:id/manager", roleMiddleware(["SUPER_ADMIN"]), setManager);
 
 module.exports = router;

@@ -3,7 +3,7 @@ const jwt = require("jsonwebtoken");
 // Sensitive upload subtrees that must not be publicly downloadable. Profile
 // photos (avatars) are intentionally excluded — they're embedded as <img>
 // across the app and carry no confidential data.
-const GATED_PREFIXES = ["/uploads/recordings/", "/uploads/tasks/"];
+const GATED_PREFIXES = ["/uploads/recordings/", "/uploads/tasks/", "/uploads/resumes/"];
 
 const TTL_SECONDS = 12 * 60 * 60; // 12h — covers a work session; expiry just forces a re-sign on next data fetch
 
