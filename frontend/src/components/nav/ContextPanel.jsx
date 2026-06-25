@@ -1,4 +1,4 @@
-﻿import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../../lib/utils";
 import api from "../../api/axios";
@@ -53,7 +53,8 @@ function PanelSection({ title, children }) {
 function WorkloadPanel() {
     return (
         <PanelSection title="Today">
-            <PanelLink to="/dashboard" icon={LayoutDashboard} label="My Day" />
+            <PanelLink to="/my-day" icon={LayoutDashboard} label="My Day" />
+            <PanelLink to="/dashboard" icon={BarChart} label="Dashboard" />
         </PanelSection>
     );
 }
@@ -75,7 +76,6 @@ function CRMPanel() {
                 <PanelLink to="/leads?mine=true" icon={Star} label="My Leads" />
                 <PanelLink to="/leads?score_min=61" icon={Star} label="Hot Leads" />
                 <PanelLink to="/leads?view=kanban" icon={KanbanSquare} label="Board View" />
-                <PanelLink to="/department-board" icon={Building} label="Department Board" />
                 <PanelLink to="/search-leads" icon={SearchCheck} label="Search Leads" />
                 <PanelLink to="/linkedin-leads" icon={Linkedin} label="LinkedIn Leads" />
             </PanelSection>

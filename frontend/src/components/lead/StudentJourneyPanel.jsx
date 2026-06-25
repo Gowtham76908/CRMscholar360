@@ -1,12 +1,48 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
     Calendar, PhoneCall, CheckSquare, GraduationCap,
     FileText, Award, UploadCloud, ShieldCheck,
-    CheckCircle2, AlertCircle, RefreshCw, Send, Loader2, ArrowRight, X, List
+    CheckCircle2, AlertCircle, RefreshCw, Send, Loader2, ArrowRight, X, List, Save
 } from "lucide-react";
 import api from "../../api/axios";
+
+const EXCLUDED_KEYS = new Set([
+    "shortlisted_universities",
+    "target_universities",
+    "univ_country",
+    "univ_name",
+    "univ_course",
+    "univ_link",
+    "sop_status",
+    "lor_status",
+    "transcripts_status",
+    "application_ref_id",
+    "submission_date",
+    "university_response",
+    "offer_letter_uploaded",
+    "deposit_amount_due",
+    "deposit_receipt_uploaded",
+    "financial_proof_docs",
+    "cas_form_number",
+    "visa_manager_approved",
+    "visa_appointment_date",
+    "mock_interview_scorecard",
+    "embassy_result",
+    "approved_visa_passport",
+    "flight_departure_date",
+    "first_year_tuition",
+    "commission_percentage",
+    "archive_reason",
+    "deferred_intake_term",
+    "remind_date"
+]);
+
+const SYSTEM_KEYS = new Set([
+    "name", "phone", "email", "company", "source",
+    "enquiryType", "biodata", "jobTitle", "linkedinUrl", "category",
+]);
 
 export default function StudentJourneyPanel({ lead, onChanged }) {
     const qc = useQueryClient();
@@ -14,28 +50,85 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
     const [loading, setLoading] = useState(false);
     const [formValues, setFormValues] = useState({});
 
+    const [newCountryIndex, setNewCountryIndex] = useState(null);
+    const [newCountryVal, setNewCountryVal] = useState("");
+    const [newUnivIndex, setNewUnivIndex] = useState(null);
+    const [newUnivVal, setNewUnivVal] = useState("");
+
     const salesDept = lead.leadDepartments?.find(ld => ld.department === "SALES");
     if (!salesDept) return null;
 
     const currentStage = salesDept.stage;
     const customFields = lead.customFields || {};
 
+    const { data: countries = [], refetch: refetchCountries } = useQuery({
+        queryKey: ["countries-list"],
+        queryFn: () => api.get("/countries").then(r => r.data),
+        enabled: currentStage === "UNIVERSITY_SHORTLISTING" || currentStage === "APPLICATION",
+    });
+
+    const { data: allDefs = [] } = useQuery({
+        queryKey: ["lead-fields"],
+        queryFn: () => api.get("/custom-fields").then(r => r.data),
+    });
+
+    const updateUniversityField = (index, field, value) => {
+        setFormValues(prev => {
+            const list = [...(prev.universities || [])];
+            list[index] = { ...list[index], [field]: value };
+            return { ...prev, universities: list };
+        });
+    };
+
+    const addCountryMut = useMutation({
+        mutationFn: (name) => api.post("/countries", { name }).then(r => r.data),
+        onSuccess: (newCountry) => {
+            refetchCountries();
+            if (newCountryIndex !== null) {
+                updateUniversityField(newCountryIndex, "univ_country", newCountry.name);
+                updateUniversityField(newCountryIndex, "univ_name", "");
+            }
+            setNewCountryIndex(null);
+            setNewCountryVal("");
+            toast.success("Country added successfully");
+        },
+        onError: (e) => {
+            toast.error(e.response?.data?.message || "Failed to add country");
+        }
+    });
+
+    const addUnivMut = useMutation({
+        mutationFn: ({ countryId, name }) => api.post(`/countries/${countryId}/universities`, { name }).then(r => r.data),
+        onSuccess: (newUniv) => {
+            refetchCountries();
+            if (newUnivIndex !== null) {
+                updateUniversityField(newUnivIndex, "univ_name", newUniv.name);
+            }
+            setNewUnivIndex(null);
+            setNewUnivVal("");
+            toast.success("University added successfully");
+        },
+        onError: (e) => {
+            toast.error(e.response?.data?.message || "Failed to add university");
+        }
+    });
+
     const STAGE_CONFIGS = {
         ENQUIRY: {
             title: "Enquiry",
             color: "text-indigo-600 bg-indigo-50 border-indigo-200",
-            icon: PhoneCall,
-            buttonText: "Log First Call",
+            icon: FileText,
+            buttonText: "Add Enquiry Note",
             requiredFields: ["Full Name", "WhatsApp", "Email", "Lead Source", "Preferred Destination Country"],
-            instruction: "Must log at least one call note to proceed to follow-up."
+            instruction: "Must add at least one note message to proceed to follow-up."
         },
         FOLLOW_UP: {
             title: "Follow Up",
             color: "text-sky-600 bg-sky-50 border-sky-200",
             icon: Calendar,
             buttonText: "Schedule Next Call",
-            requiredFields: ["Next Follow-up Date & Time", "Conversation Logs"],
-            instruction: "Next follow-up date/time must be scheduled."
+            requiredFields: ["Resume File"],
+            instruction: "Resume must be uploaded to proceed to Prospect."
         },
         PROSPECT: {
             title: "Prospect",
@@ -50,8 +143,8 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             color: "text-indigo-600 bg-indigo-50 border-indigo-200",
             icon: List,
             buttonText: "Choose Target Universities",
-            requiredFields: ["Target Universities Chosen"],
-            instruction: "Enter the shortlisted target universities."
+            requiredFields: ["Country", "University Name", "Course", "University Link"],
+            instruction: "Enter the shortlisted target university details."
         },
         APPLICATION: {
             title: "Application Process",
@@ -170,6 +263,62 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
         },
     });
 
+    // Save without validation for APPLICATION stage
+    const handleApplicationSave = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            const rawList = formValues.universities || [];
+            
+            // Case normalization
+            const list = rawList.map(univ => {
+                const matchedCountry = countries.find(c => c.name.toLowerCase() === univ.univ_country?.toLowerCase());
+                const matchedUniv = matchedCountry?.universities?.find(u => u.name.toLowerCase() === univ.univ_name?.toLowerCase());
+                return {
+                    ...univ,
+                    univ_country: matchedCountry ? matchedCountry.name : univ.univ_country,
+                    univ_name: matchedUniv ? matchedUniv.name : univ.univ_name
+                };
+            });
+            
+            const primary = list[0] || {};
+            
+            await saveCustomFieldsMut.mutateAsync({
+                sop_status: formValues.sop_status ? "Uploaded" : (customFields.sop_status || "Pending"),
+                lor_status: formValues.lor_status ? "Uploaded" : (customFields.lor_status || "Pending"),
+                transcripts_status: formValues.transcripts_status ? "Uploaded" : (customFields.transcripts_status || "Pending"),
+                univ_country: primary.univ_country || "",
+                univ_name: primary.univ_name || "",
+                univ_course: primary.univ_course || "",
+                univ_link: primary.univ_link || "",
+                shortlisted_universities: list
+            });
+            toast.success("Application data saved successfully");
+            setActionModal(null);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Save without validation for AWAITING_STATUS stage
+    const handleAwaitingStatusSave = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await saveCustomFieldsMut.mutateAsync({
+                shortlisted_universities: formValues.universities || []
+            });
+            toast.success("University responses saved successfully");
+            setActionModal(null);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // Submitting forms
     const handleActionSubmit = async (e) => {
         e.preventDefault();
@@ -177,25 +326,22 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
         try {
             if (currentStage === "ENQUIRY") {
                 // Log note
-                await api.post(`/leads/${lead.id}/notes`, { content: formValues.noteContent || "First introductory call logged." });
+                await api.post(`/leads/${lead.id}/notes`, { content: formValues.noteContent || "Enquiry note added." });
                 // Move stage
                 await moveStageMut.mutateAsync("FOLLOW_UP");
             }
             else if (currentStage === "FOLLOW_UP") {
-                if (actionModal === "schedule") {
-                    await updateLeadMut.mutateAsync({
-                        nextFollowUpAt: formValues.nextFollowUpAt ? new Date(formValues.nextFollowUpAt).toISOString() : null,
-                    });
-                    setActionModal(null);
-                } else {
-                    // Mark Interested directly (saves custom field)
-                    await saveCustomFieldsMut.mutateAsync({
-                        interested: true
-                    });
-                    setActionModal(null);
-                }
+                await moveStageMut.mutateAsync("PROSPECT");
             }
             else if (currentStage === "PROSPECT") {
+                const score = formValues.ielts_toefl_score;
+                const gpa = formValues.academic_gpa;
+                const backlogs = formValues.backlogs;
+                if (!score || !String(score).trim() || !gpa || !String(gpa).trim() || backlogs === undefined || backlogs === null || String(backlogs).trim() === "") {
+                    toast.error("Please fill in all education details (IELTS/TOEFL Score, Academic GPA, Backlogs).");
+                    setLoading(false);
+                    return;
+                }
                 await saveCustomFieldsMut.mutateAsync({
                     ielts_toefl_score: formValues.ielts_toefl_score || "",
                     academic_gpa: formValues.academic_gpa || "",
@@ -204,27 +350,120 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                 await moveStageMut.mutateAsync("UNIVERSITY_SHORTLISTING");
             }
             else if (currentStage === "UNIVERSITY_SHORTLISTING") {
-                await saveCustomFieldsMut.mutateAsync({
-                    target_universities: formValues.target_universities || ""
+                const rawList = formValues.universities || [];
+                
+                // Validate general academic fields explicitly
+                const score = formValues.ielts_toefl_score;
+                const gpa = formValues.academic_gpa;
+                const backlogs = formValues.backlogs;
+                if (!score || !String(score).trim() || !gpa || !String(gpa).trim() || backlogs === undefined || backlogs === null || String(backlogs).trim() === "") {
+                    toast.error("Please fill in all education details (IELTS/TOEFL Score, Academic GPA, Backlogs).");
+                    setLoading(false);
+                    return;
+                }
+                
+                // Validate universities shortlist
+                if (rawList.length === 0) {
+                    toast.error("Please add at least one shortlisted university.");
+                    setLoading(false);
+                    return;
+                }
+                
+                for (let i = 0; i < rawList.length; i++) {
+                    const u = rawList[i];
+                    if (!u.univ_country?.trim() || !u.univ_name?.trim() || !u.univ_course?.trim() || !u.univ_link?.trim()) {
+                        toast.error(`Please fill in all details for University #${i + 1}.`);
+                        setLoading(false);
+                        return;
+                    }
+                }
+                
+                // Case normalization for shortlisted universities
+                const list = rawList.map(univ => {
+                    const matchedCountry = countries.find(c => c.name.toLowerCase() === univ.univ_country?.toLowerCase());
+                    const matchedUniv = matchedCountry?.universities?.find(u => u.name.toLowerCase() === univ.univ_name?.toLowerCase());
+                    return {
+                        ...univ,
+                        univ_country: matchedCountry ? matchedCountry.name : univ.univ_country,
+                        univ_name: matchedUniv ? matchedUniv.name : univ.univ_name
+                    };
                 });
+                
+                const primary = list[0] || {};
+                
+                const patchPayload = {
+                    univ_country: primary.univ_country || "",
+                    univ_name: primary.univ_name || "",
+                    univ_course: primary.univ_course || "",
+                    univ_link: primary.univ_link || "",
+                    shortlisted_universities: list
+                };
+                
+                // Populate all other custom fields dynamically from formValues
+                allDefs.forEach(def => {
+                    if (!EXCLUDED_KEYS.has(def.fieldKey) && !def.isSystem && !SYSTEM_KEYS.has(def.fieldKey)) {
+                        patchPayload[def.fieldKey] = formValues[def.fieldKey] !== undefined ? formValues[def.fieldKey] : (customFields[def.fieldKey] ?? "");
+                    }
+                });
+                
+                await saveCustomFieldsMut.mutateAsync(patchPayload);
                 await moveStageMut.mutateAsync("APPLICATION");
             }
             else if (currentStage === "APPLICATION") {
+                const rawList = formValues.universities || [];
+                
+                // Validate document checklist
+                if (!formValues.sop_status || !formValues.lor_status || !formValues.transcripts_status) {
+                    toast.error("Please ensure SOP, LOR, and Academic Transcripts are all marked as Uploaded.");
+                    setLoading(false);
+                    return;
+                }
+                
+                // Validate shortlisted universities completed status
+                if (rawList.length === 0) {
+                    toast.error("At least one target university must be shortlisted.");
+                    setLoading(false);
+                    return;
+                }
+                
+                const allCompleted = rawList.every(u => u.completed);
+                if (!allCompleted) {
+                    toast.error("All target universities must have their status marked as Completed.");
+                    setLoading(false);
+                    return;
+                }
+                
+                // Case normalization
+                const list = rawList.map(univ => {
+                    const matchedCountry = countries.find(c => c.name.toLowerCase() === univ.univ_country?.toLowerCase());
+                    const matchedUniv = matchedCountry?.universities?.find(u => u.name.toLowerCase() === univ.univ_name?.toLowerCase());
+                    return {
+                        ...univ,
+                        univ_country: matchedCountry ? matchedCountry.name : univ.univ_country,
+                        univ_name: matchedUniv ? matchedUniv.name : univ.univ_name
+                    };
+                });
+                
+                const primary = list[0] || {};
+                
                 await saveCustomFieldsMut.mutateAsync({
-                    sop_status: formValues.sop_status ? "Uploaded" : "Pending",
-                    lor_status: formValues.lor_status ? "Uploaded" : "Pending",
-                    transcripts_status: formValues.transcripts_status ? "Uploaded" : "Pending"
+                    sop_status: "Uploaded",
+                    lor_status: "Uploaded",
+                    transcripts_status: "Uploaded",
+                    univ_country: primary.univ_country || "",
+                    univ_name: primary.univ_name || "",
+                    univ_course: primary.univ_course || "",
+                    univ_link: primary.univ_link || "",
+                    shortlisted_universities: list
                 });
                 await moveStageMut.mutateAsync("AWAITING_STATUS");
             }
             else if (currentStage === "AWAITING_STATUS") {
-                // Saves custom fields which triggers auto stage transition in the backend!
+                // Save the updated universities with their response data
                 await saveCustomFieldsMut.mutateAsync({
-                    application_ref_id: formValues.application_ref_id || "",
-                    submission_date: formValues.submission_date || null,
-                    university_response: formValues.university_response
+                    shortlisted_universities: formValues.universities || []
                 });
-                toast.success(`University response updated to ${formValues.university_response}`);
+                toast.success("University responses updated successfully");
                 onChanged();
                 setActionModal(null);
             }
@@ -295,22 +534,66 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             });
         }
         else if (currentStage === "UNIVERSITY_SHORTLISTING") {
-            setFormValues({
-                target_universities: customFields.target_universities || ""
+            const existingShortlist = Array.isArray(customFields.shortlisted_universities)
+                ? [...customFields.shortlisted_universities]
+                : [];
+            if (existingShortlist.length === 0 && customFields.univ_name) {
+                existingShortlist.push({
+                    univ_country: customFields.univ_country || "",
+                    univ_name: customFields.univ_name || "",
+                    univ_course: customFields.univ_course || "",
+                    univ_link: customFields.univ_link || ""
+                });
+            }
+            if (existingShortlist.length === 0) {
+                existingShortlist.push({
+                    univ_country: "",
+                    univ_name: "",
+                    univ_course: "",
+                    univ_link: ""
+                });
+            }
+            const initValues = {
+                universities: existingShortlist
+            };
+            allDefs.forEach(def => {
+                if (!EXCLUDED_KEYS.has(def.fieldKey) && !def.isSystem && !SYSTEM_KEYS.has(def.fieldKey)) {
+                    initValues[def.fieldKey] = customFields[def.fieldKey] !== undefined ? customFields[def.fieldKey] : (def.type === "CHECKBOX" ? false : def.type === "NUMBER" ? 0 : "");
+                }
             });
+            setFormValues(initValues);
         }
         else if (currentStage === "APPLICATION") {
+            const existingShortlist = Array.isArray(customFields.shortlisted_universities)
+                ? [...customFields.shortlisted_universities]
+                : [];
+            if (existingShortlist.length === 0 && customFields.univ_name) {
+                existingShortlist.push({
+                    univ_country: customFields.univ_country || "",
+                    univ_name: customFields.univ_name || "",
+                    univ_course: customFields.univ_course || "",
+                    univ_link: customFields.univ_link || "",
+                    completed: false
+                });
+            }
             setFormValues({
                 sop_status: customFields.sop_status === "Uploaded",
                 lor_status: customFields.lor_status === "Uploaded",
-                transcripts_status: customFields.transcripts_status === "Uploaded"
+                transcripts_status: customFields.transcripts_status === "Uploaded",
+                universities: existingShortlist
             });
         }
         else if (currentStage === "AWAITING_STATUS") {
+            const existingShortlist = Array.isArray(customFields.shortlisted_universities)
+                ? customFields.shortlisted_universities.map(univ => ({
+                    ...univ,
+                    application_ref_id: univ.application_ref_id || "",
+                    submission_date: univ.submission_date ? new Date(univ.submission_date).toISOString().split("T")[0] : "",
+                    university_response: univ.university_response || "Conditional Offer"
+                }))
+                : [];
             setFormValues({
-                application_ref_id: customFields.application_ref_id || "",
-                submission_date: customFields.submission_date ? new Date(customFields.submission_date).toISOString().split("T")[0] : "",
-                university_response: customFields.university_response || "Conditional Offer"
+                universities: existingShortlist
             });
         }
         else if (currentStage === "DEPOSIT_STATUS") {
@@ -386,31 +669,13 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                     </p>
                 </div>
 
-                {currentStage === "FOLLOW_UP" ? (
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => initModal("schedule")}
-                            className="flex-1 inline-flex items-center justify-center gap-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl py-2.5 transition-all shadow-sm shadow-indigo-100 hover:scale-[1.01]"
-                        >
-                            <Calendar className="h-3.5 w-3.5" />
-                            Schedule Next Call
-                        </button>
-                        <button
-                            onClick={() => initModal("interested")}
-                            className="flex-1 inline-flex items-center justify-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl py-2.5 transition-all border border-indigo-200"
-                        >
-                            Mark Interested
-                        </button>
-                    </div>
-                ) : (
-                    <button
-                        onClick={() => initModal("standard")}
-                        className="w-full inline-flex items-center justify-center gap-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl py-2.5 transition-all shadow-sm shadow-indigo-100 hover:scale-[1.01]"
-                    >
-                        {config.buttonText}
-                        <ArrowRight className="h-3.5 w-3.5" />
-                    </button>
-                )}
+                <button
+                    onClick={() => initModal("standard")}
+                    className="w-full inline-flex items-center justify-center gap-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl py-2.5 transition-all shadow-sm shadow-indigo-100 hover:scale-[1.01]"
+                >
+                    {config.buttonText}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                </button>
             </div>
 
             {/* Stage Actions Modal */}
@@ -435,11 +700,12 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                             </button>
                         </div>
 
-                        <form onSubmit={handleActionSubmit} className="space-y-4">
+                        <form onSubmit={handleActionSubmit} className="flex flex-col flex-1 min-h-0">
+                            <div className="flex-1 overflow-y-auto max-h-[60vh] pr-1.5 space-y-4">
                             {/* ENQUIRY Note */}
                             {currentStage === "ENQUIRY" && (
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-semibold text-slate-500 uppercase">First Call Notes</label>
+                                    <label className="text-xs font-semibold text-slate-500 uppercase">Enquiry Note Message</label>
                                     <textarea
                                         required
                                         placeholder="Spoke with student. Interested in studying abroad, looking at Canada and UK. Budget is around 10-15 Lakhs."
@@ -450,23 +716,10 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                 </div>
                             )}
 
-                            {/* FOLLOW_UP DateTime */}
-                            {currentStage === "FOLLOW_UP" && actionModal === "schedule" && (
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-semibold text-slate-500 uppercase">Next Follow-Up Date & Time</label>
-                                    <input
-                                        type="datetime-local"
-                                        required
-                                        value={formValues.nextFollowUpAt || ""}
-                                        onChange={e => setFormValues({ ...formValues, nextFollowUpAt: e.target.value })}
-                                        className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                                    />
-                                </div>
-                            )}
-
-                            {currentStage === "FOLLOW_UP" && actionModal === "interested" && (
+                            {/* FOLLOW_UP Confirmation */}
+                            {currentStage === "FOLLOW_UP" && (
                                 <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                                    Are you sure you want to mark this lead as interested? This will tag the lead as <span className="font-semibold text-emerald-600">Interested</span> and keep them in the <span className="font-semibold text-sky-600">Follow Up</span> stage.
+                                    Are you sure you want to move this lead to the <span className="font-semibold text-blue-600">Prospect</span> stage? This confirms that you have received the student's resume.
                                 </p>
                             )}
 
@@ -511,26 +764,283 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
 
                             {/* UNIVERSITY_SHORTLISTING Form */}
                             {currentStage === "UNIVERSITY_SHORTLISTING" && (
-                                <div className="space-y-4">
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Target Universities Chosen</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            placeholder="e.g. University of Toronto, UBC"
-                                            value={formValues.target_universities || ""}
-                                            onChange={e => setFormValues({ ...formValues, target_universities: e.target.value })}
-                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                                        />
+                                <div className="space-y-6">
+                                    {/* Education/Academic Details */}
+                                    <div className="space-y-4 p-4 border border-slate-100 bg-slate-50 rounded-2xl">
+                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Education / Academic Details</label>
+                                        {allDefs
+                                            .filter(def => !EXCLUDED_KEYS.has(def.fieldKey) && !def.isSystem && !SYSTEM_KEYS.has(def.fieldKey))
+                                            .map(def => {
+                                                const isRequired = def.fieldKey === "ielts_toefl_score" || def.fieldKey === "academic_gpa" || def.fieldKey === "backlogs" || def.required;
+                                                return (
+                                                    <div key={def.id} className="space-y-1.5">
+                                                        <label className="text-xs font-semibold text-slate-500 uppercase">
+                                                            {def.name} {isRequired && <span className="text-rose-500">*</span>}
+                                                        </label>
+                                                        {def.type === "SELECT" ? (
+                                                            <select
+                                                                required={isRequired}
+                                                                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white"
+                                                                value={formValues[def.fieldKey] ?? ""}
+                                                                onChange={e => setFormValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
+                                                            >
+                                                                <option value="">— Select —</option>
+                                                                {(def.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                                                            </select>
+                                                        ) : def.type === "TEXTAREA" ? (
+                                                            <textarea
+                                                                required={isRequired}
+                                                                rows={3}
+                                                                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 resize-none bg-white font-medium"
+                                                                value={formValues[def.fieldKey] ?? ""}
+                                                                onChange={e => setFormValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
+                                                            />
+                                                        ) : def.type === "CHECKBOX" ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    id={`cf-${def.fieldKey}`}
+                                                                    checked={!!formValues[def.fieldKey]}
+                                                                    onChange={e => setFormValues(v => ({ ...v, [def.fieldKey]: e.target.checked }))}
+                                                                    className="rounded border-slate-300 text-indigo-655 focus:ring-indigo-200 h-4 w-4"
+                                                                />
+                                                                <label htmlFor={`cf-${def.fieldKey}`} className="text-sm text-slate-700 cursor-pointer select-none">
+                                                                    Confirm {def.name}
+                                                                </label>
+                                                            </div>
+                                                        ) : (
+                                                            <input
+                                                                required={isRequired}
+                                                                type={def.type === "NUMBER" ? "number" : def.type === "DATE" ? "date" : "text"}
+                                                                min={def.type === "NUMBER" ? "0" : undefined}
+                                                                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white font-medium"
+                                                                value={formValues[def.fieldKey] ?? ""}
+                                                                onChange={e => setFormValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                     </div>
+
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Shortlisted Target Universities</label>
+                                    {(formValues.universities || []).map((univ, index) => (
+                                        <div key={index} className="space-y-4 p-4 border border-slate-100 bg-slate-50/50 rounded-2xl relative">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs font-bold text-indigo-650 bg-indigo-50/50 px-2 py-0.5 rounded-md">
+                                                    University #{index + 1}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setFormValues(prev => ({
+                                                            ...prev,
+                                                            universities: (prev.universities || []).filter((_, i) => i !== index)
+                                                        }));
+                                                    }}
+                                                    className="text-xs font-bold text-rose-500 hover:text-rose-700 transition-colors"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-xs font-semibold text-slate-500 uppercase">Country</label>
+                                                    {newCountryIndex !== index && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setNewCountryIndex(index);
+                                                                setNewCountryVal("");
+                                                            }}
+                                                            className="text-[10px] font-bold text-indigo-650 hover:text-indigo-850 transition-colors"
+                                                        >
+                                                            + Add Country
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {newCountryIndex === index ? (
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Enter new country name"
+                                                            value={newCountryVal}
+                                                            onChange={e => setNewCountryVal(e.target.value)}
+                                                            className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white"
+                                                            onKeyDown={e => {
+                                                                if (e.key === "Enter") {
+                                                                    e.preventDefault();
+                                                                    if (newCountryVal.trim()) addCountryMut.mutate(newCountryVal.trim());
+                                                                }
+                                                            }}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (newCountryVal.trim()) addCountryMut.mutate(newCountryVal.trim());
+                                                            }}
+                                                            disabled={addCountryMut.isPending || !newCountryVal.trim()}
+                                                            className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 disabled:opacity-50"
+                                                        >
+                                                            Save
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setNewCountryIndex(null);
+                                                                setNewCountryVal("");
+                                                            }}
+                                                            className="px-3.5 py-2 border border-slate-250 text-slate-650 rounded-xl text-xs font-bold hover:bg-slate-50"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <select
+                                                        value={countries.find(c => c.name.toLowerCase() === univ.univ_country?.toLowerCase())?.name || univ.univ_country || ""}
+                                                        onChange={e => {
+                                                            updateUniversityField(index, "univ_country", e.target.value);
+                                                            updateUniversityField(index, "univ_name", "");
+                                                        }}
+                                                        required
+                                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white"
+                                                    >
+                                                        <option value="">Select Country</option>
+                                                        {countries.map(c => (
+                                                            <option key={c.id} value={c.name}>{c.name}</option>
+                                                        ))}
+                                                    </select>
+                                                )}
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-xs font-semibold text-slate-500 uppercase">University Name</label>
+                                                    {newUnivIndex !== index && univ.univ_country && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setNewUnivIndex(index);
+                                                                setNewUnivVal("");
+                                                            }}
+                                                            className="text-[10px] font-bold text-indigo-650 hover:text-indigo-855 transition-colors"
+                                                        >
+                                                            + Add University
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {newUnivIndex === index ? (
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Enter new university name"
+                                                            value={newUnivVal}
+                                                            onChange={e => setNewUnivVal(e.target.value)}
+                                                            className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white"
+                                                            onKeyDown={e => {
+                                                                if (e.key === "Enter") {
+                                                                    e.preventDefault();
+                                                                    const countryObj = countries.find(c => c.name.toLowerCase() === univ.univ_country?.toLowerCase());
+                                                                    if (newUnivVal.trim() && countryObj) {
+                                                                        addUnivMut.mutate({ countryId: countryObj.id, name: newUnivVal.trim() });
+                                                                    }
+                                                                }
+                                                            }}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const countryObj = countries.find(c => c.name.toLowerCase() === univ.univ_country?.toLowerCase());
+                                                                if (newUnivVal.trim() && countryObj) {
+                                                                    addUnivMut.mutate({ countryId: countryObj.id, name: newUnivVal.trim() });
+                                                                }
+                                                            }}
+                                                            disabled={addUnivMut.isPending || !newUnivVal.trim()}
+                                                            className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 disabled:opacity-50"
+                                                        >
+                                                            Save
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setNewUnivIndex(null);
+                                                                setNewUnivVal("");
+                                                            }}
+                                                            className="px-3.5 py-2 border border-slate-250 text-slate-650 rounded-xl text-xs font-bold hover:bg-slate-50"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <select
+                                                        value={(() => {
+                                                            const matchedCountry = countries.find(c => c.name.toLowerCase() === univ.univ_country?.toLowerCase());
+                                                            const matchedUniv = matchedCountry?.universities?.find(u => u.name.toLowerCase() === univ.univ_name?.toLowerCase());
+                                                            return matchedUniv ? matchedUniv.name : (univ.univ_name || "");
+                                                        })()}
+                                                        onChange={e => updateUniversityField(index, "univ_name", e.target.value)}
+                                                        required
+                                                        disabled={!univ.univ_country}
+                                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white disabled:opacity-60"
+                                                    >
+                                                        <option value="">{univ.univ_country ? "Select University" : "Select Country first"}</option>
+                                                        {((countries.find(c => c.name.toLowerCase() === univ.univ_country?.toLowerCase())?.universities) || []).map(u => (
+                                                            <option key={u.id} value={u.name}>{u.name}</option>
+                                                        ))}
+                                                    </select>
+                                                )}
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-semibold text-slate-500 uppercase">Course</label>
+                                                <input
+                                                    type="text"
+                                                    required
+                                                    placeholder="e.g. M.Sc. Computer Science"
+                                                    value={univ.univ_course || ""}
+                                                    onChange={e => updateUniversityField(index, "univ_course", e.target.value)}
+                                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-semibold text-slate-500 uppercase">University Link</label>
+                                                <input
+                                                    type="url"
+                                                    required
+                                                    placeholder="e.g. https://www.utoronto.ca"
+                                                    value={univ.univ_link || ""}
+                                                    onChange={e => updateUniversityField(index, "univ_link", e.target.value)}
+                                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setFormValues(prev => ({
+                                                ...prev,
+                                                universities: [
+                                                    ...(prev.universities || []),
+                                                    { univ_country: "", univ_name: "", univ_course: "", univ_link: "" }
+                                                ]
+                                            }));
+                                        }}
+                                        className="w-full py-2.5 border border-dashed border-indigo-300 text-indigo-650 rounded-xl text-xs font-bold hover:bg-indigo-50/50 hover:border-indigo-400 transition-colors flex items-center justify-center gap-1.5 mt-2"
+                                    >
+                                        + Add Another University
+                                    </button>
                                 </div>
                             )}
 
                             {/* APPLICATION Process Docs & Universities */}
                             {currentStage === "APPLICATION" && (
-                                <div className="space-y-4">
-                                    <div className="space-y-2.5 pt-2">
-                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Upload Checklists</label>
+                                <div className="space-y-6">
+                                    <div className="space-y-2.5 pt-2 bg-slate-50 p-4 border border-slate-100 rounded-2xl">
+                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Document Checklists</label>
                                         <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
                                             <input
                                                 type="checkbox"
@@ -559,45 +1069,305 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                             Academic Transcripts Uploaded
                                         </label>
                                     </div>
+
+                                    <div className="space-y-4">
+                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Shortlisted Universities Status</label>
+                                        {(formValues.universities || []).map((univ, index) => (
+                                            <div key={index} className="space-y-4 p-4 border border-slate-100 bg-slate-50/50 rounded-2xl relative">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-bold text-indigo-650 bg-indigo-50/50 px-2 py-0.5 rounded-md">
+                                                        University #{index + 1}
+                                                    </span>
+                                                    <div className="flex items-center gap-3">
+                                                        <label className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 cursor-pointer select-none">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!univ.completed}
+                                                                onChange={e => updateUniversityField(index, "completed", e.target.checked)}
+                                                                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-250"
+                                                            />
+                                                            Completed
+                                                        </label>
+                                                        {index > 0 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setFormValues(prev => ({
+                                                                        ...prev,
+                                                                        universities: (prev.universities || []).filter((_, i) => i !== index)
+                                                                    }));
+                                                                }}
+                                                                className="text-xs font-bold text-rose-500 hover:text-rose-700 transition-colors"
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1.5">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-xs font-semibold text-slate-500 uppercase">Country</label>
+                                                        {newCountryIndex !== index && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setNewCountryIndex(index);
+                                                                    setNewCountryVal("");
+                                                                }}
+                                                                className="text-[10px] font-bold text-indigo-650 hover:text-indigo-850 transition-colors"
+                                                            >
+                                                                + Add Country
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    {newCountryIndex === index ? (
+                                                        <div className="flex gap-2">
+                                                            <input
+                                                                type="text"
+                                                                placeholder="Enter new country name"
+                                                                value={newCountryVal}
+                                                                onChange={e => setNewCountryVal(e.target.value)}
+                                                                className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white"
+                                                                onKeyDown={e => {
+                                                                    if (e.key === "Enter") {
+                                                                        e.preventDefault();
+                                                                        if (newCountryVal.trim()) addCountryMut.mutate(newCountryVal.trim());
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (newCountryVal.trim()) addCountryMut.mutate(newCountryVal.trim());
+                                                                }}
+                                                                disabled={addCountryMut.isPending || !newCountryVal.trim()}
+                                                                className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 disabled:opacity-50"
+                                                            >
+                                                                Save
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setNewCountryIndex(null);
+                                                                    setNewCountryVal("");
+                                                                }}
+                                                                className="px-3.5 py-2 border border-slate-250 text-slate-650 rounded-xl text-xs font-bold hover:bg-slate-50"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <select
+                                                            value={countries.find(c => c.name.toLowerCase() === univ.univ_country?.toLowerCase())?.name || univ.univ_country || ""}
+                                                            onChange={e => {
+                                                                updateUniversityField(index, "univ_country", e.target.value);
+                                                                updateUniversityField(index, "univ_name", "");
+                                                            }}
+                                                            required
+                                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white"
+                                                        >
+                                                            <option value="">Select Country</option>
+                                                            {countries.map(c => (
+                                                                <option key={c.id} value={c.name}>{c.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                </div>
+
+                                                <div className="space-y-1.5">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-xs font-semibold text-slate-500 uppercase">University Name</label>
+                                                        {newUnivIndex !== index && univ.univ_country && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setNewUnivIndex(index);
+                                                                    setNewUnivVal("");
+                                                                }}
+                                                                className="text-[10px] font-bold text-indigo-650 hover:text-indigo-855 transition-colors"
+                                                            >
+                                                                + Add University
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    {newUnivIndex === index ? (
+                                                        <div className="flex gap-2">
+                                                            <input
+                                                                type="text"
+                                                                placeholder="Enter new university name"
+                                                                value={newUnivVal}
+                                                                onChange={e => setNewUnivVal(e.target.value)}
+                                                                className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white"
+                                                                onKeyDown={e => {
+                                                                    if (e.key === "Enter") {
+                                                                        e.preventDefault();
+                                                                        const countryObj = countries.find(c => c.name.toLowerCase() === univ.univ_country?.toLowerCase());
+                                                                        if (newUnivVal.trim() && countryObj) {
+                                                                            addUnivMut.mutate({ countryId: countryObj.id, name: newUnivVal.trim() });
+                                                                        }
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const countryObj = countries.find(c => c.name.toLowerCase() === univ.univ_country?.toLowerCase());
+                                                                    if (newUnivVal.trim() && countryObj) {
+                                                                        addUnivMut.mutate({ countryId: countryObj.id, name: newUnivVal.trim() });
+                                                                    }
+                                                                }}
+                                                                disabled={addUnivMut.isPending || !newUnivVal.trim()}
+                                                                className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 disabled:opacity-50"
+                                                            >
+                                                                Save
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setNewUnivIndex(null);
+                                                                    setNewUnivVal("");
+                                                                }}
+                                                                className="px-3.5 py-2 border border-slate-250 text-slate-650 rounded-xl text-xs font-bold hover:bg-slate-50"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <select
+                                                            value={(() => {
+                                                                const matchedCountry = countries.find(c => c.name.toLowerCase() === univ.univ_country?.toLowerCase());
+                                                                const matchedUniv = matchedCountry?.universities?.find(u => u.name.toLowerCase() === univ.univ_name?.toLowerCase());
+                                                                return matchedUniv ? matchedUniv.name : (univ.univ_name || "");
+                                                            })()}
+                                                            onChange={e => updateUniversityField(index, "univ_name", e.target.value)}
+                                                            required
+                                                            disabled={!univ.univ_country}
+                                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white disabled:opacity-60"
+                                                        >
+                                                            <option value="">{univ.univ_country ? "Select University" : "Select Country first"}</option>
+                                                            {((countries.find(c => c.name.toLowerCase() === univ.univ_country?.toLowerCase())?.universities) || []).map(u => (
+                                                                <option key={u.id} value={u.name}>{u.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                </div>
+
+                                                <div className="space-y-1.5">
+                                                    <label className="text-xs font-semibold text-slate-500 uppercase">Course</label>
+                                                    <input
+                                                        type="text"
+                                                        required
+                                                        placeholder="e.g. M.Sc. Computer Science"
+                                                        value={univ.univ_course || ""}
+                                                        onChange={e => updateUniversityField(index, "univ_course", e.target.value)}
+                                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
+                                                    />
+                                                </div>
+
+                                                <div className="space-y-1.5">
+                                                    <label className="text-xs font-semibold text-slate-500 uppercase">University Link</label>
+                                                    <input
+                                                        type="url"
+                                                        required
+                                                        placeholder="e.g. https://www.utoronto.ca"
+                                                        value={univ.univ_link || ""}
+                                                        onChange={e => updateUniversityField(index, "univ_link", e.target.value)}
+                                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setFormValues(prev => ({
+                                                    ...prev,
+                                                    universities: [
+                                                        ...(prev.universities || []),
+                                                        { univ_country: "", univ_name: "", univ_course: "", univ_link: "", completed: false }
+                                                    ]
+                                                }));
+                                            }}
+                                            className="w-full py-2.5 border border-dashed border-indigo-300 text-indigo-650 rounded-xl text-xs font-bold hover:bg-indigo-50/50 hover:border-indigo-400 transition-colors flex items-center justify-center gap-1.5 mt-2"
+                                        >
+                                            + Add Another University
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
                             {/* AWAITING_STATUS Response */}
                             {currentStage === "AWAITING_STATUS" && (
                                 <div className="space-y-4">
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Application Reference ID</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            placeholder="e.g. APP-8947-CA"
-                                            value={formValues.application_ref_id || ""}
-                                            onChange={e => setFormValues({ ...formValues, application_ref_id: e.target.value })}
-                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Submission Date</label>
-                                        <input
-                                            type="date"
-                                            required
-                                            value={formValues.submission_date || ""}
-                                            onChange={e => setFormValues({ ...formValues, submission_date: e.target.value })}
-                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">University Response</label>
-                                        <select
-                                            value={formValues.university_response || "Conditional Offer"}
-                                            onChange={e => setFormValues({ ...formValues, university_response: e.target.value })}
-                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white"
-                                        >
-                                            <option value="Conditional Offer">Conditional Offer</option>
-                                            <option value="Unconditional Offer">Unconditional Offer</option>
-                                            <option value="Reject">Reject (Close/Archive)</option>
-                                        </select>
-                                    </div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">University Application Responses</label>
+                                    {(formValues.universities || []).map((univ, index) => (
+                                        <div key={index} className="space-y-4 p-4 border border-slate-100 bg-slate-50/50 rounded-2xl relative">
+                                            <div className="flex items-center justify-between">
+                                                <div className="space-y-0.5">
+                                                    <span className="text-xs font-bold text-indigo-650 bg-indigo-50/50 px-2 py-0.5 rounded-md block w-fit">
+                                                        University #{index + 1}
+                                                    </span>
+                                                    <div className="text-xs text-slate-600">
+                                                        <span className="font-semibold">{univ.univ_name || "Not specified"}</span>
+                                                        {univ.univ_country && <span className="text-slate-400"> • {univ.univ_country}</span>}
+                                                    </div>
+                                                    {univ.univ_course && (
+                                                        <div className="text-[10px] text-slate-500">{univ.univ_course}</div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-semibold text-slate-500 uppercase">Application Reference ID</label>
+                                                <input
+                                                    type="text"
+                                                    required
+                                                    placeholder="e.g. APP-8947-CA"
+                                                    value={univ.application_ref_id || ""}
+                                                    onChange={e => {
+                                                        const updated = [...(formValues.universities || [])];
+                                                        updated[index] = { ...updated[index], application_ref_id: e.target.value };
+                                                        setFormValues({ ...formValues, universities: updated });
+                                                    }}
+                                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-semibold text-slate-500 uppercase">Submission Date</label>
+                                                <input
+                                                    type="date"
+                                                    required
+                                                    value={univ.submission_date || ""}
+                                                    onChange={e => {
+                                                        const updated = [...(formValues.universities || [])];
+                                                        updated[index] = { ...updated[index], submission_date: e.target.value };
+                                                        setFormValues({ ...formValues, universities: updated });
+                                                    }}
+                                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-semibold text-slate-500 uppercase">University Response</label>
+                                                <select
+                                                    value={univ.university_response || "Conditional Offer"}
+                                                    onChange={e => {
+                                                        const updated = [...(formValues.universities || [])];
+                                                        updated[index] = { ...updated[index], university_response: e.target.value };
+                                                        setFormValues({ ...formValues, universities: updated });
+                                                    }}
+                                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white"
+                                                >
+                                                    <option value="Conditional Offer">Conditional Offer</option>
+                                                    <option value="Unconditional Offer">Unconditional Offer</option>
+                                                    <option value="Reject">Reject (Close/Archive)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
 
@@ -776,8 +1546,10 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                 </div>
                             )}
 
+                            </div>
+
                             {/* Buttons */}
-                            <div className="flex items-center justify-end gap-2 border-t border-gray-100 pt-3.5 mt-2">
+                            <div className="flex items-center justify-end gap-2 border-t border-gray-100 pt-3.5 mt-4">
                                 <button
                                     type="button"
                                     onClick={() => setActionModal(null)}
@@ -785,14 +1557,56 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                 >
                                     Cancel
                                 </button>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition-all shadow-sm shadow-indigo-100 flex items-center gap-1.5"
-                                >
-                                    {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                                    Submit
-                                </button>
+                                {currentStage === "APPLICATION" ? (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={handleApplicationSave}
+                                            disabled={loading}
+                                            className="px-4 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 rounded-xl transition-all border border-indigo-200 flex items-center gap-1.5"
+                                        >
+                                            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                                            Save
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={loading}
+                                            className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition-all shadow-sm shadow-indigo-100 flex items-center gap-1.5"
+                                        >
+                                            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
+                                            Move to Awaiting Status
+                                        </button>
+                                    </>
+                                ) : currentStage === "AWAITING_STATUS" ? (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={handleAwaitingStatusSave}
+                                            disabled={loading}
+                                            className="px-4 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 rounded-xl transition-all border border-indigo-200 flex items-center gap-1.5"
+                                        >
+                                            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                                            Save
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={loading}
+                                            className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition-all shadow-sm shadow-indigo-100 flex items-center gap-1.5"
+                                        >
+                                            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                                            Submit
+                                        </button>
+                                    </>
+                                ) : (
+                                    <button
+                                        type="submit"
+                                        disabled={loading}
+                                        className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition-all shadow-sm shadow-indigo-100 flex items-center gap-1.5"
+                                    >
+                                        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                                        Submit
+                                    </button>
+                                )}
                             </div>
                         </form>
                     </div>

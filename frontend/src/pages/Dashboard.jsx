@@ -8,13 +8,13 @@ import { DashboardSkeleton } from "../components/ui/Skeleton";
 import Badge from "../components/ui/Badge";
 import Avatar from "../components/Avatar";
 import {
-    CheckCircle, Circle, Clock, ArrowRight, Sparkles,
-    Users, AlertCircle, Bell, Phone, MessageSquare, X,
+    CheckCircle, Clock, Sparkles, X, ArrowRight,
+    Users, AlertCircle, Bell,
     TrendingUp, Target, UserCheck, IndianRupee, Receipt,
     Wallet, BarChart2, Trophy, Banknote, TrendingDown, KanbanSquare,
     CalendarClock, HelpCircle, GraduationCap, Hourglass, FolderOpen,
     ShieldAlert, BadgeCheck, Landmark, CheckCircle2, XCircle, ShieldCheck,
-    Settings, Search, CalendarDays, FileText, Inbox, CheckSquare, ClipboardList
+    Settings, Search, CalendarDays, FileText, Inbox, CheckSquare
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../lib/utils";
@@ -116,107 +116,6 @@ function AIDigestCard({ followUp, overdueTasks, pendingTasks, upcomingReminders,
     );
 }
 
-// ─── Action Queue Item ────────────────────────────────────────────────────────
-
-function ActionItem({ lead, snoozed, onSnooze }) {
-    const navigate = useNavigate();
-    const due = dueSoonLabel(lead.nextFollowUpAt ?? lead.updatedAt);
-    if (snoozed) return null;
-    return (
-        <div className={cn(
-            "group rounded-lg border transition-all",
-            due?.variant === "error"
-                ? "border-red-100 bg-red-50/30 hover:border-red-200"
-                : "border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/30"
-        )}>
-            <div className="flex items-center gap-3 p-3 cursor-pointer" onClick={() => navigate(`/leads/${lead.id}`)}>
-                <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 text-xs font-bold text-indigo-700">
-                    {lead.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{lead.name}</p>
-                    <p className="text-xs text-gray-500 truncate">{lead.phone || lead.email || "No contact"}</p>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                    {due && <Badge variant={due.variant} size="sm">{due.label}</Badge>}
-                    {lead.leadDepartments?.[0] && (
-                        <Badge variant="indigo" size="sm">{lead.leadDepartments[0].stage?.replace(/_/g, " ")}</Badge>
-                    )}
-                </div>
-            </div>
-            <div className="hidden group-hover:flex items-center gap-1.5 px-3 pb-2.5">
-                {lead.phone && (
-                    <a href={`tel:${lead.phone}`} onClick={e => e.stopPropagation()}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-gray-200 text-xs font-semibold text-gray-600 hover:border-green-300 hover:text-green-700 hover:bg-green-50 transition-colors shadow-sm">
-                        <Phone className="h-3 w-3" /> Call
-                    </a>
-                )}
-                <button onClick={e => { e.stopPropagation(); navigate(`/leads/${lead.id}?wa=1`); }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-gray-200 text-xs font-semibold text-gray-600 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 transition-colors shadow-sm">
-                    <MessageSquare className="h-3 w-3" /> WhatsApp
-                </button>
-                <button onClick={e => { e.stopPropagation(); onSnooze(lead.id); }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-gray-200 text-xs font-semibold text-gray-400 hover:border-gray-300 hover:text-gray-600 transition-colors shadow-sm ml-auto">
-                    <X className="h-3 w-3" /> Snooze 1h
-                </button>
-            </div>
-        </div>
-    );
-}
-
-// ─── Task Item ────────────────────────────────────────────────────────────────
-
-function TaskItem({ task, onComplete }) {
-    const navigate = useNavigate();
-    const due = dueSoonLabel(task.dueDate);
-    return (
-        <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:bg-indigo-50/40 hover:border-indigo-200 transition-colors group cursor-pointer"
-            onClick={() => navigate(`/tasks/${task.id}`)}>
-            <button onClick={(e) => { e.stopPropagation(); onComplete(task.id); }}
-                className="shrink-0 text-gray-300 hover:text-emerald-500 transition-colors" title="Mark complete">
-                <Circle className="h-4 w-4" />
-            </button>
-            <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate group-hover:text-indigo-700 transition-colors">{task.title}</p>
-                {task.lead && <p className="text-xs text-gray-400 truncate">{task.lead.name}</p>}
-            </div>
-            <div className="shrink-0 flex items-center gap-2">
-                {due && <Badge variant={due.variant} size="sm">{due.label}</Badge>}
-                {task.dueDate && !due && (
-                    <span className="text-[11px] text-gray-400">
-                        {new Date(task.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                    </span>
-                )}
-            </div>
-        </div>
-    );
-}
-
-// ─── Reminder Item ────────────────────────────────────────────────────────────
-
-function ReminderItem({ reminder }) {
-    const d = new Date(reminder.remindAt);
-    const isToday = d.toDateString() === new Date().toDateString();
-    return (
-        <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 border border-amber-100">
-            <Bell className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
-            <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-800 font-medium truncate">{reminder.message}</p>
-                {reminder.lead && (
-                    <Link to={`/leads/${reminder.lead.id}`} className="text-xs text-indigo-500 hover:underline truncate block">
-                        {reminder.lead.name}
-                    </Link>
-                )}
-            </div>
-            <span className="text-[11px] font-semibold text-amber-600 shrink-0">
-                {isToday
-                    ? d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
-                    : d.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-            </span>
-        </div>
-    );
-}
-
 // ─── Section Header ───────────────────────────────────────────────────────────
 
 function SectionHeader({ icon: Icon, title, to, linkLabel = "View all →", accent = "indigo" }) {
@@ -300,76 +199,6 @@ function TeamTable({ data, navigate }) {
                         ))}
                     </tbody>
                 </table>
-            </div>
-        </div>
-    );
-}
-
-// ─── Operational Panel (Action Queue + Tasks + Reminders) ────────────────────
-
-function OperationalPanel({ actionQueue, pendingTasks, upcomingReminders, isSnoozed, handleSnooze, completeTask, stats, user }) {
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Action Queue */}
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                    <h2 className="text-sm font-semibold text-gray-900">Action Queue</h2>
-                    <Badge variant="warning" size="sm">{actionQueue.length}</Badge>
-                </div>
-                <div className="p-3 space-y-1.5 max-h-80 overflow-y-auto">
-                    {actionQueue.length > 0
-                        ? actionQueue.map(lead => (
-                            <ActionItem key={lead.id} lead={lead} snoozed={isSnoozed(lead.id)} onSnooze={handleSnooze} />
-                        ))
-                        : <p className="text-xs text-gray-400 text-center py-6">No leads need action right now</p>
-                    }
-                </div>
-            </div>
-
-            {/* My Tasks */}
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                    <h2 className="text-sm font-semibold text-gray-900">My Tasks</h2>
-                    <Badge variant={pendingTasks.length > 0 ? "error" : "success"} size="sm">
-                        {pendingTasks.length} pending
-                    </Badge>
-                </div>
-                <div className="p-3 space-y-1.5 max-h-80 overflow-y-auto">
-                    {pendingTasks.length > 0
-                        ? pendingTasks.slice(0, 8).map(task => (
-                            <TaskItem key={task.id} task={task} onComplete={(id) => completeTask.mutate(id)} />
-                        ))
-                        : (
-                            <div className="flex flex-col items-center justify-center py-8 gap-2">
-                                <CheckCircle className="h-8 w-8 text-emerald-300" />
-                                <p className="text-xs text-gray-400">All tasks done!</p>
-                            </div>
-                        )
-                    }
-                </div>
-            </div>
-
-            {/* Reminders + AI */}
-            <div className="space-y-4">
-                <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                        <h2 className="text-sm font-semibold text-gray-900">Reminders</h2>
-                        <Bell className="h-3.5 w-3.5 text-gray-400" />
-                    </div>
-                    <div className="p-3 space-y-1.5">
-                        {upcomingReminders.length > 0
-                            ? upcomingReminders.map(r => <ReminderItem key={r.id} reminder={r} />)
-                            : <p className="text-xs text-gray-400 text-center py-4">No upcoming reminders</p>
-                        }
-                    </div>
-                </div>
-                <AIDigestCard
-                    followUp={stats?.followUp ?? 0}
-                    overdueTasks={pendingTasks.filter(t => dueSoonLabel(t.dueDate)?.variant === "error").length}
-                    pendingTasks={pendingTasks.length}
-                    upcomingReminders={upcomingReminders.length}
-                    userName={user?.name?.split(" ")[0] ?? ""}
-                />
             </div>
         </div>
     );
@@ -493,12 +322,79 @@ const Dashboard = () => {
     // Tab state: overview, analytics, performance
     const [activeTab, setActiveTab] = useState("overview");
 
+    // Modal state for viewing leads by stage
+    const [selectedStage, setSelectedStage] = useState(null);
+    const [showStageModal, setShowStageModal] = useState(false);
+    const [stageLeadsPage, setStageLeadsPage] = useState(1);
+    const stageLeadsLimit = 50; // Load 50 leads per page
+
     const [searchParams, setSearchParams] = useSearchParams();
+
+    // ── Generate dynamic intakes for last 5 years ──────────────────────────────
+    const availableIntakes = useMemo(() => {
+        const currentDate = new Date();
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth() + 1; // 1-12
+        
+        const intakes = [];
+        
+        // Define season configurations
+        // Spring: March-May, Summer: June-August, Fall: September-November, Winter: December-February
+        const seasons = [
+            { name: "Spring", startMonth: 3, endMonth: 5, yearOffset: 0 },
+            { name: "Summer", startMonth: 6, endMonth: 8, yearOffset: 0 },
+            { name: "Fall", startMonth: 9, endMonth: 11, yearOffset: 0 },
+            { name: "Winter", startMonth: 12, endMonth: 2, yearOffset: 1 } // Winter spans two years
+        ];
+        
+        // Generate intakes for the last 5 years
+        for (let yearOffset = 0; yearOffset < 5; yearOffset++) {
+            const year = currentYear - yearOffset;
+            
+            for (const season of seasons) {
+                const intakeYear = year;
+                const endYear = season.yearOffset ? year + 1 : year;
+                
+                // Format dates properly with leading zeros
+                const startMonth = String(season.startMonth).padStart(2, '0');
+                const endMonth = String(season.endMonth).padStart(2, '0');
+                
+                // Calculate last day of end month
+                const lastDay = new Date(endYear, season.endMonth, 0).getDate();
+                
+                const startDate = `${intakeYear}-${startMonth}-01`;
+                const endDate = `${endYear}-${endMonth}-${String(lastDay).padStart(2, '0')}`;
+                
+                // Only include intakes that are in the past or current
+                const intakeEndDate = new Date(endDate);
+                const shouldInclude = intakeEndDate <= currentDate || 
+                    (intakeYear === currentYear && season.startMonth <= currentMonth);
+                
+                if (shouldInclude) {
+                    intakes.push({
+                        label: `${season.name} ${intakeYear}`,
+                        value: `${season.name} ${intakeYear}`,
+                        startDate,
+                        endDate
+                    });
+                }
+            }
+        }
+        
+        // Sort in descending order (most recent first)
+        intakes.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+        
+        return intakes;
+    }, []);
+
+    // Default to the most recent intake
+    const defaultIntake = availableIntakes[0]?.value || "All Intakes";
 
     // 1. Read values from searchParams, fallback to defaults
     const paramStartDate = searchParams.get("startDate");
     const paramEndDate = searchParams.get("endDate");
     const paramIntake = searchParams.get("intake");
+    const paramYearRange = searchParams.get("yearRange");
     const paramDept = searchParams.get("department");
     const paramConsultant = searchParams.get("consultantId");
 
@@ -515,7 +411,8 @@ const Dashboard = () => {
     // Filter states (applied values that trigger query fetching)
     const startDate = paramStartDate !== null ? paramStartDate : defaultStartDate;
     const endDate = paramEndDate !== null ? paramEndDate : defaultEndDate;
-    const intake = paramIntake !== null ? paramIntake : "Winter 2023";
+    const intake = paramIntake !== null ? paramIntake : defaultIntake;
+    const yearRange = paramYearRange !== null ? paramYearRange : "All Time";
     const selectedConsultantId = paramConsultant !== null ? paramConsultant : "";
 
     // Department selection hook
@@ -541,6 +438,7 @@ const Dashboard = () => {
     const [tempStartDate, setTempStartDate] = useState(startDate);
     const [tempEndDate, setTempEndDate] = useState(endDate);
     const [tempIntake, setTempIntake] = useState(intake);
+    const [tempYearRange, setTempYearRange] = useState(yearRange);
     const [tempDepartment, setTempDepartment] = useState(null);
     const [tempSelectedConsultantId, setTempSelectedConsultantId] = useState(selectedConsultantId);
 
@@ -549,8 +447,9 @@ const Dashboard = () => {
         setTempStartDate(startDate);
         setTempEndDate(endDate);
         setTempIntake(intake);
+        setTempYearRange(yearRange);
         setTempSelectedConsultantId(selectedConsultantId);
-    }, [startDate, endDate, intake, selectedConsultantId]);
+    }, [startDate, endDate, intake, yearRange, selectedConsultantId]);
 
     // Sync tempDepartment with department once it loads/resolves initially
     useEffect(() => {
@@ -562,35 +461,66 @@ const Dashboard = () => {
     // Custom handlers for Intake selection vs Manual Date selection
     const handleIntakeChange = (val) => {
         setTempIntake(val);
-        if (val === "Winter 2023") {
-            setTempStartDate("2023-12-01");
-            setTempEndDate("2024-02-29");
-        } else if (val === "Summer 2023") {
-            setTempStartDate("2023-06-01");
-            setTempEndDate("2023-08-31");
-        } else if (val === "Fall 2023") {
-            setTempStartDate("2023-09-01");
-            setTempEndDate("2023-11-30");
-        } else if (val === "Winter 2024") {
-            setTempStartDate("2024-12-01");
-            setTempEndDate("2025-02-28");
-        } else if (val === "Summer 2024") {
-            setTempStartDate("2024-06-01");
-            setTempEndDate("2024-08-31");
-        } else if (val === "All Intakes") {
+        
+        if (val === "All Intakes") {
+            setTempStartDate("");
+            setTempEndDate("");
+        } else {
+            // Find the selected intake and set its date range
+            const selectedIntake = availableIntakes.find(intake => intake.value === val);
+            if (selectedIntake) {
+                setTempStartDate(selectedIntake.startDate);
+                setTempEndDate(selectedIntake.endDate);
+            }
+        }
+        // Reset year range when intake is selected
+        setTempYearRange("All Time");
+    };
+
+    const handleYearRangeChange = (val) => {
+        setTempYearRange(val);
+        const today = new Date();
+        const todayStr = today.toISOString().split("T")[0];
+        
+        if (val === "Last 1 Year") {
+            const lastYear = new Date();
+            lastYear.setFullYear(lastYear.getFullYear() - 1);
+            setTempStartDate(lastYear.toISOString().split("T")[0]);
+            setTempEndDate(todayStr);
+        } else if (val === "Last 5 Years") {
+            const last5Years = new Date();
+            last5Years.setFullYear(last5Years.getFullYear() - 5);
+            setTempStartDate(last5Years.toISOString().split("T")[0]);
+            setTempEndDate(todayStr);
+        } else if (val === "Last 10 Years") {
+            const last10Years = new Date();
+            last10Years.setFullYear(last10Years.getFullYear() - 10);
+            setTempStartDate(last10Years.toISOString().split("T")[0]);
+            setTempEndDate(todayStr);
+        } else if (val === "10+ Years") {
+            // Set to a very old date (e.g., 20 years ago) to capture everything
+            const tenPlusYears = new Date();
+            tenPlusYears.setFullYear(tenPlusYears.getFullYear() - 20);
+            setTempStartDate(tenPlusYears.toISOString().split("T")[0]);
+            setTempEndDate(todayStr);
+        } else if (val === "All Time") {
             setTempStartDate("");
             setTempEndDate("");
         }
+        // Reset intake when year range is selected
+        setTempIntake("All Intakes");
     };
 
     const handleStartDateChange = (val) => {
         setTempStartDate(val);
         setTempIntake("All Intakes");
+        setTempYearRange("All Time");
     };
 
     const handleEndDateChange = (val) => {
         setTempEndDate(val);
         setTempIntake("All Intakes");
+        setTempYearRange("All Time");
     };
 
     const handleApplyFilters = () => {
@@ -604,6 +534,12 @@ const Dashboard = () => {
 
         if (tempIntake !== null && tempIntake !== undefined) nextParams.set("intake", tempIntake);
         else nextParams.delete("intake");
+
+        if (tempYearRange !== null && tempYearRange !== undefined && tempYearRange !== "All Time") {
+            nextParams.set("yearRange", tempYearRange);
+        } else {
+            nextParams.delete("yearRange");
+        }
 
         if (tempDepartment) {
             nextParams.set("department", tempDepartment);
@@ -636,6 +572,7 @@ const Dashboard = () => {
         setTempStartDate("");
         setTempEndDate("");
         setTempIntake("All Intakes");
+        setTempYearRange("All Time");
         setTempSelectedConsultantId("");
         setTempDepartment(activeDept);
         
@@ -643,20 +580,13 @@ const Dashboard = () => {
         nextParams.set("startDate", "");
         nextParams.set("endDate", "");
         nextParams.set("intake", "All Intakes");
+        nextParams.delete("yearRange");
         nextParams.delete("consultantId");
         nextParams.set("department", activeDept);
         
         setSearchParams(nextParams);
         setDepartment(activeDept);
     };
-
-    // Snooze state
-    const [snoozed, setSnoozed] = useState({});
-    const handleSnooze = (leadId) => {
-        setSnoozed(prev => ({ ...prev, [leadId]: Date.now() + 3_600_000 }));
-        toast("Snoozed for 1 hour");
-    };
-    const isSnoozed = (leadId) => snoozed[leadId] && snoozed[leadId] > Date.now();
 
     // ── Shared queries ─────────────────────────────────────────────────────────
     const { data: stats, isLoading: statsLoading } = useQuery({
@@ -665,25 +595,66 @@ const Dashboard = () => {
         staleTime: 120_000,
     });
 
-    const { data: leadsData, isLoading: leadsLoading } = useQuery({
-        queryKey: ["leads", "action-queue"],
-        queryFn: () => api.get("/leads", {
-            params: { limit: 10, status: "FOLLOW_UP,CONTACTED,NEW", sortBy: "updatedAt", sortOrder: "asc" }
-        }).then(r => r.data.data || r.data),
-        staleTime: 120_000,
-    });
-
-    const { data: tasks, isLoading: tasksLoading } = useQuery({
+    const { data: tasks } = useQuery({
         queryKey: ["tasks", "my-pending"],
         queryFn: () => api.get("/tasks").then(r => r.data.data ?? r.data),
         staleTime: 120_000,
     });
 
-    const { data: reminders, isLoading: remindersLoading } = useQuery({
+    const { data: reminders } = useQuery({
         queryKey: ["reminders", "upcoming"],
         queryFn: () => api.get("/reminders").then(r => r.data.data ?? r.data),
         staleTime: 120_000,
     });
+
+    // ── Query for leads by stage (for modal) ──────────────────────────────────
+    const { data: stageLeadsData, isLoading: stageLeadsLoading } = useQuery({
+        queryKey: ["stage-leads", selectedStage?.code, department, selectedConsultantId, stageLeadsPage],
+        queryFn: () => api.get("/leads", {
+            params: {
+                department,
+                stage: selectedStage?.code,
+                assignedTo: selectedConsultantId || undefined,
+                // Don't apply date filters - we want all leads in this stage
+                // startDate: startDate || undefined,
+                // endDate: endDate || undefined,
+                page: stageLeadsPage,
+                limit: stageLeadsLimit
+            }
+        }).then(r => r.data),
+        enabled: !!selectedStage && !!department,
+        staleTime: 30_000,
+        keepPreviousData: true, // Keep previous data while loading next page
+    });
+
+    const stageLeads = stageLeadsData?.data || [];
+    const stageLeadsTotal = stageLeadsData?.total || 0;
+    const stageLeadsTotalPages = stageLeadsData?.totalPages || 1;
+
+    // Handler to open stage modal
+    const handleStageClick = (stage) => {
+        setSelectedStage(stage);
+        setStageLeadsPage(1); // Reset to first page
+        setShowStageModal(true);
+    };
+
+    const closeStageModal = () => {
+        setShowStageModal(false);
+        setSelectedStage(null);
+        setStageLeadsPage(1); // Reset pagination
+    };
+
+    const handleNextPage = () => {
+        if (stageLeadsPage < stageLeadsTotalPages) {
+            setStageLeadsPage(prev => prev + 1);
+        }
+    };
+
+    const handlePrevPage = () => {
+        if (stageLeadsPage > 1) {
+            setStageLeadsPage(prev => prev - 1);
+        }
+    };
 
     // ── Manager / Admin queries ────────────────────────────────────────────────
     const { data: rawTeamStats = [] } = useQuery({
@@ -751,42 +722,32 @@ const Dashboard = () => {
         retry: false,
     });
 
-    const completeTask = useMutation({
-        mutationFn: (id) => api.patch(`/tasks/${id}/status`, { status: "COMPLETED" }),
-        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["tasks"] }); toast.success("Task marked complete"); },
-        onError: () => toast.error("Failed to update task"),
-    });
-
     const hasActiveFilters = useMemo(() => {
         const isTempCleared = 
             (tempStartDate === "" || tempStartDate === null) &&
             (tempEndDate === "" || tempEndDate === null) &&
             (tempIntake === "All Intakes") &&
+            (tempYearRange === "All Time") &&
             (tempSelectedConsultantId === "");
             
         const isTempDefault = 
             (tempStartDate === defaultStartDate) &&
             (tempEndDate === defaultEndDate) &&
-            (tempIntake === "Winter 2023") &&
+            (tempIntake === defaultIntake) &&
+            (tempYearRange === "All Time") &&
             (tempSelectedConsultantId === "");
             
         if (isTempCleared || isTempDefault) {
             return false;
         }
         return true;
-    }, [tempStartDate, tempEndDate, tempIntake, tempSelectedConsultantId, defaultStartDate, defaultEndDate]);
+    }, [tempStartDate, tempEndDate, tempIntake, tempYearRange, tempSelectedConsultantId, defaultStartDate, defaultEndDate, defaultIntake]);
 
-    const isLoading = statsLoading || leadsLoading || tasksLoading || remindersLoading || dashLoading;
+    const isLoading = statsLoading || dashLoading;
     if (isLoading) return <DashboardSkeleton />;
 
     const pendingTasks      = (tasks || []).filter(t => t.status === "PENDING");
     const upcomingReminders = (reminders || []).filter(r => !r.isSent).slice(0, 5);
-    const actionQueue       = (leadsData || []).slice(0, 8);
-
-    const operationalProps = {
-        actionQueue, pendingTasks, upcomingReminders,
-        isSnoozed, handleSnooze, completeTask, stats, user,
-    };
 
     const PILLS = [
         { key: "SALES", label: "SALES" },
@@ -834,7 +795,7 @@ const Dashboard = () => {
             {/* Header */}
             <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200/60 pb-5">
                 <div className="flex items-center gap-8">
-                    <h1 className="text-2xl font-black text-indigo-950">Dash Board</h1>
+                    <h1 className="text-2xl font-black text-indigo-950">Dashboard</h1>
                     <nav className="flex items-center gap-6 text-sm font-semibold">
                         {[
                             { id: "overview", label: "Overview" },
@@ -860,6 +821,14 @@ const Dashboard = () => {
                             );
                         })}
                     </nav>
+                </div>
+                <div className="flex items-center gap-3">
+                    <Link 
+                        to="/my-day" 
+                        className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold transition-colors"
+                    >
+                        View My Day →
+                    </Link>
                 </div>
             </header>
 
@@ -891,18 +860,33 @@ const Dashboard = () => {
 
                         <div className="flex flex-wrap items-center gap-4">
                             <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Year Range</span>
+                                <select
+                                    value={tempYearRange}
+                                    onChange={(e) => handleYearRangeChange(e.target.value)}
+                                    className="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 bg-gray-50/50 text-gray-700 min-w-[140px] cursor-pointer"
+                                >
+                                    <option value="All Time">All Time</option>
+                                    <option value="Last 1 Year">Last 1 Year</option>
+                                    <option value="Last 5 Years">Last 5 Years</option>
+                                    <option value="Last 10 Years">Last 10 Years</option>
+                                    <option value="10+ Years">10+ Years</option>
+                                </select>
+                            </div>
+
+                            <div className="flex flex-col">
                                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Intake</span>
                                 <select
                                     value={tempIntake}
                                     onChange={(e) => handleIntakeChange(e.target.value)}
-                                    className="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 bg-gray-50/50 text-gray-700 min-w-[130px] cursor-pointer"
+                                    className="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 bg-gray-50/50 text-gray-700 min-w-[150px] cursor-pointer"
                                 >
                                     <option value="All Intakes">All Intakes</option>
-                                    <option value="Winter 2023">Winter 2023</option>
-                                    <option value="Summer 2023">Summer 2023</option>
-                                    <option value="Fall 2023">Fall 2023</option>
-                                    <option value="Winter 2024">Winter 2024</option>
-                                    <option value="Summer 2024">Summer 2024</option>
+                                    {availableIntakes.map((intake) => (
+                                        <option key={intake.value} value={intake.value}>
+                                            {intake.label}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
 
@@ -970,7 +954,11 @@ const Dashboard = () => {
                         {dashData?.funnel?.map(stage => {
                             const Icon = STAGE_ICONS[stage.code] || FileText;
                             return (
-                                <div key={stage.code} className="flex flex-col items-center justify-center p-6 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 text-center group border-t-4 border-t-transparent hover:border-t-indigo-600">
+                                <button
+                                    key={stage.code}
+                                    onClick={() => handleStageClick(stage)}
+                                    className="flex flex-col items-center justify-center p-6 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 text-center group border-t-4 border-t-transparent hover:border-t-indigo-600 cursor-pointer"
+                                >
                                     <div className="h-12 w-12 rounded-full bg-indigo-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200">
                                         <Icon className="h-6 w-6 text-indigo-600" />
                                     </div>
@@ -980,7 +968,10 @@ const Dashboard = () => {
                                     <span className="text-3xl font-black text-indigo-950 leading-tight">
                                         {stage.count}
                                     </span>
-                                </div>
+                                    <span className="text-[10px] text-indigo-600 font-medium mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        View Details →
+                                    </span>
+                                </button>
                             );
                         })}
                     </div>
@@ -1092,15 +1083,156 @@ const Dashboard = () => {
                         </div>
                     </div>
 
-                    {/* Operational Area (Original Tasks/Reminders sections) */}
-                    <div className="mt-8">
-                        <h2 className="text-lg font-bold text-indigo-950 mb-4 flex items-center gap-2">
-                            <ClipboardList className="h-5 w-5 text-indigo-600" />
-                            Tasks & Follow-up Actions
-                        </h2>
-                        <OperationalPanel {...operationalProps} />
-                    </div>
                 </>
+            )}
+
+
+            {/* Stage Details Modal */}
+            {showStageModal && selectedStage && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeStageModal}>
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                            <div>
+                                <h2 className="text-lg font-bold text-indigo-950">
+                                    {formatStageLabel(selectedStage.code)}
+                                </h2>
+                                <p className="text-sm text-gray-500 mt-0.5">
+                                    {selectedStage.count} {selectedStage.count === 1 ? 'lead' : 'leads'} in this stage
+                                </p>
+                            </div>
+                            <button
+                                onClick={closeStageModal}
+                                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                            >
+                                <X className="h-5 w-5 text-gray-500" />
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="flex-1 overflow-y-auto p-6">
+                            {stageLeadsLoading ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <div className="flex items-center gap-2">
+                                        {[0, 150, 300].map(d => (
+                                            <div key={d} className="h-2 w-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : stageLeads && stageLeads.length > 0 ? (
+                                <div className="grid grid-cols-1 gap-3">
+                                    {stageLeads.map(lead => (
+                                        <Link
+                                            key={lead.id}
+                                            to={`/leads/${lead.id}`}
+                                            className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all group"
+                                            onClick={closeStageModal}
+                                        >
+                                            <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 text-sm font-bold text-indigo-700 group-hover:bg-indigo-200 transition-colors">
+                                                {lead.name.charAt(0).toUpperCase()}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-gray-900 truncate group-hover:text-indigo-700 transition-colors">
+                                                    {lead.name}
+                                                </p>
+                                                <div className="flex items-center gap-3 mt-1">
+                                                    {lead.phone && (
+                                                        <span className="text-xs text-gray-500">📞 {lead.phone}</span>
+                                                    )}
+                                                    {lead.email && (
+                                                        <span className="text-xs text-gray-500">✉️ {lead.email}</span>
+                                                    )}
+                                                </div>
+                                                {lead.assignedTo && (
+                                                    <span className="inline-flex items-center gap-1 mt-2 text-[10px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                                                        <UserCheck className="h-3 w-3" />
+                                                        {lead.assignedTo.name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="shrink-0">
+                                                {lead.leadScore && (
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        <span className="text-[10px] font-bold text-gray-400 uppercase">Score</span>
+                                                        <span className={cn(
+                                                            "text-lg font-black",
+                                                            lead.leadScore >= 70 ? "text-emerald-600" :
+                                                            lead.leadScore >= 40 ? "text-amber-600" :
+                                                            "text-gray-400"
+                                                        )}>
+                                                            {lead.leadScore}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <ArrowRight className="h-5 w-5 text-gray-300 group-hover:text-indigo-600 transition-colors" />
+                                        </Link>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-12 text-center">
+                                    <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                                        <FileText className="h-8 w-8 text-gray-400" />
+                                    </div>
+                                    <p className="text-sm font-medium text-gray-900">No leads found</p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        There are no leads in this stage matching your current filters
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+                            <div className="flex items-center gap-4">
+                                <span className="text-xs text-gray-500">
+                                    Showing {((stageLeadsPage - 1) * stageLeadsLimit) + 1} - {Math.min(stageLeadsPage * stageLeadsLimit, stageLeadsTotal)} of {stageLeadsTotal} leads
+                                </span>
+                                {stageLeadsTotalPages > 1 && (
+                                    <span className="text-xs text-gray-400">
+                                        Page {stageLeadsPage} of {stageLeadsTotalPages}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {stageLeadsTotalPages > 1 && (
+                                    <>
+                                        <button
+                                            onClick={handlePrevPage}
+                                            disabled={stageLeadsPage === 1}
+                                            className={cn(
+                                                "px-3 py-1.5 text-sm font-medium rounded-lg transition-colors",
+                                                stageLeadsPage === 1
+                                                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                                    : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                            )}
+                                        >
+                                            Previous
+                                        </button>
+                                        <button
+                                            onClick={handleNextPage}
+                                            disabled={stageLeadsPage >= stageLeadsTotalPages}
+                                            className={cn(
+                                                "px-3 py-1.5 text-sm font-medium rounded-lg transition-colors",
+                                                stageLeadsPage >= stageLeadsTotalPages
+                                                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                                    : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                            )}
+                                        >
+                                            Next
+                                        </button>
+                                    </>
+                                )}
+                                <button
+                                    onClick={closeStageModal}
+                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* Analytics Tab Content */}

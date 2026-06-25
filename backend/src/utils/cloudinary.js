@@ -15,7 +15,7 @@ if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && proce
  * @param {string} folder - Destination folder on Cloudinary
  * @returns {Promise<string|null>} Secure URL of uploaded image or null if not configured or failed
  */
-const uploadToCloudinary = async (localFilePath, folder = "profiles") => {
+const uploadToCloudinary = async (localFilePath, folder = "profiles", resourceType = "auto") => {
     try {
         if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
             console.warn("Cloudinary is not configured. Please add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET to your .env file.");
@@ -24,7 +24,9 @@ const uploadToCloudinary = async (localFilePath, folder = "profiles") => {
 
         const result = await cloudinary.uploader.upload(localFilePath, {
             folder: `crmscholar360/${folder}`,
-            resource_type: "image",
+            resource_type: resourceType,
+            use_filename: true,
+            unique_filename: true,
         });
 
         return result.secure_url;

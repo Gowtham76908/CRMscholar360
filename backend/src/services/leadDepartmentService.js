@@ -907,27 +907,26 @@ async function getDepartmentMembers(department) {
 async function validateSalesStageMove(leadDept, currentStage, targetStage, txOrPrisma = prisma) {
     if (currentStage === targetStage) return;
 
-    // Load lead to check its customFields, nextFollowUpAt, etc.
+    // Load lead to check its customFields, resumeUrl, etc.
     const lead = await txOrPrisma.lead.findUnique({
         where: { id: leadDept.leadId },
-        select: { id: true, nextFollowUpAt: true, customFields: true }
+        select: { id: true, nextFollowUpAt: true, resumeUrl: true, customFields: true }
     });
     if (!lead) return;
 
     const cf = lead.customFields || {};
 
     if (currentStage === "ENQUIRY") {
-        const callCount = await txOrPrisma.callLog.count({ where: { leadId: leadDept.leadId } });
         const noteCount = await txOrPrisma.note.count({ where: { leadId: leadDept.leadId } });
-        if (callCount === 0 && noteCount === 0) {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Enquiry stage: Must log at least one call note first.");
+        if (noteCount === 0) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Enquiry stage: Must add at least one note message first.");
         }
     }
 
-    // Verify that next follow-up date and time is scheduled before moving out of Follow-Up stage
+    // Verify that a resume is uploaded before moving out of Follow-Up stage
     if (currentStage === "FOLLOW_UP") {
-        if (!lead.nextFollowUpAt) {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Follow-Up stage: Next follow-up date and time must be scheduled.");
+        if (!lead.resumeUrl) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Follow-Up stage: Resume must be uploaded first.");
         }
     }
 
@@ -944,16 +943,39 @@ async function validateSalesStageMove(leadDept, currentStage, targetStage, txOrP
     }
 
     if (currentStage === "UNIVERSITY_SHORTLISTING") {
-        const targetUniv = cf.target_universities;
-        const hasTarget = targetUniv !== undefined && targetUniv !== null && String(targetUniv).trim() !== "";
-        if (!hasTarget) {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of University Shortlisting stage: Target Universities Chosen must be filled.");
+        const country = cf.univ_country;
+        const name = cf.univ_name;
+        const course = cf.univ_course;
+        const link = cf.univ_link;
+        const hasCountry = country !== undefined && country !== null && String(country).trim() !== "";
+        const hasName = name !== undefined && name !== null && String(name).trim() !== "";
+        const hasCourse = course !== undefined && course !== null && String(course).trim() !== "";
+        const hasLink = link !== undefined && link !== null && String(link).trim() !== "";
+
+        const testScore = cf.ielts_toefl_score;
+        const gpa = cf.academic_gpa;
+        const backlogs = cf.backlogs;
+        const hasScore = testScore !== undefined && testScore !== null && String(testScore).trim() !== "";
+        const hasGpa = gpa !== undefined && gpa !== null && String(gpa).trim() !== "";
+        const hasBacklogs = backlogs !== undefined && backlogs !== null && String(backlogs).trim() !== "";
+
+        if (!hasCountry || !hasName || !hasCourse || !hasLink || !hasScore || !hasGpa || !hasBacklogs) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of University Shortlisting stage: Both education details (IELTS/TOEFL, GPA, Backlogs) and university details (Country, Name, Course, Link) must be filled.");
         }
     }
 
     if (currentStage === "APPLICATION") {
         if (cf.sop_status !== "Uploaded" || cf.lor_status !== "Uploaded" || cf.transcripts_status !== "Uploaded") {
             throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Application Process stage: All mandatory docs (SOP, LOR, Transcripts) must be checked 'Uploaded'.");
+        }
+
+        const list = cf.shortlisted_universities || [];
+        if (list.length === 0) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Application Process stage: At least one target university must be shortlisted.");
+        }
+        const allCompleted = list.every(u => u.completed === true || u.completed === "true" || u.status === "Completed");
+        if (!allCompleted) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Application Process stage: All target universities must have their application status marked 'Completed'.");
         }
     }
 

@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from "react";
-import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { LeadDetailSkeleton } from "../components/ui/Skeleton";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -11,7 +11,8 @@ import {
     Calendar, User, Loader2, PhoneCall, FileText, Activity,
     ChevronDown, ChevronRight, Play, Clock, AlertCircle, ChevronLeft,
     Zap, Users, Save, SlidersHorizontal, Eye, MousePointerClick, GitBranch,
-    TrendingUp, IndianRupee, Pencil,
+    TrendingUp, IndianRupee, Pencil, Paperclip, ArrowRight,
+    PanelRightOpen, PanelRightClose,
 } from "lucide-react";
 import { Modal } from "../components/Modal";
 import SlidePanel from "../components/SlidePanel";
@@ -26,6 +27,7 @@ import WhatsAppModal from "../components/lead/WhatsAppModal";
 import PostCallPanel from "../components/lead/PostCallPanel";
 import ComposeEmailModal from "../components/ComposeEmailModal";
 import { useLeadPresence } from "../hooks/useLeadPresence";
+import { useLeadDepartments, useWorkflows } from "../hooks/useDepartments";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -70,6 +72,7 @@ const ACTION_CONFIG = {
     INVOICE_CREATED:       { icon: "🧾", color: "text-emerald-500", bg: "bg-emerald-50 border-emerald-100", label: "Invoice created" },
     INVOICE_UPDATED:       { icon: "✎", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100", label: "Invoice updated" },
     PAYMENT_RECEIVED:      { icon: "💰", color: "text-emerald-700", bg: "bg-emerald-100 border-emerald-200", label: "Payment received" },
+    RESUME_UPLOADED:       { icon: "📎", color: "text-indigo-500", bg: "bg-indigo-50 border-indigo-100", label: "Resume uploaded" },
     DEFAULT:        { icon: "·", color: "text-gray-400",   bg: "bg-gray-50 border-gray-100",   label: "Activity" },
 };
 
@@ -132,6 +135,33 @@ function TimelineItem({ item }) {
     const meta = item.metadata ?? {};
 
     const renderDetail = () => {
+        if (item.action === "RESUME_UPLOADED" && meta.resumeUrl) {
+            return (
+                <div className="mt-1.5 bg-indigo-50 border border-indigo-150 rounded-xl p-3 flex items-center justify-between gap-3 max-w-md shadow-sm">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-9 w-9 rounded-xl bg-white border border-indigo-150 flex items-center justify-center text-indigo-650 shadow-inner flex-shrink-0">
+                            <FileText className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800 truncate" title={meta.resumeName || "Resume"}>
+                                {meta.resumeName || "Resume"}
+                            </p>
+                            <p className="text-[10px] font-semibold text-slate-450 mt-0.5">
+                                Uploaded by {meta.uploadedBy || "User"}
+                            </p>
+                        </div>
+                    </div>
+                    <a
+                        href={meta.resumeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center px-3.5 py-1.5 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 text-xs font-bold rounded-lg shadow-sm transition-all flex-shrink-0 cursor-pointer"
+                    >
+                        View Resume
+                    </a>
+                </div>
+            );
+        }
         if (item.action === "LEAD_CREATED") {
             const isImport = meta.source === "FILE_IMPORT";
             const isFb = meta.source === "FACEBOOK_REALTIME";
@@ -375,9 +405,12 @@ function TimelineItem({ item }) {
         }
         if (item.action === "REMINDER_SET" && meta.remindAt) {
             return (
-                <p className="mt-1 text-xs text-gray-500">
-                    Due {new Date(meta.remindAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                </p>
+                <div className="mt-1.5 bg-amber-50 border border-amber-100 rounded-lg p-2.5 space-y-1">
+                    {meta.message && <p className="text-xs font-semibold text-amber-900">{meta.message}</p>}
+                    <p className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
+                        ⏰ Due {new Date(meta.remindAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                </div>
             );
         }
         if (["LEAD_ASSIGNED", "ASSIGNED"].includes(item.action) && meta.assignedTo) {
@@ -488,7 +521,7 @@ function CallItem({ call, leadId }) {
     });
 
     return (
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="border border-gray-200/70 rounded-2xl overflow-hidden">
             <button
                 onClick={() => setExpanded(v => !v)}
                 className="w-full flex items-center justify-between p-3.5 hover:bg-gray-50 transition-colors text-left"
@@ -638,7 +671,7 @@ function TaskRow({ task, leadId, compact = false }) {
     }
 
     return (
-        <div className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-all group">
+        <div className="flex items-center gap-3 p-3 bg-white border border-gray-200/70 rounded-2xl hover:shadow-sm transition-all group">
             <button
                 onClick={() => toggle.mutate({ id: task.id, status: task.status === "PENDING" ? "COMPLETED" : "PENDING" })}
                 disabled={toggle.isPending}
@@ -744,7 +777,7 @@ function CustomFieldsPanel({ leadId, lead }) {
     if (visibleFields.length === 0) return null;
 
     return (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+        <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-1.5">
                     <SlidersHorizontal className="h-3.5 w-3.5 text-gray-400" />
@@ -942,7 +975,7 @@ function DealsPanel({ deals, loading, onAdd }) {
     const wonDeals = deals.filter(d => d.stage === "WON");
 
     return (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+        <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
                     <TrendingUp className="h-3.5 w-3.5 text-violet-500" />
@@ -1007,8 +1040,10 @@ export default function LeadDetail() {
     const { user } = useAuth();
     const queryClient = useQueryClient();
     const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
     const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN";
+
+    const lastPath = localStorage.getItem("last-leads-path");
+    const backUrl = (lastPath && (lastPath.startsWith("/leads") || lastPath.startsWith("/department-board"))) ? lastPath : "/leads?view=kanban";
 
     const [noteText, setNoteText] = useState("");
     const [showTaskModal, setShowTaskModal] = useState(false);
@@ -1017,10 +1052,17 @@ export default function LeadDetail() {
     const [showPostCall, setShowPostCall] = useState(false);
     const [showEmailModal, setShowEmailModal] = useState(false);
     const [showDealModal, setShowDealModal] = useState(false);
-    const [lastCallId, setLastCallId] = useState(null);
+    const [showDetails, setShowDetails] = useState(false);
     const [timelineFilter, setTimelineFilter] = useState("all");
     const [expandedGroups, setExpandedGroups] = useState(new Set());
     const noteRef = useRef(null);
+    const fileInputRef = useRef(null);
+    const [uploadingFile, setUploadingFile] = useState(false);
+
+    const [composerTab, setComposerTab] = useState("note");
+    const [reminderMsg, setReminderMsg] = useState("");
+    const [reminderAt, setReminderAt] = useState("");
+    const [addToGcal, setAddToGcal] = useState(false);
 
     // ─── Queries (all parallel) ───────────────────────────────────────────────
     const { data: lead, isLoading: leadLoading, error: leadError } = useQuery({
@@ -1040,7 +1082,7 @@ export default function LeadDetail() {
         enabled: !!lead,
     });
 
-    const { data: callsData, isLoading: callsLoading } = useQuery({
+    const { data: callsData } = useQuery({
         queryKey: ["lead-calls", id],
         queryFn: () => api.get(`/calls/${id}`).then(r => r.data),
         enabled: !!lead,
@@ -1052,11 +1094,12 @@ export default function LeadDetail() {
         enabled: !!lead,
     });
 
-    const { data: reminders = [], isLoading: remindersLoading } = useQuery({
-        queryKey: ["lead-reminders", id],
-        queryFn: () => api.get("/reminders", { params: { leadId: id } }).then(r => r.data),
-        enabled: !!lead,
+    const { data: gcalStatus } = useQuery({
+        queryKey: ["gcal-status"],
+        queryFn: () => api.get("/google/calendar/status").then(r => r.data),
+        staleTime: 60_000,
     });
+    const gcalConnected = gcalStatus?.connected;
 
     const { data: leadNav } = useQuery({
         queryKey: ["leads-nav"],
@@ -1096,6 +1139,44 @@ export default function LeadDetail() {
 
     const coViewers = useLeadPresence(id);
 
+    // Department hooks for stage progression
+    const { data: assignments = [] } = useLeadDepartments(id);
+    const { stageLabel, getStages, hasWorkflow } = useWorkflows();
+
+    // Get primary (first) department for the "Move to next status" button
+    const primaryDept = assignments.length > 0 ? assignments[0] : null;
+    const canUpdateStage = primaryDept && hasWorkflow(primaryDept.department);
+    
+    // Calculate next stage
+    const stages = primaryDept ? getStages(primaryDept.department) : [];
+    const currentIndex = stages.findIndex((s) => s.code === primaryDept?.stage);
+    const nextStage = currentIndex !== -1 && currentIndex < stages.length - 1 ? stages[currentIndex + 1] : null;
+
+    const stageMut = useMutation({
+        mutationFn: ({ leadDepartmentId, newStage }) => 
+            api.patch(`/lead-departments/${leadDepartmentId}/stage`, { stage: newStage }).then(r => r.data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["lead-departments", id] });
+            queryClient.invalidateQueries({ queryKey: ["lead", id] });
+            queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
+        }
+    });
+
+    const handleMoveToNextStage = () => {
+        if (!primaryDept || !nextStage) return;
+        stageMut.mutate(
+            { leadDepartmentId: primaryDept.id, newStage: nextStage.code },
+            {
+                onSuccess: () => {
+                    toast.success(`Moved to ${nextStage.label}`);
+                },
+                onError: (err) => {
+                    toast.error(err.response?.data?.message || "Failed to update stage");
+                }
+            }
+        );
+    };
+
     const calls = Array.isArray(callsData) ? callsData : (callsData?.data ?? []);
     const tasks = tasksData?.data ?? [];
     const activeAutomations = Array.isArray(automationsRaw) ? automationsRaw.filter(a => a.active) : [];
@@ -1123,6 +1204,73 @@ export default function LeadDetail() {
         e.preventDefault();
         if (!noteText.trim()) return;
         addNote.mutate(noteText.trim());
+    };
+
+    const handleFileChange = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        e.target.value = "";
+
+        if (file.size > 10 * 1024 * 1024) {
+            toast.error("File size exceeds 10MB limit");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("resume", file);
+
+        setUploadingFile(true);
+        try {
+            await api.post(`/upload/resume/${id}`, formData, {
+                headers: { "Content-Type": "multipart/form-data" }
+            });
+            toast.success("Resume uploaded successfully!");
+            queryClient.invalidateQueries({ queryKey: ["lead", id] });
+            queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
+        } catch (error) {
+            console.error("Failed to upload resume:", error);
+            const errMsg = error.response?.data?.error?.message || error.response?.data?.message || "Failed to upload resume";
+            toast.error(errMsg);
+        } finally {
+            setUploadingFile(false);
+        }
+    };
+
+    const addReminder = useMutation({
+        mutationFn: (data) => api.post("/reminders", data),
+        onSuccess: async (res) => {
+            queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
+            if (addToGcal && gcalConnected) {
+                try {
+                    const reminderId = res.data?.id;
+                    await api.post("/google/calendar/events", {
+                        summary: reminderMsg.trim() || "CRM Reminder",
+                        description: `Lead: ${lead?.name || id}`,
+                        startTime: reminderAt,
+                        reminderId,
+                        leadId: id,
+                    });
+                    toast.success("Reminder set & added to Google Calendar");
+                } catch {
+                    toast.success("Reminder set (Google Calendar sync failed)");
+                }
+            } else {
+                toast.success("Reminder set");
+            }
+            setReminderMsg("");
+            setReminderAt("");
+            setAddToGcal(false);
+            setComposerTab("note");
+        },
+        onError: () => {
+            toast.error("Failed to set reminder");
+        }
+    });
+
+    const handleReminderSubmit = (e) => {
+        e.preventDefault();
+        if (!reminderAt) return;
+        addReminder.mutate({ leadId: id, message: reminderMsg.trim() || "Reminder", remindAt: reminderAt });
     };
 
     // ─── Timeline: merge + filter ─────────────────────────────────────────────
@@ -1179,10 +1327,8 @@ export default function LeadDetail() {
             leadId: id,
             customerNumber: lead?.phone,
         }),
-        onSuccess: (data) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["lead-calls", id] });
-            const callId = data?.data?.callId ?? data?.data?.id ?? null;
-            setLastCallId(callId);
             setTimeout(() => setShowPostCall(true), 3000);
         },
         onError: (err) => {
@@ -1222,7 +1368,7 @@ export default function LeadDetail() {
             <div className="flex flex-col items-center justify-center h-64 gap-3">
                 <AlertCircle className="h-8 w-8 text-red-400" />
                 <p className="text-gray-600 font-medium">Lead not found</p>
-                <Link to="/leads" className="text-sm text-indigo-600 hover:underline">← Back to Leads</Link>
+                <Link to={backUrl} className="text-sm text-indigo-600 hover:underline">← Back to Leads</Link>
             </div>
         );
     }
@@ -1230,39 +1376,53 @@ export default function LeadDetail() {
     const openTasks = tasks.filter(t => t.status !== "COMPLETED");
 
     return (
-        <div className="space-y-5">
+        <div className="space-y-6 max-w-[1400px] mx-auto">
             {/* Back nav + prev/next */}
             <div className="flex items-center justify-between">
-                <Link to="/leads" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors font-medium">
+                <Link to={backUrl} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors font-medium">
                     <ArrowLeft className="h-4 w-4" /> Leads
                 </Link>
-                {leadNav && leadNav.length > 0 && (
-                    <div className="flex items-center gap-1">
-                        <button
-                            onClick={() => prevLeadId && navigate(`/leads/${prevLeadId}`)}
-                            disabled={!prevLeadId}
-                            title="Previous lead"
-                            className="h-7 w-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                        >
-                            <ChevronLeft className="h-4 w-4" />
-                        </button>
-                        <span className="text-xs text-gray-400 font-medium px-1">
-                            {navIdx + 1} / {leadNav.length}
-                        </span>
-                        <button
-                            onClick={() => nextLeadId && navigate(`/leads/${nextLeadId}`)}
-                            disabled={!nextLeadId}
-                            title="Next lead"
-                            className="h-7 w-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                        >
-                            <ChevronRight className="h-4 w-4" />
-                        </button>
-                    </div>
-                )}
+                <div className="flex items-center gap-3">
+                    {leadNav && leadNav.length > 0 && (
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => prevLeadId && navigate(`/leads/${prevLeadId}`)}
+                                disabled={!prevLeadId}
+                                title="Previous lead"
+                                className="h-7 w-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            <span className="text-xs text-gray-400 font-medium px-1">
+                                {navIdx + 1} / {leadNav.length}
+                            </span>
+                            <button
+                                onClick={() => nextLeadId && navigate(`/leads/${nextLeadId}`)}
+                                disabled={!nextLeadId}
+                                title="Next lead"
+                                className="h-7 w-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
+                        </div>
+                    )}
+                    <button
+                        onClick={() => setShowDetails(v => !v)}
+                        title={showDetails ? "Hide lead details" : "Show lead details"}
+                        className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border text-xs font-semibold transition-colors ${
+                            showDetails
+                                ? "border-indigo-200 bg-indigo-50 text-indigo-600"
+                                : "border-gray-200 bg-white text-gray-500 hover:border-indigo-300 hover:text-indigo-600"
+                        }`}
+                    >
+                        {showDetails ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+                        Details
+                    </button>
+                </div>
             </div>
 
             {/* ── Lead Hero Header ──────────────────────────────────────────── */}
-            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="bg-white border border-gray-200/70 rounded-2xl shadow-sm overflow-hidden">
                 {coViewers.length > 0 && (
                     <div className="flex items-center gap-2 px-5 py-2 bg-indigo-50/50 border-b border-indigo-100">
                         <div className="flex -space-x-1.5">
@@ -1457,28 +1617,36 @@ export default function LeadDetail() {
                             >
                                 <GitBranch className="h-3.5 w-3.5" /> Journey
                             </Link>
-                            <button
-                                onClick={() => setShowDealModal(true)}
-                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-all"
-                            >
-                                <TrendingUp className="h-3.5 w-3.5" /> Convert to Deal
-                            </button>
+                            {canUpdateStage && nextStage && (
+                                <button
+                                    onClick={handleMoveToNextStage}
+                                    disabled={stageMut.isPending}
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-semibold rounded-lg shadow-sm transition-all"
+                                >
+                                    {stageMut.isPending ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <ArrowRight className="h-3.5 w-3.5" />
+                                    )}
+                                    Move to {nextStage.label}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* ── Main 2/3 + 1/3 grid ───────────────────────────────────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+            {/* ── Main grid — context panel toggles open/closed (default closed) ── */}
+            <div className={`grid grid-cols-1 gap-6 items-start ${showDetails ? "lg:grid-cols-3" : ""}`}>
 
-                {/* ── LEFT: suggestions + timeline (spans 2 cols on desktop) ── */}
-                <div className="lg:col-span-2 min-w-0 space-y-4">
+                {/* ── LEFT: suggestions + timeline (full width when details closed) ── */}
+                <div className={`min-w-0 space-y-5 ${showDetails ? "lg:col-span-2" : ""}`}>
 
                     {/* Smart suggestions — surfaced, no longer behind a tab */}
                     <SmartSuggestions leadId={id} lead={lead} onAction={handleSuggestionAction} />
 
                     {/* Timeline card */}
-                    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                    <div className="bg-white border border-gray-200/70 rounded-2xl shadow-sm overflow-hidden">
                         {/* Activity header */}
                         <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -1496,26 +1664,120 @@ export default function LeadDetail() {
                                 </span>
                             )}
                         </div>
-                        {/* Inline note compose */}
-                        <div className="p-4 border-b border-gray-100">
-                            <form onSubmit={handleNoteSubmit} className="flex gap-2 items-end">
-                                <textarea
-                                    ref={noteRef}
-                                    value={noteText}
-                                    onChange={e => setNoteText(e.target.value)}
-                                    onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleNoteSubmit(e); }}
-                                    placeholder="Add a note… (Ctrl+Enter to save)"
-                                    rows={2}
-                                    className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400"
-                                />
+                        {/* Inline note/reminder compose */}
+                        <div className="border-b border-gray-100 overflow-hidden">
+                            {/* Composer Tabs */}
+                            <div className="flex gap-1.5 px-4 pt-3 pb-1.5 border-b border-gray-100 bg-gray-50/50">
                                 <button
-                                    type="submit"
-                                    disabled={addNote.isPending || !noteText.trim()}
-                                    className="flex-shrink-0 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-all"
+                                    type="button"
+                                    onClick={() => setComposerTab("note")}
+                                    className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                                        composerTab === "note"
+                                            ? "bg-white text-indigo-700 shadow-sm border border-gray-200"
+                                            : "text-gray-500 hover:text-gray-800"
+                                    }`}
                                 >
-                                    {addNote.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+                                    📝 Add Note
                                 </button>
-                            </form>
+                                <button
+                                    type="button"
+                                    onClick={() => setComposerTab("reminder")}
+                                    className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                                        composerTab === "reminder"
+                                            ? "bg-white text-indigo-700 shadow-sm border border-gray-200"
+                                            : "text-gray-500 hover:text-gray-800"
+                                    }`}
+                                >
+                                    ⏰ Set Reminder
+                                </button>
+                            </div>
+
+                            {composerTab === "note" ? (
+                                <div className="p-4">
+                                    <form onSubmit={handleNoteSubmit} className="flex gap-2 items-end">
+                                        <textarea
+                                            ref={noteRef}
+                                            value={noteText}
+                                            onChange={e => setNoteText(e.target.value)}
+                                            onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleNoteSubmit(e); }}
+                                            placeholder="Add a note… (Ctrl+Enter to save)"
+                                            rows={2}
+                                            className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400"
+                                        />
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            onChange={handleFileChange}
+                                            accept=".pdf,.doc,.docx,.txt"
+                                            className="hidden"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={uploadingFile}
+                                            className="flex-shrink-0 p-2 text-gray-500 hover:text-indigo-650 hover:bg-indigo-50 border border-gray-250 rounded-lg transition-all cursor-pointer"
+                                            title="Upload Resume"
+                                        >
+                                            {uploadingFile ? (
+                                                <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+                                            ) : (
+                                                <Paperclip className="h-4 w-4" />
+                                            )}
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={addNote.isPending || !noteText.trim()}
+                                            className="flex-shrink-0 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-all cursor-pointer"
+                                        >
+                                            {addNote.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+                                        </button>
+                                    </form>
+                                </div>
+                            ) : (
+                                <div className="p-4 bg-amber-50/10">
+                                    <form onSubmit={handleReminderSubmit} className="space-y-3">
+                                        <textarea
+                                            value={reminderMsg}
+                                            onChange={e => setReminderMsg(e.target.value)}
+                                            placeholder="Reminder message… (optional)"
+                                            rows={2}
+                                            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400 bg-white"
+                                        />
+                                        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                                <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">Remind me at:</span>
+                                                <input
+                                                    type="datetime-local"
+                                                    value={reminderAt}
+                                                    onChange={e => setReminderAt(e.target.value)}
+                                                    className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white cursor-pointer"
+                                                />
+                                                <button
+                                                    type="submit"
+                                                    disabled={addReminder.isPending || !reminderAt}
+                                                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-all cursor-pointer shadow-sm flex items-center gap-1.5"
+                                                    title="Save reminder"
+                                                >
+                                                    {addReminder.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "OK"}
+                                                </button>
+                                            </div>
+                                            {gcalConnected && (
+                                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={addToGcal}
+                                                        onChange={e => setAddToGcal(e.target.checked)}
+                                                        className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
+                                                    />
+                                                    <span className="flex items-center gap-1 text-xs text-gray-600 font-semibold">
+                                                        <Calendar className="h-3.5 w-3.5 text-blue-500" /> Add to GCal
+                                                    </span>
+                                                </label>
+                                            )}
+                                        </div>
+                                    </form>
+                                </div>
+                            )}
                         </div>
 
                         {/* Filter pills */}
@@ -1541,7 +1803,7 @@ export default function LeadDetail() {
                                 <p className="text-sm text-gray-400 text-center py-8">No activity yet.</p>
                             ) : (
                                 <div className="space-y-5">
-                                    {timelineGroups.map(({ key: day, items, recent }) => {
+                                    {timelineGroups.map(({ key: day, items }) => {
                                         const isOpen = expandedGroups.has(day);
                                         const toggle = () => setExpandedGroups(prev => {
                                             const next = new Set(prev);
@@ -1659,13 +1921,12 @@ export default function LeadDetail() {
                     </div>
                 </div>
 
-                {/* ── RIGHT: lead context (1/3 col, sticky on desktop) ─────── */}
-                <div className="lg:col-span-1 w-full space-y-4 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto pb-4">
+                {/* ── RIGHT: lead context (collapsible, sticky on desktop) ─────── */}
+                {showDetails && (
+                <div className="lg:col-span-1 w-full space-y-5 lg:sticky lg:top-6 self-start">
 
                     <LeadSidebar
                         lead={lead}
-                        reminders={reminders}
-                        remindersLoading={remindersLoading}
                         leadId={id}
                         hideContact
                         calls={calls}
@@ -1694,7 +1955,7 @@ export default function LeadDetail() {
                     <DealsPanel deals={leadDeals} loading={dealsLoading} onAdd={() => setShowDealModal(true)} />
 
                     {/* ── Tasks (compact count — full list is below) ───────── */}
-                    <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+                    <div className="bg-white border border-gray-200/70 rounded-2xl px-4 py-3 shadow-sm">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <CheckCircle className="h-3.5 w-3.5 text-gray-400" />
@@ -1726,7 +1987,7 @@ export default function LeadDetail() {
 
                     {/* ── Related Team Activity ────────────────────────────────── */}
                     {teamActivity.length > 0 && (
-                        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                        <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
                             <div className="flex items-center gap-1.5 mb-3">
                                 <Users className="h-3.5 w-3.5 text-gray-400" />
                                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Team Activity</h3>
@@ -1757,7 +2018,7 @@ export default function LeadDetail() {
 
                     {/* ── Active Automations ───────────────────────────────────── */}
                     {activeAutomations.length > 0 && (
-                        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                        <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
                             <div className="flex items-center gap-1.5 mb-3">
                                 <Zap className="h-3.5 w-3.5 text-violet-500" />
                                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Active Automations</h3>
@@ -1781,10 +2042,11 @@ export default function LeadDetail() {
                         </div>
                     )}
                 </div>
+                )}
             </div>
 
             {/* ── Full-width Tasks Section ───────────────────────────────────── */}
-            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="bg-white border border-gray-200/70 rounded-2xl shadow-sm overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                     <div className="flex items-center gap-3">
@@ -1832,7 +2094,6 @@ export default function LeadDetail() {
                 ) : (
                     <div className="divide-y divide-gray-50">
                         {tasks.map(task => {
-                            const isOverdue = task.status !== "COMPLETED" && new Date(task.dueDate) < new Date();
                             return (
                                 <div key={task.id} className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/70 transition-colors group">
                                     <TaskRow task={task} leadId={id} />

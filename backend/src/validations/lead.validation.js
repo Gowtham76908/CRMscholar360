@@ -3,10 +3,10 @@ const { DEPARTMENTS } = require("../config/departmentWorkflows");
 
 const getLeadsSchema = z.object({
     page: z.coerce.number().min(1).default(1),
-    // Board view needs every lead in one bulk fetch (columns are filtered client-side),
-    // so this needs a higher ceiling than the normal 20/page list — 500 covers the
-    // current seed size with headroom; raise again if the lead count grows past it.
-    limit: z.coerce.number().min(1).max(500).default(20),
+    // Board view and stage modals need larger batch fetches to show all leads at once.
+    // The limit is set to 2000 to handle large datasets while preventing memory issues.
+    // For pagination, the default of 20 per page is still used.
+    limit: z.coerce.number().min(1).max(2000).default(20),
     assignedTo: z.string().uuid().optional(),
     startDate: z.coerce.date().optional(),
     endDate: z.coerce.date().optional(),

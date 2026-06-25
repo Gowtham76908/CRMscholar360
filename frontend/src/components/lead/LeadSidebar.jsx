@@ -1,12 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import api from "../../api/axios";
 import { toast } from "sonner";
 import { getScoreStyle } from "../../utils/leadScore";
 import {
     Phone, Mail, Building2, Briefcase, Linkedin,
-    Bell, Plus, Loader2, MessageCircle, CheckCircle, XCircle,
-    ChevronDown, Sparkles, Calendar,
+    Plus, Loader2, MessageCircle, CheckCircle, XCircle,
+    ChevronDown, Sparkles,
 } from "lucide-react";
 
 // Canonical temperature styling, shared with every other lead screen.
@@ -37,20 +37,9 @@ const formatRemindAt = (dt) => {
     return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + ` ${timeStr}`;
 };
 
-export default function LeadSidebar({ lead, reminders, remindersLoading, leadId, hideContact = false, calls, notes, tasks }) {
+export default function LeadSidebar({ lead, leadId, hideContact = false, calls, notes, tasks }) {
     const queryClient = useQueryClient();
-    const [showReminderForm, setShowReminderForm] = useState(false);
-    const [reminderMsg, setReminderMsg] = useState("");
-    const [reminderAt, setReminderAt] = useState("");
-    const [addToGcal, setAddToGcal] = useState(false);
     const [scoreExpanded, setScoreExpanded] = useState(false);
-
-    const { data: gcalStatus } = useQuery({
-        queryKey: ["gcal-status"],
-        queryFn: () => api.get("/google/calendar/status").then(r => r.data),
-        staleTime: 60_000,
-    });
-    const gcalConnected = gcalStatus?.connected;
 
     const scoreConf = SCORE_CONFIG(lead.score ?? 0);
 
@@ -67,48 +56,11 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId,
         onError: () => toast.error("Failed to update WhatsApp opt-in"),
     });
 
-    const addReminder = useMutation({
-        mutationFn: (data) => api.post("/reminders", data),
-        onSuccess: async (res) => {
-            queryClient.invalidateQueries({ queryKey: ["lead-reminders", leadId] });
-            if (addToGcal && gcalConnected) {
-                try {
-                    const reminderId = res.data?.id;
-                    await api.post("/google/calendar/events", {
-                        summary: reminderMsg.trim() || "CRM Reminder",
-                        description: `Lead: ${lead?.name || leadId}`,
-                        startTime: reminderAt,
-                        reminderId,
-                        leadId,
-                    });
-                    toast.success("Reminder set & added to Google Calendar");
-                } catch {
-                    toast.success("Reminder set (Google Calendar sync failed)");
-                }
-            } else {
-                toast.success("Reminder set");
-            }
-            setShowReminderForm(false);
-            setReminderMsg("");
-            setReminderAt("");
-            setAddToGcal(false);
-        },
-    });
-
-    const handleReminderSubmit = (e) => {
-        e.preventDefault();
-        if (!reminderMsg.trim() || !reminderAt) return;
-        addReminder.mutate({ leadId, message: reminderMsg.trim(), remindAt: reminderAt });
-    };
-
-    const upcoming = (reminders || []).filter(r => !r.isSent);
-    const past     = (reminders || []).filter(r => r.isSent);
-
     return (
         <aside className="space-y-4">
             {/* Contact Details — hidden when the hero header already shows phone/email/assignee */}
             {!hideContact && (
-            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Contact</h3>
                 <ul className="space-y-2.5">
                     {lead.phone && (
@@ -181,7 +133,7 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId,
             )}
 
             {/* Lead Score */}
-            <div className={`border border-gray-200 rounded-xl p-4 shadow-sm ${scoreConf.bg}`}>
+            <div className={`border border-gray-200/70 rounded-2xl p-4 shadow-sm ${scoreConf.bg}`}>
                 <div className="flex items-center justify-between mb-2">
                     <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Lead Score</h3>
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full bg-white border ${scoreConf.text}`}>
@@ -225,7 +177,7 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId,
             </div>
 
             {/* Lead Metadata */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Details</h3>
                 <dl className="space-y-2">
                     <div className="flex justify-between text-sm">
@@ -248,91 +200,21 @@ export default function LeadSidebar({ lead, reminders, remindersLoading, leadId,
                             <dd className="font-medium text-gray-800">{relativeTime(lead.firstResponseAt)}</dd>
                         </div>
                     )}
+                    {lead.resumeUrl && (
+                        <div className="flex justify-between text-sm pt-2 border-t border-gray-100 items-center">
+                            <dt className="text-gray-500">Resume</dt>
+                            <dd className="font-medium text-indigo-600 hover:underline truncate max-w-[70%]">
+                                <a href={lead.resumeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1" title={lead.resumeName || "View Resume"}>
+                                    📄 {lead.resumeName || "View Resume"}
+                                </a>
+                            </dd>
+                        </div>
+                    )}
                 </dl>
             </div>
 
-            {/* Reminders */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Reminders</h3>
-                    <button
-                        onClick={() => setShowReminderForm(v => !v)}
-                        className="text-indigo-600 hover:text-indigo-800 transition-colors"
-                        title="Add reminder"
-                    >
-                        <Plus className="h-3.5 w-3.5" />
-                    </button>
-                </div>
-
-                {showReminderForm && (
-                    <form onSubmit={handleReminderSubmit} className="mb-3 space-y-2 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
-                        <input
-                            type="text"
-                            value={reminderMsg}
-                            onChange={e => setReminderMsg(e.target.value)}
-                            placeholder="Reminder message"
-                            className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                        />
-                        <input
-                            type="datetime-local"
-                            value={reminderAt}
-                            onChange={e => setReminderAt(e.target.value)}
-                            className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                        />
-                        {gcalConnected && (
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={addToGcal}
-                                    onChange={e => setAddToGcal(e.target.checked)}
-                                    className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
-                                />
-                                <span className="flex items-center gap-1 text-xs text-gray-600">
-                                    <Calendar className="h-3 w-3 text-blue-500" /> Add to Google Calendar
-                                </span>
-                            </label>
-                        )}
-                        <div className="flex gap-2">
-                            <button
-                                type="submit"
-                                disabled={addReminder.isPending}
-                                className="flex-1 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                            >
-                                {addReminder.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : "Set Reminder"}
-                            </button>
-                            <button type="button" onClick={() => setShowReminderForm(false)}
-                                className="px-3 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                                Cancel
-                            </button>
-                        </div>
-                    </form>
-                )}
-
-                {remindersLoading ? (
-                    <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /></div>
-                ) : upcoming.length === 0 ? (
-                    <p className="text-xs text-gray-400 text-center py-2">No upcoming reminders</p>
-                ) : (
-                    <ul className="space-y-2">
-                        {upcoming.map(r => (
-                            <li key={r.id} className="flex items-start gap-2 p-2 bg-amber-50 rounded-lg border border-amber-100">
-                                <Bell className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
-                                <div className="min-w-0">
-                                    <p className="text-xs text-gray-800 font-medium truncate">{r.message}</p>
-                                    <p className="text-[10px] text-amber-600 font-medium mt-0.5">{formatRemindAt(r.remindAt)}</p>
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-
-                {past.length > 0 && (
-                    <p className="text-[10px] text-gray-400 mt-2 text-center">{past.length} past reminder{past.length > 1 ? "s" : ""}</p>
-                )}
-            </div>
-
             {/* Quick Stats */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Quick Stats</h3>
                 <div className="grid grid-cols-3 gap-2 text-center">
                     {[

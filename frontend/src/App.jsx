@@ -15,6 +15,7 @@ import NotFound       from "./pages/NotFound";
 
 // ── Lazy: all protected pages ────────────────────────────────────────────────
 const Dashboard              = lazy(() => import("./pages/Dashboard"));
+const MyDay                  = lazy(() => import("./pages/MyDay"));
 const Team                   = lazy(() => import("./pages/Team"));
 const Tasks                  = lazy(() => import("./pages/Tasks"));
 const TaskDetail             = lazy(() => import("./pages/TaskDetail"));
@@ -88,6 +89,7 @@ function App() {
             {/* Protected routes */}
             <Route element={<ErrorBoundary><ChatProvider><AppLayout /></ChatProvider></ErrorBoundary>}>
               <Route path="/dashboard"                element={<Dashboard />} />
+              <Route path="/my-day"                   element={<MyDay />} />
               <Route path="/search-leads"             element={<SearchLeads />} />
               <Route path="/linkedin-leads"           element={<LinkedInLeads />} />
               <Route path="/kanban"                   element={<Kanban />} />

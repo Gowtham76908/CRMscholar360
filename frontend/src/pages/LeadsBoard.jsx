@@ -1,16 +1,21 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
     Building2, Loader2, Mail, Phone, Globe, Tag, Calendar,
-    ClipboardList, ChevronLeft, ChevronRight, X,
+    ClipboardList, ChevronLeft, ChevronRight, X, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useWorkflows, useDepartmentBoard } from "../hooks/useDepartments";
-import { DEPARTMENT_ORDER, departmentLabel, departmentStyle } from "../lib/departments";
+import { DEPARTMENT_ORDER, departmentLabel } from "../lib/departments";
 import { getCategoryFromScore, getSLAStatus } from "../utils/leadScore";
 import Avatar from "../components/Avatar";
 
 const PER_STAGE = 10;
+
+const fmtDate = (d) => {
+    if (!d) return "—";
+    return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+};
 
 const STAGE_THEME = {
     // Lead Intake
@@ -69,7 +74,15 @@ function getPageButtons(current, total) {
  * moving a lead's stage happens from Lead Detail. Cards are plain links, except
  * the task preview chip which opens a read-only popup.
  */
-export default function LeadsBoard({ search = "", mine = false, initialDepartment, slaWarningDays = 3, slaBreachDays = 7 }) {
+export default function LeadsBoard({
+    search = "",
+    mine = false,
+    initialDepartment,
+    slaWarningDays = 3,
+    slaBreachDays = 7,
+    boardControlsExpanded = false,
+    setBoardControlsExpanded,
+}) {
     const { user } = useAuth();
     const { getStages, hasWorkflow, isLoading: workflowsLoading } = useWorkflows();
 
@@ -82,18 +95,20 @@ export default function LeadsBoard({ search = "", mine = false, initialDepartmen
     const [page, setPage] = useState(1);
     const [previewTask, setPreviewTask] = useState(null);
 
-    // Apply the Leads page's department filter once, the first time the category
-    // list resolves — afterwards the tabs are user-controlled.
-    const appliedInitial = useRef(false);
-    useEffect(() => {
-        if (appliedInitial.current || !categories.length) return;
-        if (initialDepartment && categories.includes(initialDepartment)) {
-            setDepartment(initialDepartment);
-        } else if (!department) {
-            setDepartment(categories[0]);
-        }
-        appliedInitial.current = true;
-    }, [initialDepartment, categories, department]);
+    // Auto-initialize department when categories load
+    if (!department && categories.length > 0) {
+        const defaultDept = initialDepartment && categories.includes(initialDepartment) ? initialDepartment : categories[0];
+        setDepartment(defaultDept);
+    }
+
+    // Reset page to 1 if search/mine filters change
+    const [prevSearch, setPrevSearch] = useState(search);
+    const [prevMine, setPrevMine] = useState(mine);
+    if (search !== prevSearch || mine !== prevMine) {
+        setPrevSearch(search);
+        setPrevMine(mine);
+        setPage(1);
+    }
 
     // Changing tabs starts back at page 1.
     const changeDepartment = (d) => { setDepartment(d); setPage(1); };
@@ -103,10 +118,7 @@ export default function LeadsBoard({ search = "", mine = false, initialDepartmen
         if (search) f.search = search;
         if (mine && user?.id) f.assignedEmployeeId = user.id;
         return f;
-    }, [search, mine, user?.id]);
-
-    // Reset to page 1 whenever the filters change underneath the current page.
-    useEffect(() => { setPage(1); }, [filters.search, filters.assignedEmployeeId, department]);
+    }, [search, mine, user]);
 
     const { data, isLoading, isFetching } = useDepartmentBoard(department, filters, page, PER_STAGE);
     // Already split server-side, one entry per stage: { [stageCode]: { rows, total, totalPages } }.
@@ -122,23 +134,35 @@ export default function LeadsBoard({ search = "", mine = false, initialDepartmen
 
     return (
         <div className="space-y-4">
-            {/* Category tabs */}
-            <div className="flex flex-wrap items-center gap-2 bg-slate-100/85 backdrop-blur-md border border-slate-200/60 p-1.5 rounded-full w-fit shadow-inner">
-                {categories.map((d) => (
-                    <button
-                        key={d}
-                        onClick={() => changeDepartment(d)}
-                        className={`px-5 py-2 rounded-full text-xs font-bold transition-all duration-300 relative ${
-                            department === d 
-                                ? "bg-indigo-600 text-white shadow-md shadow-indigo-200/50 scale-[1.03]" 
-                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
-                        }`}
-                    >
-                        {departmentLabel(d)}
-                    </button>
-                ))}
-            </div>
+            {/* Category tabs & Toggle Controls Button */}
+            <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+                <div className="flex flex-wrap items-center gap-2 bg-slate-100/85 backdrop-blur-md border border-slate-200/60 p-1.5 rounded-full w-fit shadow-inner">
+                    {categories.map((d) => (
+                        <button
+                            key={d}
+                            onClick={() => changeDepartment(d)}
+                            className={`px-5 py-2 rounded-full text-xs font-bold transition-all duration-300 relative cursor-pointer ${
+                                department === d 
+                                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-200/50 scale-[1.03]" 
+                                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
+                            }`}
+                        >
+                            {departmentLabel(d)}
+                        </button>
+                    ))}
+                </div>
 
+                {setBoardControlsExpanded && (
+                    <button
+                        onClick={() => setBoardControlsExpanded(!boardControlsExpanded)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-800 transition-all shadow-sm text-xs font-bold cursor-pointer font-sans"
+                        title={boardControlsExpanded ? "Hide filters & actions" : "Show filters & actions"}
+                    >
+                        {boardControlsExpanded ? "Hide Filters & Actions" : "Show Filters & Actions"}
+                        <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${boardControlsExpanded ? "rotate-180" : ""}`} />
+                    </button>
+                )}
+            </div>
             {stages.length === 0 ? (
                 <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-sm text-slate-500 shadow-sm">
                     <Building2 className="h-8 w-8 text-slate-300 mx-auto mb-3" />
@@ -215,7 +239,7 @@ function StageColumn({ stage, rows, totalInStage, slaWarningDays, slaBreachDays,
     const theme = STAGE_THEME[stage.code] || { border: "border-t-indigo-500" };
 
     return (
-        <div className={`w-80 min-w-[320px] flex-shrink-0 flex flex-col bg-slate-50/60 backdrop-blur-md rounded-2xl border border-slate-200/50 overflow-hidden shadow-sm hover:shadow-md hover:border-slate-300/60 transition-all duration-300 border-t-4 ${theme.border}`}>
+        <div className={`w-[370px] min-w-[370px] flex-shrink-0 flex flex-col bg-slate-50/60 backdrop-blur-md rounded-2xl border border-slate-200/50 overflow-hidden shadow-sm hover:shadow-md hover:border-slate-300/60 transition-all duration-300 border-t-4 ${theme.border}`}>
             {/* Column Header */}
             <div className="px-4 py-3.5 flex items-center justify-between border-b border-slate-200/40 bg-white/95 backdrop-blur-md sticky top-0 z-10">
                 <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border whitespace-nowrap shadow-sm ${stageColor(stage.code)}`}>
@@ -288,7 +312,7 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
     return (
         <Link
             to={`/leads/${lead.id}`}
-            className={`group block bg-white rounded-2xl border transition-all duration-355 p-4 relative overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-indigo-400/80 ${
+            className={`group block bg-white rounded-2xl border transition-all duration-355 p-5 relative overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-indigo-400/80 ${
                 sla?.level === "breach" 
                     ? "border-red-200 bg-gradient-to-br from-white to-red-50/5 border-l-4 border-l-red-500" 
                     : sla?.level === "warning"
@@ -298,11 +322,11 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
         >
             {/* Row 1 — name + SLA badge */}
             <div className="flex items-start justify-between gap-2">
-                <span className="font-bold text-sm text-slate-800 truncate group-hover:text-indigo-650 transition-colors">
+                <span className="font-bold text-base text-slate-800 truncate group-hover:text-indigo-650 transition-colors">
                     {lead.name}
                 </span>
                 {sla && (
-                    <span className={`flex-shrink-0 text-[9px] font-extrabold px-2.5 py-0.5 rounded-full border shadow-sm ${
+                    <span className={`flex-shrink-0 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border shadow-sm ${
                         sla.level === "breach" 
                             ? "bg-red-100/80 text-red-700 border-red-200" 
                             : "bg-amber-100/80 text-amber-700 border-amber-200"
@@ -313,55 +337,55 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
             </div>
 
             {/* Row 2 — contact (phone + email, both when available) */}
-            <div className="mt-2.5 space-y-1.5">
+            <div className="mt-3.5 space-y-2">
                 {lead.phone && (
-                    <p className="flex items-center gap-2 text-xs text-slate-500 truncate font-semibold hover:text-slate-800 transition-colors">
-                        <Phone className="h-3.5 w-3.5 text-slate-450 shrink-0" /> {lead.phone}
+                    <p className="flex items-center gap-2 text-sm text-slate-500 truncate font-semibold hover:text-slate-800 transition-colors">
+                        <Phone className="h-4 w-4 text-slate-450 shrink-0" /> {lead.phone}
                     </p>
                 )}
                 {lead.email && (
-                    <p className="flex items-center gap-2 text-xs text-slate-500 truncate font-semibold hover:text-slate-800 transition-colors">
-                        <Mail className="h-3.5 w-3.5 text-slate-450 shrink-0" /> {lead.email}
+                    <p className="flex items-center gap-2 text-sm text-slate-500 truncate font-semibold hover:text-slate-800 transition-colors">
+                        <Mail className="h-4 w-4 text-slate-450 shrink-0" /> {lead.email}
                     </p>
                 )}
             </div>
 
             {/* Row 3 — source + enquiry type */}
             {(lead.source || lead.enquiryType) && (
-                <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+                <div className="mt-4 flex items-center gap-2 flex-wrap">
                     {lead.source && (
-                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/40">
-                            <Globe className="h-2.5 w-2.5 shrink-0 text-slate-400" /> {lead.source.toLowerCase().replace(/_/g, " ")}
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200/40">
+                            <Globe className="h-3.5 w-3.5 shrink-0 text-slate-400" /> {lead.source.toLowerCase().replace(/_/g, " ")}
                         </span>
                     )}
                     {lead.enquiryType && (
-                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-50/70 text-indigo-750 border border-indigo-100/30">
-                            <Tag className="h-2.5 w-2.5 shrink-0 text-indigo-400" /> {lead.enquiryType.toLowerCase().replace(/_/g, " ")}
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full bg-indigo-50/70 text-indigo-750 border border-indigo-100/30">
+                            <Tag className="h-3.5 w-3.5 shrink-0 text-indigo-400" /> {lead.enquiryType.toLowerCase().replace(/_/g, " ")}
                         </span>
                     )}
                 </div>
             )}
 
             {/* Row 4 — last activity */}
-            <div className="mt-3.5 flex items-center gap-1.5 text-[10px] text-slate-450 font-semibold">
+            <div className="mt-4 flex items-center gap-2 text-xs text-slate-450 font-semibold">
                 <Calendar className="h-3.5 w-3.5 text-slate-350" />
                 <span>Active {formatLastUpdated(lead.updatedAt)}</span>
             </div>
 
             {/* Row 5 — footer */}
-            <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-3.5">
-                <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border shadow-sm ${categoryColors[category] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+            <div className="flex items-center justify-between border-t border-slate-100 pt-3.5 mt-4">
+                <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border shadow-sm ${categoryColors[category] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
                     {category} · {lead.score ?? 0}
                 </span>
                 {row.assignedEmployee ? (
-                    <div className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/50 pl-1 pr-2.5 py-0.5 rounded-full shadow-sm max-w-[140px] transition-colors duration-200" title={row.assignedEmployee.name}>
-                        <Avatar user={row.assignedEmployee} size="xs" className="w-5 h-5 ring-2 ring-white" />
+                    <div className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200/50 pl-1 pr-3 py-1 rounded-full shadow-sm max-w-[160px] transition-colors duration-200" title={row.assignedEmployee.name}>
+                        <Avatar user={row.assignedEmployee} size="xs" className="w-5.5 h-5.5 ring-2 ring-white" />
                         <span className="text-[10px] text-slate-655 font-bold truncate">
                             {row.assignedEmployee.name.split(" ")[0]}
                         </span>
                     </div>
                 ) : (
-                    <span className="text-[10px] text-slate-400 font-bold bg-slate-50 border border-slate-200/40 px-2.5 py-0.5 rounded-full shadow-sm" title="Unassigned">
+                    <span className="text-[10px] text-slate-400 font-bold bg-slate-50 border border-slate-200/40 px-2.5 py-1 rounded-full shadow-sm" title="Unassigned">
                         Unassigned
                     </span>
                 )}
@@ -371,9 +395,9 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
             {task && (
                 <button
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPreviewTask(task); }}
-                    className="mt-3 w-full flex items-center gap-2 text-[10px] text-left px-2.5 py-2 rounded-xl bg-slate-50 hover:bg-indigo-50/60 border border-slate-200/40 hover:border-indigo-150/40 text-slate-600 hover:text-indigo-700 transition-all duration-200 font-bold"
+                    className="mt-3.5 w-full flex items-center gap-2.5 text-[10px] text-left px-3 py-2.5 rounded-xl bg-slate-50 hover:bg-indigo-50/60 border border-slate-200/40 hover:border-indigo-150/40 text-slate-600 hover:text-indigo-700 transition-all duration-200 font-bold"
                 >
-                    <ClipboardList className="h-3.5 w-3.5 shrink-0 text-slate-455 group-hover:text-indigo-400" />
+                    <ClipboardList className="h-4 w-4 shrink-0 text-slate-455 group-hover:text-indigo-400" />
                     <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${TASK_STATUS_DOT[task.status] || "bg-gray-400"}`} />
                     <span className="truncate flex-1 font-semibold">{task.title}</span>
                 </button>

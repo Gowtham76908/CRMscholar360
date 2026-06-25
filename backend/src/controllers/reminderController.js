@@ -21,6 +21,19 @@ const createReminder = async (req, res, next) => {
             }
         });
 
+        // Log Activity
+        const logActivity = require("../utils/activityLogger");
+        await logActivity({
+            leadId,
+            userId,
+            action: "REMINDER_SET",
+            metadata: {
+                message,
+                remindAt: when,
+                addToGcal: req.body.addToGcal || false
+            }
+        });
+
         res.status(201).json(reminder);
     } catch (error) {
         return next(error);

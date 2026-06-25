@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -32,6 +32,11 @@ export default function DepartmentBoard() {
     const { user } = useAuth();
     const isManager = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
     const qc = useQueryClient();
+    const location = useLocation();
+
+    useEffect(() => {
+        localStorage.setItem("last-leads-path", location.pathname + location.search);
+    }, [location]);
 
     const { department, setDepartment, options, isLoading: deptsLoading } = useDepartmentSelection();
     const { getStages, stageLabel } = useWorkflows();

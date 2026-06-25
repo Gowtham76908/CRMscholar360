@@ -130,6 +130,8 @@ model Lead {
   company         String?
   biodata         String?
   customFields    Json?
+  resumeUrl       String?
+  resumeName      String?
   activities      Activity[]
   callLogs        CallLog[]
   fasterqCalls    FasterqCall[]
@@ -1097,4 +1099,21 @@ model ChatMessage {
   @@index([channelId, createdAt])
   @@index([authorId])
   @@index([parentId])
+}
+
+model Country {
+  id           String       @id @default(uuid())
+  name         String       @unique
+  universities University[]
+  createdAt    DateTime     @default(now())
+}
+
+model University {
+  id        String   @id @default(uuid())
+  name      String
+  countryId String
+  country   Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([name, countryId])
 }

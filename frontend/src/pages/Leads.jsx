@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { Search, Filter, Edit, Plus, Upload, Phone, PhoneCall, Play, Pause, SearchCheck, Users, History, Mail, ChevronLeft, ChevronRight as ChevronRightIcon, LayoutGrid, List, Kanban, X, SlidersHorizontal, AlertTriangle, ChevronDown, User, Calendar, Star, Tag, Globe, CheckCircle2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -100,6 +100,12 @@ function DeptChips({ leadDepartments = [], stageLabel, max = 2 }) {
 
 const Leads = () => {
     const [searchParams, setSearchParams] = useSearchParams();
+    const location = useLocation();
+    const [boardControlsExpanded, setBoardControlsExpanded] = useState(false);
+
+    useEffect(() => {
+        localStorage.setItem("last-leads-path", location.pathname + location.search);
+    }, [location]);
 
     const activeTab    = searchParams.get("tab")         || "leads";
     const searchTerm   = searchParams.get("search")      || "";
@@ -279,7 +285,7 @@ const Leads = () => {
     // Bulk Actions
     const [selectedLeads, setSelectedLeads] = useState([]);
 
-    const handleSelectAll = (e) => {
+    const _handleSelectAll = (e) => {
         if (e.target.checked) {
             setSelectedLeads(leads.map(l => l.id));
         } else {
@@ -287,7 +293,7 @@ const Leads = () => {
         }
     };
 
-    const handleSelectOne = (id) => {
+    const _handleSelectOne = (id) => {
         if (selectedLeads.includes(id)) {
             setSelectedLeads(selectedLeads.filter(l => l !== id));
         } else {
@@ -355,37 +361,57 @@ const Leads = () => {
         return <LeadsSkeleton />;
     }
 
+    const showControls = !isBoardView || boardControlsExpanded;
+
     return (
         <>
         <div className="space-y-5">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
+            {isBoardView && boardControlsExpanded && (
+                <div className="flex items-center justify-between bg-white border border-gray-200 rounded-2xl px-5 py-3.5 shadow-sm">
                     <div className="flex items-center gap-2">
-                        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Leads</h1>
+                        <h1 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
+                            <Users className="h-5 w-5 text-indigo-650" /> Leads Board
+                        </h1>
                         {isFetching && !isLoading && <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />}
                     </div>
-                    <p className="text-sm text-gray-500">{meta.total} leads · Manage your pipeline</p>
                 </div>
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => setIsImportModalOpen(true)}
-                        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                    >
-                        <Upload className="h-4 w-4 mr-2" />
-                        Import File
-                    </button>
-                    <button
-                        onClick={() => setIsAddModalOpen(true)}
-                        className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                    >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Lead
-                    </button>
+            )}
+
+            {showControls && (
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                        {!isBoardView && (
+                            <>
+                                <div className="flex items-center gap-2">
+                                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Leads</h1>
+                                    {isFetching && !isLoading && <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />}
+                                </div>
+                                <p className="text-sm text-gray-500">{meta.total} leads · Manage your pipeline</p>
+                            </>
+                        )}
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setIsImportModalOpen(true)}
+                            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-55 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Import File
+                        </button>
+                        <button
+                            onClick={() => setIsAddModalOpen(true)}
+                            className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Lead
+                        </button>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Tabs */}
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+            {showControls && (
+                <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
                 <button
                     onClick={() => { setActiveTab("leads"); setSearchTerm(""); setSelectedLeads([]); setPage(1); }}
                     className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
@@ -419,9 +445,11 @@ const Leads = () => {
                     </span>
                 </button>
             </div>
+            )}
 
             {/* Search + Filter bar */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            {showControls && (
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 {/* Top row: search + filter toggle */}
                 <div className="flex items-center gap-3 p-3">
                     <div className="relative flex-1">
@@ -592,6 +620,7 @@ const Leads = () => {
                     </div>
                 )}
             </div>
+            )}
 
             {/* Bulk Action Bar */}
             {selectedLeads.length > 0 && (
@@ -621,7 +650,8 @@ const Leads = () => {
             )}
 
             {/* View toggle + lead count */}
-            <div className="flex items-center justify-between flex-wrap gap-4">
+            {showControls && (
+                <div className="flex items-center justify-between flex-wrap gap-4">
                 <p className="text-sm text-gray-500">
                     {isBoardView
                         ? "Click a card to open the lead"
@@ -665,6 +695,7 @@ const Leads = () => {
                     </div>
                 </div>
             </div>
+            )}
 
             {/* Board view — read-only, category-scoped, server-paginated per department
                 (see useDepartmentBoard) so it loads quickly regardless of department size.
@@ -676,6 +707,8 @@ const Leads = () => {
                     initialDepartment={departmentFilter || undefined}
                     slaWarningDays={slaWarningDays}
                     slaBreachDays={slaBreachDays}
+                    boardControlsExpanded={boardControlsExpanded}
+                    setBoardControlsExpanded={setBoardControlsExpanded}
                 />
             ) : viewMode === "grid" ? (
                 <div className={`grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 transition-opacity duration-150 ${isFetching && !isLoading ? "opacity-60" : ""}`}>

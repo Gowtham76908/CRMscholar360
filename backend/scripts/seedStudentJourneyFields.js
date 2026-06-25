@@ -8,7 +8,11 @@ const STUDENT_JOURNEY_FIELDS = [
     { fieldKey: "ielts_toefl_score",         name: "IELTS/TOEFL Score",         type: "TEXT",     order: 20 },
     { fieldKey: "academic_gpa",              name: "Academic GPA",              type: "TEXT",     order: 21 },
     { fieldKey: "backlogs",                  name: "Backlogs",                  type: "NUMBER",   order: 22 },
-    { fieldKey: "target_universities",       name: "Target Universities Chosen", type: "TEXT",     order: 23 },
+    { fieldKey: "univ_country",              name: "University Country",        type: "TEXT",     order: 23 },
+    { fieldKey: "univ_name",                 name: "University Name",           type: "TEXT",     order: 23.1 },
+    { fieldKey: "univ_course",               name: "Course",                    type: "TEXT",     order: 23.2 },
+    { fieldKey: "univ_link",                 name: "University Link",           type: "TEXT",     order: 23.3 },
+    { fieldKey: "shortlisted_universities",  name: "Shortlisted Universities",  type: "JSON",     order: 23.4, visible: false },
     { fieldKey: "sop_status",                name: "SOP Status",                type: "SELECT",   options: ["Pending", "Uploaded"], order: 24 },
     { fieldKey: "lor_status",                name: "LOR Status",                type: "SELECT",   options: ["Pending", "Uploaded"], order: 25 },
     { fieldKey: "transcripts_status",        name: "Transcripts Status",        type: "SELECT",   options: ["Pending", "Uploaded"], order: 26 },
@@ -48,7 +52,7 @@ async function main() {
                     options: f.options ? f.options : null,
                     order: f.order,
                     isSystem: false,
-                    visible: true,
+                    visible: f.visible !== undefined ? f.visible : true,
                 }
             });
             console.log(`  Updated field: ${f.fieldKey}`);
@@ -61,7 +65,7 @@ async function main() {
                     type: f.type,
                     options: f.options ? f.options : null,
                     required: false,
-                    visible: true,
+                    visible: f.visible !== undefined ? f.visible : true,
                     isSystem: false,
                     order: f.order,
                 }
