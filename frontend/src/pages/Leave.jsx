@@ -100,7 +100,7 @@ const Leave = () => {
                 </div>
 
                 {/* Pending Approvals (Admin Only) */}
-                {user?.role === "SUPER_ADMIN" || user?.role === "ADMIN" && pendingLeaves.length > 0 && (
+                {(user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") && pendingLeaves.length > 0 && (
                     <div className="bg-white rounded-xl shadow-lg overflow-hidden">
                         <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50">
                             <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">

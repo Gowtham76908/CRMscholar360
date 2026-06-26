@@ -8,7 +8,9 @@
       "Bash(node --check scripts/seedAttendance.js)",
       "Bash(node scripts/seedAttendance.js)",
       "Bash(node -e ' *)",
-      "Bash(node --check src/services/leadDepartmentService.js)"
+      "Bash(node --check src/services/leadDepartmentService.js)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); console.log\\('DB:', \\(process.env.DATABASE_URL||'NONE'\\).slice\\(0,25\\)\\)\")",
+      "Bash(node /private/tmp/claude-501/-Users-kishore-CRMscholar360/a7543dbb-0546-463f-9afe-3db5132185ed/scratchpad/testjob.js)"
     ]
   }
 }

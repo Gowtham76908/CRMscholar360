@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
-import { Loader2, Trash2, Power, UserPlus, Shield, ToggleLeft, ToggleRight, Edit, Mail, Building } from "lucide-react";
+import { Loader2, Trash2, Power, UserPlus, Shield, ToggleLeft, ToggleRight, Edit, Mail, Building, Search } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import Dialog from "../components/ui/Dialog";
@@ -23,6 +23,7 @@ const Team = () => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+    const [search, setSearch] = useState("");
     const isAdmin = currentUser?.role === "SUPER_ADMIN";
 
     const { data: team, isLoading, error: teamError } = useQuery({
@@ -49,6 +50,16 @@ const Team = () => {
         onError: (err) => toast.error(err.response?.data?.message || "Failed to delete user"),
     });
 
+    const filteredTeam = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return team || [];
+        return (team || []).filter(m =>
+            m.name?.toLowerCase().includes(q) ||
+            m.email?.toLowerCase().includes(q) ||
+            m.department?.toLowerCase().includes(q)
+        );
+    }, [team, search]);
+
     if (!isAdmin) return (
         <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
@@ -65,6 +76,7 @@ const Team = () => {
     const active = team?.filter(m => m.isActive).length ?? 0;
     const admins = team?.filter(m => ["ADMIN","SUPER_ADMIN"].includes(m.role)).length ?? 0;
 
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -73,18 +85,36 @@ const Team = () => {
                     <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Team</h1>
                     <p className="text-sm text-gray-500">{team?.length ?? 0} members · {active} active · {admins} admins</p>
                 </div>
-                <button
-                    onClick={() => setIsAddModalOpen(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors"
-                >
-                    <UserPlus className="h-4 w-4" />
-                    Add Member
-                </button>
+                <div className="flex items-center gap-2">
+                    {/* Search */}
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                        <input
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder="Search members…"
+                            className="h-9 pl-9 pr-3 text-xs w-48 sm:w-56 rounded-xl border border-gray-200 bg-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none placeholder:text-gray-400"
+                        />
+                    </div>
+                    <button
+                        onClick={() => setIsAddModalOpen(true)}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors"
+                    >
+                        <UserPlus className="h-4 w-4" />
+                        Add Member
+                    </button>
+                </div>
             </div>
 
             {/* Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                {team?.map((member) => (
+                {filteredTeam.length === 0 && search && (
+                    <div className="col-span-full py-12 text-center">
+                        <Search className="h-6 w-6 text-gray-300 mx-auto mb-2" />
+                        <p className="text-sm text-gray-400">No members match "{search}"</p>
+                    </div>
+                )}
+                {filteredTeam.map((member) => (
                     <div
                         key={member.id}
                         className={cn(
@@ -101,7 +131,9 @@ const Team = () => {
                                 </div>
                                 <span className={cn(
                                     "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white",
-                                    member.isActive ? "bg-emerald-400" : "bg-gray-300"
+                                    !member.isActive ? "bg-gray-300" :
+                                    member.onlineStatus === "ONLINE" ? "bg-emerald-500" :
+                                    member.onlineStatus === "BREAK" ? "bg-amber-500" : "bg-zinc-400"
                                 )} />
                             </div>
                             <div className="min-w-0 flex-1">

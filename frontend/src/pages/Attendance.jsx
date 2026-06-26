@@ -197,9 +197,23 @@ const CheckInPanel = () => {
     const [isGettingLocation, setIsGettingLocation] = useState(false);
     const [workDuration, setWorkDuration] = useState("00h 00m 00s");
 
+    const { data: companySettings } = useQuery({
+        queryKey: ["company-settings"],
+        queryFn: async () => (await api.get("/company-settings")).data,
+    });
+
+    // Mirrors the server-side deadline (companySettingsController). When the deadline
+    // is disabled, check-in is always allowed. Weekday vs Sunday cutoff in IST "HH:MM".
     const isCheckInAllowed = () => {
+        const s = companySettings;
+        if (s && s.attendanceDeadlineEnabled === false) return true;
         const t = currentTime;
-        return (t.getHours() * 60 + t.getMinutes()) <= (11 * 60 + 50);
+        const isSunday = t.getDay() === 0;
+        const cutoff = isSunday
+            ? (s?.attendanceDeadlineSunday || "12:30")
+            : (s?.attendanceDeadlineWeekday || "11:50");
+        const [hh, mm] = String(cutoff).split(":").map(Number);
+        return (t.getHours() * 60 + t.getMinutes()) <= ((hh || 0) * 60 + (mm || 0));
     };
 
     useEffect(() => {

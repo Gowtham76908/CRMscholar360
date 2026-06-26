@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Users, Loader2, ShieldCheck } from "lucide-react";
+import { Users, Loader2, ShieldCheck, Search } from "lucide-react";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import { departmentLabel, DEPARTMENT_ORDER } from "../lib/departments";
@@ -15,6 +15,7 @@ export default function DepartmentStaffing() {
     const { user } = useAuth();
     const qc = useQueryClient();
     const [roleTab, setRoleTab] = useState("all"); // "all", "SUPER_ADMIN", "ADMIN", "EMPLOYEE"
+    const [search, setSearch] = useState("");
 
     // Use /team endpoint to fetch the updated user and member list
     const { data: users = [], isLoading: usersLoading } = useQuery({
@@ -56,11 +57,15 @@ export default function DepartmentStaffing() {
         onError: (e) => toast.error(e.response?.data?.error?.message || "Could not update membership"),
     });
 
-    // Filter users list based on selected role tab
+    // Filter users list based on selected role tab and name search
     const filteredUsers = useMemo(() => {
-        if (roleTab === "all") return users;
-        return users.filter((u) => u.role === roleTab);
-    }, [users, roleTab]);
+        const q = search.trim().toLowerCase();
+        return users.filter((u) => {
+            const matchRole = roleTab === "all" || u.role === roleTab;
+            const matchSearch = !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
+            return matchRole && matchSearch;
+        });
+    }, [users, roleTab, search]);
 
     if (user?.role !== "SUPER_ADMIN") {
         return (
@@ -75,9 +80,21 @@ export default function DepartmentStaffing() {
 
     return (
         <div className="max-w-6xl mx-auto px-4 py-6">
-            <div className="flex items-center gap-2 mb-1">
-                <Users className="h-5 w-5 text-indigo-600" />
-                <h1 className="text-xl font-bold text-gray-900">Department Staffing</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-1">
+                <div className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-indigo-600" />
+                    <h1 className="text-xl font-bold text-gray-900">Department Staffing</h1>
+                </div>
+                {/* Search */}
+                <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    <input
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder="Search by name or email…"
+                        className="w-full h-9 pl-9 pr-3 text-xs rounded-xl border border-gray-200 bg-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none placeholder:text-gray-400"
+                    />
+                </div>
             </div>
             <p className="text-sm text-gray-500 mb-5">Assign users to departments. Membership controls visibility and who can be assigned services.</p>
 

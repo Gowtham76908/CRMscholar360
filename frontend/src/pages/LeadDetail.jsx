@@ -1626,6 +1626,16 @@ export default function LeadDetail() {
                                     </span>
                                 )}
                             </div>
+
+                            {/* Available at every stage: opens this lead's invoice if one
+                                exists, otherwise creates a new one linked to the lead. */}
+                            <button
+                                onClick={() => navigate(`/invoices?leadId=${id}&invoiceForLead=1`)}
+                                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                            >
+                                <IndianRupee className="h-3.5 w-3.5" />
+                                Create / Update Invoice
+                            </button>
                         </div>
                     </div>
 
@@ -2152,6 +2162,7 @@ export default function LeadDetail() {
                                 queryClient.invalidateQueries({ queryKey: ["lead", id] });
                                 queryClient.invalidateQueries({ queryKey: ["lead-departments", id] });
                                 queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
+                                queryClient.invalidateQueries({ queryKey: ["lead-notes", id] });
                             }}
                         />
                     )}

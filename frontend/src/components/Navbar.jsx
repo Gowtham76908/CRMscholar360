@@ -67,16 +67,20 @@ const Navbar = ({ onMenuClick }) => {
                         </button>
 
                         {profileOpen && (
-                            <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
-                                {/* User info */}
-                                <div className="px-4 py-2 border-b border-gray-100 mb-1">
-                                    <p className="text-sm font-semibold text-gray-900 truncate">{user?.name}</p>
-                                    <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                            <div className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-xl border border-gray-100/80 py-0 z-50 overflow-hidden ring-1 ring-black/5">
+                                {/* User header card with subtle gradient background */}
+                                <div className="px-4.5 py-4 border-b border-gray-100 bg-gradient-to-br from-indigo-50/30 via-white to-white flex items-center gap-3">
+                                    <Avatar user={user} size="sm" />
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-bold text-gray-900 truncate leading-none mb-1">{user?.name}</p>
+                                        <p className="text-[10px] font-black text-indigo-600 uppercase tracking-wider leading-none mb-1">{user?.role ? roleLabel(user.role) : "Role"}</p>
+                                        <p className="text-[10px] text-gray-400 truncate leading-none">{user?.email}</p>
+                                    </div>
                                 </div>
 
                                 {/* Status selector */}
-                                <div className="px-4 py-2">
-                                    <p className="text-xs text-gray-400 mb-1.5 font-medium uppercase tracking-wide">Presence</p>
+                                <div className="px-4.5 py-3 border-b border-gray-100/80">
+                                    <p className="text-[10px] text-gray-400 mb-2 font-bold uppercase tracking-wider">Presence Status</p>
                                     <StatusSelector
                                         currentStatus={onlineStatus}
                                         onSelect={(s) => { updateStatus(s); setProfileOpen(false); }}
@@ -84,18 +88,18 @@ const Navbar = ({ onMenuClick }) => {
                                     />
                                 </div>
 
-                                <div className="border-t border-gray-100 mt-1 pt-1">
+                                <div className="p-1.5 space-y-0.5">
                                     <Link
                                         to="/settings"
                                         onClick={() => setProfileOpen(false)}
-                                        className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                        className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
                                     >
                                         <Settings className="h-4 w-4 text-gray-400" />
                                         Settings
                                     </Link>
                                     <button
                                         onClick={() => { setProfileOpen(false); logout(); }}
-                                        className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50/60 rounded-xl transition-colors"
                                     >
                                         <LogOut className="h-4 w-4 text-red-400" />
                                         Logout

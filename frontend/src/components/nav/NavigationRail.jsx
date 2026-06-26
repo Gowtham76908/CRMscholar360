@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { LayoutDashboard, Users, MessageSquare, Zap, BarChart, Settings2, Command } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import Avatar from "../Avatar";
@@ -79,23 +79,27 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
     const isManager = isSuperAdmin || user?.role === "ADMIN" || user?.role === "TEAM_LEADER";
     const activeMode = getModeFromPath(location.pathname);
 
-    // The Admin mode is shown to managers and team leaders too; AdminPanel gates individual links
-    // so managers/team leaders only see what they're allowed to manage.
-    const visibleModes = MODES.filter(m => !m.adminOnly || isManager);
+    // The Admin mode is shown to everyone; AdminPanel gates individual links
+    // so managers/employees only see what they have access to.
+    const visibleModes = MODES.filter(m => !m.adminOnly || isManager || m.id === "admin");
 
-    // Keyboard shortcuts 1–5 for mode switching
+    // Keyboard shortcuts for mode switching
     useEffect(() => {
         const handle = (e) => {
             if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.metaKey || e.ctrlKey) return;
             const idx = parseInt(e.key) - 1;
             if (idx >= 0 && idx < visibleModes.length) {
                 const mode = visibleModes[idx];
-                onModeClick(mode.id, mode.defaultPath);
+                let path = mode.defaultPath;
+                if (mode.id === "admin" && user?.role === "EMPLOYEE") {
+                    path = "/attendance";
+                }
+                onModeClick(mode.id, path);
             }
         };
         window.addEventListener("keydown", handle);
         return () => window.removeEventListener("keydown", handle);
-    }, [visibleModes, onModeClick]);
+    }, [visibleModes, onModeClick, user]);
 
     return (
         <aside className="fixed inset-y-0 left-0 z-30 w-14 bg-white border-r border-gray-200 hidden md:flex flex-col items-center py-3">
@@ -121,8 +125,14 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
                     return (
                         <button
                             key={mode.id}
-                            onClick={() => onModeClick(mode.id, mode.defaultPath)}
-                            title={`${mode.label} (${mode.shortcut})`}
+                            onClick={() => {
+                                let path = mode.defaultPath;
+                                if (mode.id === "admin" && user?.role === "EMPLOYEE") {
+                                    path = "/attendance";
+                                }
+                                onModeClick(mode.id, path);
+                            }}
+                            title={`${mode.id === "admin" && user?.role === "EMPLOYEE" ? "Settings" : mode.label} (${mode.shortcut})`}
                             className={cn(
                                 "relative w-full flex items-center justify-center p-2.5 rounded-xl transition-all duration-150",
                                 isActive

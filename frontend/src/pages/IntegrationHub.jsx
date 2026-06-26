@@ -379,7 +379,7 @@ function CopyButton({ text }) {
     const [copied, setCopied] = useState(false);
     return (
         <button onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-            className="flex items-center gap-1 text-[11px] font-medium text-zinc-500 hover:text-orange-600 transition-colors">
+            className="flex items-center gap-1 text-[11px] font-medium text-zinc-500 hover:text-violet-600 transition-colors">
             {copied ? <CheckCheck size={12} className="text-emerald-500" /> : <Copy size={12} />}
             {copied ? "Copied" : "Copy"}
         </button>
@@ -548,7 +548,7 @@ function ConnectionHealth({ integrations, onScrollToCard }) {
                                 <span className="text-xs text-zinc-600">{a.msg}</span>
                             </div>
                             <button onClick={() => onScrollToCard(a.platform)}
-                                className="text-[10px] font-semibold text-zinc-400 hover:text-orange-500 transition-colors shrink-0 mt-0.5">
+                                className="text-[10px] font-semibold text-zinc-400 hover:text-violet-500 transition-colors shrink-0 mt-0.5">
                                 View →
                             </button>
                         </motion.div>
@@ -638,7 +638,7 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
         } finally { setSaving(false); }
     };
 
-    const inputCls = "w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition placeholder-zinc-400 bg-white";
+    const inputCls = "w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition placeholder-zinc-400 bg-white";
     const labelCls = "block text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1.5";
     const publicUrl = backendUrl + "/api/public/leads";
 
@@ -690,7 +690,7 @@ document.getElementById('crm-lead-form').onsubmit = async function(e) {
                             <button key={t.id} onClick={() => setTab(t.id)}
                                 className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold rounded-t-lg border-b-2 transition-all ${
                                     tab === t.id
-                                        ? "border-orange-500 text-orange-600 bg-orange-50/50"
+                                        ? "border-violet-500 text-violet-600 bg-violet-50/50"
                                         : "border-transparent text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50"
                                 }`}>
                                 <t.icon size={13} />{t.label}
@@ -826,7 +826,7 @@ document.getElementById('crm-lead-form').onsubmit = async function(e) {
                                 {provider?.extras?.includes("secure") && (
                                     <div className="flex items-center gap-3 p-4 bg-zinc-50 rounded-2xl border border-zinc-200">
                                         <button type="button" onClick={() => set("secure", !form.secure)}
-                                            className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${form.secure ? "bg-orange-500" : "bg-zinc-300"}`}>
+                                            className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${form.secure ? "bg-violet-500" : "bg-zinc-300"}`}>
                                             <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.secure ? "translate-x-4" : ""}`} />
                                         </button>
                                         <div>
@@ -851,7 +851,7 @@ document.getElementById('crm-lead-form').onsubmit = async function(e) {
                         <div className="flex items-center gap-1.5 px-1">
                             {guide.steps.map((_, i) => (
                                 <button key={i} onClick={() => setActiveStep(i)}
-                                    className={`h-1.5 rounded-full transition-all duration-300 ${i === activeStep ? "flex-1 bg-orange-500" : i < activeStep ? "w-6 bg-orange-300" : "w-6 bg-zinc-200"}`} />
+                                    className={`h-1.5 rounded-full transition-all duration-300 ${i === activeStep ? "flex-1 bg-violet-500" : i < activeStep ? "w-6 bg-violet-300" : "w-6 bg-zinc-200"}`} />
                             ))}
                         </div>
 
@@ -860,9 +860,9 @@ document.getElementById('crm-lead-form').onsubmit = async function(e) {
                             <motion.div key={activeStep}
                                 initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
                                 transition={{ duration: 0.16 }}
-                                className="rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50 to-amber-50 p-5">
+                                className="rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50 to-indigo-50 p-5">
                                 <div className="flex items-start gap-4">
-                                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center text-white font-black text-lg shadow-md shrink-0">
+                                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-400 to-violet-500 flex items-center justify-center text-white font-black text-lg shadow-md shrink-0">
                                         {activeStep + 1}
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -881,18 +881,17 @@ document.getElementById('crm-lead-form').onsubmit = async function(e) {
                             <div className="divide-y divide-zinc-100">
                                 {guide.steps.map((step, i) => (
                                     <button key={i} onClick={() => setActiveStep(i)}
-                                        className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors ${i === activeStep ? "bg-orange-50" : "hover:bg-zinc-50"}`}>
-                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 transition-colors ${
-                                            i < activeStep ? "bg-emerald-100 text-emerald-600" :
-                                            i === activeStep ? "bg-orange-500 text-white" :
-                                            "bg-zinc-100 text-zinc-400"
+                                        className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors ${i === activeStep ? "bg-violet-50" : "hover:bg-zinc-50"}`}>
+                                        <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center border transition-colors shrink-0 ${
+                                            i === activeStep ? "bg-violet-500 text-white" :
+                                            i < activeStep ? "bg-emerald-50 border-emerald-200 text-emerald-600" : "bg-white border-zinc-200 text-zinc-400"
                                         }`}>
                                             {i < activeStep ? <CheckCircle2 size={13} /> : i + 1}
                                         </span>
-                                        <span className={`text-xs font-semibold ${i === activeStep ? "text-orange-700" : i < activeStep ? "text-zinc-400 line-through" : "text-zinc-700"}`}>
+                                        <span className={`text-xs font-semibold ${i === activeStep ? "text-violet-700" : i < activeStep ? "text-zinc-400 line-through" : "text-zinc-700"}`}>
                                             {step.label}
                                         </span>
-                                        {i === activeStep && <ChevronRight size={13} className="ml-auto text-orange-400" />}
+                                        {i === activeStep && <ChevronRight size={13} className="ml-auto text-violet-400" />}
                                     </button>
                                 ))}
                             </div>
@@ -927,7 +926,7 @@ document.getElementById('crm-lead-form').onsubmit = async function(e) {
                             </button>
                             {activeStep < guide.steps.length - 1 ? (
                                 <button onClick={() => setActiveStep(s => s + 1)}
-                                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 rounded-xl transition-all shadow-sm">
+                                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700 rounded-xl transition-all shadow-sm">
                                     Next<ChevronRight size={14} />
                                 </button>
                             ) : (
@@ -948,7 +947,7 @@ document.getElementById('crm-lead-form').onsubmit = async function(e) {
                     {(provider?.oauth && !(provider?.configFields || []).length) ? null : (provider?.embedWidget ? !!apiKey : !provider?.alwaysConnected) && (
                         <button onClick={handleSave} disabled={saving}
                             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60 transition-all shadow-sm"
-                            style={{ background: "linear-gradient(135deg,#F97316,#EA580C)" }}>
+                            style={{ background: "linear-gradient(135deg,#7C3AED,#6D28D9)" }}>
                             {saving ? <><Loader2 size={14} className="animate-spin" />Saving…</> : "Save & Activate"}
                         </button>
                     )}
@@ -1072,14 +1071,14 @@ function Card({ p, integration, onConnect, onSync, onDisconnect, onConfigure, on
                     {!connected && !errored ? (
                         <button onClick={onConnect}
                             className="flex-1 flex items-center justify-center gap-1 py-2 px-3 rounded-lg text-xs font-semibold text-white"
-                            style={{ background: "linear-gradient(135deg,#F97316,#EA580C)" }}>
+                            style={{ background: "linear-gradient(135deg,#7C3AED,#6D28D9)" }}>
                             <Plug size={11} />Connect
                         </button>
                     ) : (
                         <>
                             {errored && (
                                 <button onClick={onConnect}
-                                    className="flex items-center gap-1 py-2 px-3 rounded-lg text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 hover:bg-orange-100 transition-colors">
+                                    className="flex items-center gap-1 py-2 px-3 rounded-lg text-xs font-semibold text-violet-700 bg-violet-50 border border-violet-200 hover:bg-violet-100 transition-colors">
                                     <RefreshCw size={11} />Reconnect
                                 </button>
                             )}
@@ -1164,8 +1163,8 @@ function AllLogsTable() {
             className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
             {/* Header */}
             <div className="flex items-center gap-3 px-5 py-4 border-b border-zinc-100 bg-zinc-50/50">
-                <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center">
-                    <TrendingUp size={14} className="text-orange-500" />
+                <div className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center">
+                    <TrendingUp size={14} className="text-violet-500" />
                 </div>
                 <h2 className="text-sm font-bold text-zinc-800">Integration Logs</h2>
                 <span className="text-[11px] text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full">
@@ -1190,7 +1189,7 @@ function AllLogsTable() {
                         <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
                         <input value={search} onChange={e => handleSearch(e.target.value)}
                             placeholder="Search…"
-                            className="pl-7 pr-3 py-1.5 text-[11px] border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400 w-36" />
+                            className="pl-7 pr-3 py-1.5 text-[11px] border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-violet-400 w-36" />
                     </div>
                 </div>
             </div>
@@ -1369,12 +1368,12 @@ export default function IntegrationHub() {
     const activeProvider = PROVIDERS.find(p => p.key === configSheet);
 
     return (
-        <div className="min-h-full bg-gradient-to-br from-orange-50/30 via-white to-white">
+        <div className="min-h-full bg-gradient-to-br from-violet-50/30 via-white to-white">
             {/* Sticky header */}
             <div className="px-6 pt-7 pb-5 border-b border-zinc-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
                 <div className="max-w-6xl mx-auto flex items-center justify-between gap-6">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg,#F97316,#EA580C)" }}>
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg,#7C3AED,#6D28D9)" }}>
                             <Zap size={18} className="text-white" />
                         </div>
                         <div>
@@ -1393,7 +1392,7 @@ export default function IntegrationHub() {
                         </div>
                         <svg className="w-11 h-11 -rotate-90 shrink-0" viewBox="0 0 36 36">
                             <circle cx="18" cy="18" r="14" fill="none" stroke="#f4f4f5" strokeWidth="3.5" />
-                            <circle cx="18" cy="18" r="14" fill="none" stroke="#f97316" strokeWidth="3.5"
+                            <circle cx="18" cy="18" r="14" fill="none" stroke="#8b5cf6" strokeWidth="3.5"
                                 strokeDasharray={`${(connectedCount / PROVIDERS.length) * 87.96} 87.96`}
                                 strokeLinecap="round"
                                 style={{ transition: "stroke-dasharray 0.6s ease" }} />
@@ -1505,7 +1504,7 @@ export default function IntegrationHub() {
                         className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center">
                         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
                             className="bg-white rounded-2xl shadow-2xl px-8 py-6 flex flex-col items-center gap-3">
-                            <Loader2 size={28} className="animate-spin text-orange-500" />
+                            <Loader2 size={28} className="animate-spin text-violet-500" />
                             <p className="text-sm font-semibold text-zinc-700">Waiting for authorization…</p>
                             <p className="text-xs text-zinc-400">Complete the connection in the popup window</p>
                         </motion.div>

@@ -59,6 +59,7 @@ function WorkloadPanel() {
     );
 }
 
+// CRM Panel
 function CRMPanel() {
     const { data: total } = useQuery({
         queryKey: ["crm-panel-lead-count"],
@@ -80,10 +81,7 @@ function CRMPanel() {
                 <PanelLink to="/linkedin-leads" icon={Linkedin} label="LinkedIn Leads" />
             </PanelSection>
 
-            <PanelSection title="Deals">
-                <PanelLink to="/deals" icon={TrendingUp} label="All Deals" />
-                <PanelLink to="/deals/pipeline" icon={KanbanSquare} label="Pipeline" />
-            </PanelSection>
+
 
             <div className="px-2.5 pt-1">
                 <Link
@@ -179,7 +177,6 @@ function AutomatePanel() {
             </PanelSection>
 
             <PanelSection title="Work">
-                {/* <PanelLink to="/sprints" icon={ZapIcon} label="Sprints" /> */}
                 <PanelLink to="/tasks" icon={CheckSquare} label="My Tasks" />
             </PanelSection>
         </>
@@ -215,6 +212,7 @@ function AdminPanel() {
 
             <PanelSection title="Billing">
                 <PanelLink to="/invoices" icon={Receipt} label="Invoices" />
+                {isSuperAdmin && <PanelLink to="/finance" icon={IndianRupee} label="Finance Tracker" />}
             </PanelSection>
 
             <PanelSection title="Leads">
@@ -253,7 +251,9 @@ const PANEL_COMPONENTS = {
 // ─── ContextPanel (Zone 2) ────────────────────────────────────────────────────
 
 export default function ContextPanel({ activeMode, open, onClose }) {
+    const { user } = useAuth();
     const ActivePanel = PANEL_COMPONENTS[activeMode] ?? WorkloadPanel;
+    const title = activeMode === "admin" && user?.role === "EMPLOYEE" ? "Settings" : (PANEL_TITLES[activeMode] || "");
 
     return (
         <>
@@ -266,7 +266,7 @@ export default function ContextPanel({ activeMode, open, onClose }) {
             >
                 <div className="flex items-center px-4 h-14 border-b border-gray-100">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-                        {PANEL_TITLES[activeMode]}
+                        {title}
                     </p>
                 </div>
                 <div className="flex-1 overflow-y-auto px-2 py-3">
@@ -286,7 +286,7 @@ export default function ContextPanel({ activeMode, open, onClose }) {
                     <div className="relative bg-white rounded-t-2xl shadow-xl max-h-[70vh] flex flex-col">
                         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                             <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">
-                                {PANEL_TITLES[activeMode]}
+                                {title}
                             </p>
                             <button
                                 onClick={onClose}

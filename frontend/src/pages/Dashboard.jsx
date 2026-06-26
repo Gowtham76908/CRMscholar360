@@ -21,6 +21,7 @@ import { cn } from "../lib/utils";
 import { roleLabel } from "../lib/roles";
 import DepartmentSection from "../components/department/DepartmentSection";
 import HistoricalActivity from "../components/department/HistoricalActivity";
+import Dialog from "../components/ui/Dialog";
 
 const isSuperAdmin = (role) => role === "SUPER_ADMIN";
 const isManager    = (role) => role === "SUPER_ADMIN" || role === "ADMIN" || role === "TEAM_LEADER";
@@ -312,6 +313,127 @@ function OverdueFollowUpsWidget({ leads }) {
     );
 }
 
+// ─── Finance Dashboard Panel ──────────────────────────────────────────────────
+
+const FINANCE_CAT_COLORS = [
+    "#6366F1","#F59E0B","#10B981","#EF4444",
+    "#8B5CF6","#06B6D4","#F97316","#64748B",
+];
+
+function FinanceDashboardPanel() {
+    const { data: summary, isLoading } = useQuery({
+        queryKey: ["finance-summary", { period: "30d" }],
+        queryFn: () => api.get("/expenses/tracker", { params: { period: "30d" } }).then(r => r.data),
+        staleTime: 60_000,
+    });
+
+    const fmtINR = (val) => new Intl.NumberFormat("en-IN", {
+        style: "currency", currency: "INR", maximumFractionDigits: 0
+    }).format(val || 0);
+
+    const categoryBreakdown = useMemo(() => {
+        const expenses = (summary?.transactions || []).filter(t => t.type === "EXPENSE");
+        const map = {};
+        expenses.forEach(t => {
+            const cat = t.category || "Miscellaneous";
+            map[cat] = (map[cat] || 0) + (t.amount || 0);
+        });
+        return Object.entries(map)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 6);
+    }, [summary?.transactions]);
+
+    if (isLoading) return (
+        <div className="flex justify-center py-16">
+            <IndianRupee className="h-6 w-6 animate-pulse text-indigo-400" />
+        </div>
+    );
+
+    const netPositive = (summary?.netProfit ?? 0) >= 0;
+    const margin = summary?.totalIncome > 0
+        ? Math.round((summary.netProfit / summary.totalIncome) * 100) : 0;
+    const catTotal = categoryBreakdown.reduce((s, c) => s + c.value, 0);
+
+    return (
+        <div className="space-y-5">
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex items-center justify-between">
+                    <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Income</p>
+                        <p className="text-2xl font-bold text-slate-900 mt-1">{fmtINR(summary?.totalIncome)}</p>
+                        <p className="text-[10px] text-emerald-600 font-medium mt-1.5">Last 30 days · paid invoices</p>
+                    </div>
+                    <div className="h-11 w-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                        <TrendingUp className="h-5 w-5" />
+                    </div>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex items-center justify-between">
+                    <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Expenses</p>
+                        <p className="text-2xl font-bold text-slate-900 mt-1">{fmtINR(summary?.totalExpense)}</p>
+                        <p className="text-[10px] text-red-500 font-medium mt-1.5">Last 30 days · operating costs</p>
+                    </div>
+                    <div className="h-11 w-11 rounded-2xl bg-red-50 flex items-center justify-center text-red-500">
+                        <TrendingDown className="h-5 w-5" />
+                    </div>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex items-center justify-between">
+                    <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Net Profit</p>
+                        <p className={`text-2xl font-bold mt-1 ${netPositive ? "text-emerald-700" : "text-red-700"}`}>
+                            {fmtINR(summary?.netProfit)}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-medium mt-1.5">Operating margin: {margin}%</p>
+                    </div>
+                    <div className={`h-11 w-11 rounded-2xl flex items-center justify-center ${netPositive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+                        <IndianRupee className="h-5 w-5" />
+                    </div>
+                </div>
+            </div>
+
+            {/* Expense Category Breakdown */}
+            {categoryBreakdown.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">Expense Breakdown by Category · Last 30d</p>
+                    <div className="space-y-3">
+                        {categoryBreakdown.map((cat, idx) => {
+                            const pct = catTotal > 0 ? Math.round((cat.value / catTotal) * 100) : 0;
+                            const color = FINANCE_CAT_COLORS[idx % FINANCE_CAT_COLORS.length];
+                            return (
+                                <div key={cat.name} className="flex items-center gap-3">
+                                    <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs font-medium text-slate-700 truncate">{cat.name}</span>
+                                            <span className="text-xs font-bold text-slate-900 ml-2 flex-shrink-0">{fmtINR(cat.value)}</span>
+                                        </div>
+                                        <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                                            <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+                                        </div>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-slate-400 w-8 text-right flex-shrink-0">{pct}%</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* Link to full tracker */}
+            <div className="flex justify-end">
+                <Link
+                    to="/finance"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+                >
+                    View Full Finance Tracker <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+            </div>
+        </div>
+    );
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 const Dashboard = () => {
@@ -319,7 +441,7 @@ const Dashboard = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
-    // Tab state: overview, analytics, performance
+    // Tab state: overview, finance, performance
     const [activeTab, setActiveTab] = useState("overview");
 
     // Modal state for viewing leads by stage
@@ -330,6 +452,7 @@ const Dashboard = () => {
 
     // Today's Attendance modal state
     const [showAttendanceModal, setShowAttendanceModal] = useState(false);
+    const [confirmDialog, setConfirmDialog] = useState(null);
 
     const [searchParams, setSearchParams] = useSearchParams();
 
@@ -857,10 +980,11 @@ const Dashboard = () => {
                     <nav className="flex items-center gap-6 text-sm font-semibold">
                         {[
                             { id: "overview", label: "Overview" },
-                            { id: "analytics", label: "Analytics" },
+                            { id: "finance", label: "Finance", superAdminOnly: true },
                             { id: "performance", label: "Performance", managerOnly: true },
                         ].map(tab => {
                             if (tab.managerOnly && !isManager(user?.role)) return null;
+                            if (tab.superAdminOnly && !isSuperAdmin(user?.role)) return null;
                             const isActive = activeTab === tab.id;
                             return (
                                 <button
@@ -908,7 +1032,13 @@ const Dashboard = () => {
                                 </div>
                                 {!myTodayAttendance.checkOut && (
                                     <button
-                                        onClick={() => checkOutMut.mutate()}
+                                        onClick={() => setConfirmDialog({
+                                            title: "Confirm Check Out",
+                                            description: "Are you sure you want to check out for today?",
+                                            confirmLabel: "Check Out",
+                                            variant: "danger",
+                                            onConfirm: () => checkOutMut.mutate()
+                                        })}
                                         disabled={checkOutMut.isLoading}
                                         className="ml-2 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                                     >
@@ -933,7 +1063,13 @@ const Dashboard = () => {
                                     <p className="text-xs font-bold text-gray-600">Not Checked In</p>
                                 </div>
                                 <button
-                                    onClick={() => checkInMut.mutate()}
+                                    onClick={() => setConfirmDialog({
+                                        title: "Confirm Check In",
+                                        description: "Are you sure you want to check in for today?",
+                                        confirmLabel: "Check In",
+                                        variant: "success",
+                                        onConfirm: () => checkInMut.mutate()
+                                    })}
                                     disabled={checkInMut.isLoading}
                                     className="ml-2 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                                 >
@@ -1545,49 +1681,9 @@ const Dashboard = () => {
                 </div>
             )}
 
-            {/* Analytics Tab Content */}
-            {activeTab === "analytics" && (
-                <div className="space-y-6">
-                    {isManager(user?.role) ? (
-                        <section className="space-y-4">
-                            <div className="flex items-center gap-2">
-                                <IndianRupee className="h-5 w-5 text-emerald-500" />
-                                <h2 className="text-lg font-bold text-indigo-950">Organisation Revenue Overview</h2>
-                            </div>
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                <KPICard label="Pipeline Value" value={fmtINR(revKPIs.pipelineValue)} sub="Active deals" icon={BarChart2} accent="indigo" />
-                                <KPICard label="Won Revenue" value={fmtINR(revKPIs.wonRevenue)} sub="Closed · last 30d" icon={Trophy} accent="emerald" />
-                                <KPICard label="Collected" value={fmtINR(revKPIs.collectedRevenue)} sub="Payments received" icon={Wallet} accent="sky" />
-                                <KPICard label="Outstanding" value={fmtINR(revKPIs.outstandingRevenue)} sub="Yet to collect" icon={TrendingDown} accent="red" />
-                            </div>
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                <KPICard label="Realized Revenue" value={fmtINR(revKPIs.realizedRevenue)} sub="Credit payments" icon={IndianRupee} accent="emerald" />
-                                <KPICard label="Pending Revenue" value={fmtINR(revKPIs.pendingRevenue)} sub="Invoiced, unpaid" icon={Receipt} accent="amber" />
-                                <KPICard label="Avg Deal Size" value={fmtINR(revKPIs.avgDealSize)} sub="Won · last 30d" icon={Banknote} accent="violet" />
-                                <KPICard label="Win Rate" value={`${revKPIs.winRate ?? 0}%`} sub={`${revKPIs.wonCount ?? 0} of ${revKPIs.totalDeals ?? 0} deals · 30d`} icon={Target} accent="indigo" />
-                            </div>
-                        </section>
-                    ) : (
-                        myRevKPIs && (
-                            <section className="space-y-4">
-                                <div className="flex items-center gap-2">
-                                    <IndianRupee className="h-5 w-5 text-emerald-500" />
-                                    <h2 className="text-lg font-bold text-indigo-950">My Revenue Summary</h2>
-                                </div>
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                    <KPICard label="My Revenue" value={fmtINR(myRevKPIs.revenueGenerated)} sub="Won deals" icon={Trophy} accent="emerald" />
-                                    <KPICard label="Collected" value={fmtINR(myRevKPIs.collectedRevenue)} sub="Payments received" icon={Wallet} accent="sky" />
-                                    <KPICard label="Outstanding" value={fmtINR(myRevKPIs.outstandingRevenue)} sub="Yet to collect" icon={TrendingDown} accent="red" />
-                                    <KPICard label="My Contribution" value={`${myRevKPIs.contributionPct ?? 0}%`} sub="Of team total" icon={BarChart2} accent="violet" />
-                                </div>
-                            </section>
-                        )
-                    )}
-
-                    {isManager(user?.role) && (
-                        <DealPipelineSection pipeline={pipeline} />
-                    )}
-                </div>
+            {/* Finance Tab Content */}
+            {activeTab === "finance" && isSuperAdmin(user?.role) && (
+                <FinanceDashboardPanel />
             )}
 
             {/* Performance Tab Content */}
@@ -1596,6 +1692,19 @@ const Dashboard = () => {
                     <TeamTable data={teamStats} navigate={navigate} />
                 </div>
             )}
+
+            <Dialog
+                open={!!confirmDialog}
+                title={confirmDialog?.title}
+                description={confirmDialog?.description}
+                confirmLabel={confirmDialog?.confirmLabel}
+                variant={confirmDialog?.variant}
+                onConfirm={() => {
+                    confirmDialog?.onConfirm();
+                    setConfirmDialog(null);
+                }}
+                onCancel={() => setConfirmDialog(null)}
+            />
         </div>
     );
 };

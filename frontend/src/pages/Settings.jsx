@@ -50,6 +50,7 @@ const TABS = [
 const ADMIN_TABS = [
     { id: "lead-fields",  icon: Layers,     label: "Lead Fields" },
     { id: "lead-sla",     icon: Clock,      label: "Lead SLA" },
+    { id: "attendance",   icon: Clock,      label: "Attendance" },
     { id: "ai-assistant", icon: Bot,        label: "AI Assistant" },
     { id: "audit",        icon: Shield,     label: "Audit Logs" },
     { id: "sessions",     icon: Smartphone, label: "Sessions" },
@@ -358,6 +359,130 @@ function SlaSettings() {
                 >
                     {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                     Save SLA Settings
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ─── Attendance Automation ────────────────────────────────────────────────────
+
+function AttendanceSettings() {
+    const queryClient = useQueryClient();
+    const { data: existing, isLoading } = useQuery({
+        queryKey: ["company-settings"],
+        queryFn: () => api.get("/company-settings").then((r) => r.data),
+    });
+
+    const [form, setForm] = useState({
+        attendanceDeadlineEnabled: true,
+        attendanceDeadlineWeekday: "11:50",
+        attendanceDeadlineSunday: "12:30",
+        autoAbsentEnabled: true,
+        autoAbsentTime: "12:00",
+        autoCheckoutEnabled: true,
+        autoCheckoutRunTime: "22:00",
+        autoCheckoutMarkTime: "20:00",
+    });
+
+    useEffect(() => {
+        if (existing) {
+            setForm({
+                attendanceDeadlineEnabled: existing.attendanceDeadlineEnabled ?? true,
+                attendanceDeadlineWeekday: existing.attendanceDeadlineWeekday || "11:50",
+                attendanceDeadlineSunday:  existing.attendanceDeadlineSunday  || "12:30",
+                autoAbsentEnabled:    existing.autoAbsentEnabled ?? true,
+                autoAbsentTime:       existing.autoAbsentTime || "12:00",
+                autoCheckoutEnabled:  existing.autoCheckoutEnabled ?? true,
+                autoCheckoutRunTime:  existing.autoCheckoutRunTime  || "22:00",
+                autoCheckoutMarkTime: existing.autoCheckoutMarkTime || "20:00",
+            });
+        }
+    }, [existing]);
+
+    const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+
+    const save = useMutation({
+        mutationFn: () => api.patch("/company-settings", form),
+        onSuccess: () => {
+            // Refresh so the check-in deadline gate picks up the new values everywhere.
+            queryClient.invalidateQueries({ queryKey: ["company-settings"] });
+            toast.success("Attendance settings saved");
+        },
+        onError: (e) => toast.error(e.response?.data?.message || "Failed to save"),
+    });
+
+    if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-indigo-400" /></div>;
+
+    const Toggle = ({ checked, onChange, label }) => (
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4 accent-indigo-600" />
+            <span className="text-sm font-medium text-gray-700">{label}</span>
+        </label>
+    );
+
+    const TimeField = ({ label, value, onChange, hint, disabled }) => (
+        <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</label>
+            <input type="time" disabled={disabled} className={inputCls(disabled)} value={value} onChange={(e) => onChange(e.target.value)} />
+            {hint && <p className="text-xs text-gray-400">{hint}</p>}
+        </div>
+    );
+
+    return (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-8">
+            <div>
+                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-indigo-500" /> Attendance Automation
+                </h2>
+                <p className="text-sm text-gray-400 mt-0.5">All times are in IST (24-hour). Changes apply within a minute — no restart needed.</p>
+            </div>
+
+            {/* Check-in deadline */}
+            <section className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-gray-800">Check-in Deadline</h3>
+                    <Toggle checked={form.attendanceDeadlineEnabled} onChange={(v) => set({ attendanceDeadlineEnabled: v })} label="Enforce deadline" />
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                    <TimeField label="Weekday cutoff" value={form.attendanceDeadlineWeekday} disabled={!form.attendanceDeadlineEnabled}
+                        onChange={(v) => set({ attendanceDeadlineWeekday: v })} hint="Latest a weekday check-in is allowed." />
+                    <TimeField label="Sunday cutoff" value={form.attendanceDeadlineSunday} disabled={!form.attendanceDeadlineEnabled}
+                        onChange={(v) => set({ attendanceDeadlineSunday: v })} hint="Latest a Sunday check-in is allowed." />
+                </div>
+            </section>
+
+            {/* Auto-mark absent */}
+            <section className="space-y-4 border-t border-gray-100 pt-6">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-gray-800">Auto-mark Absent</h3>
+                    <Toggle checked={form.autoAbsentEnabled} onChange={(v) => set({ autoAbsentEnabled: v })} label="Enable job" />
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                    <TimeField label="Run at" value={form.autoAbsentTime} disabled={!form.autoAbsentEnabled}
+                        onChange={(v) => set({ autoAbsentTime: v })} hint="Anyone with no record by this time is marked ABSENT. Set after the check-in cutoff." />
+                </div>
+            </section>
+
+            {/* Auto-checkout */}
+            <section className="space-y-4 border-t border-gray-100 pt-6">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-gray-800">Auto-checkout</h3>
+                    <Toggle checked={form.autoCheckoutEnabled} onChange={(v) => set({ autoCheckoutEnabled: v })} label="Enable job" />
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                    <TimeField label="Run at" value={form.autoCheckoutRunTime} disabled={!form.autoCheckoutEnabled}
+                        onChange={(v) => set({ autoCheckoutRunTime: v })} hint="When the job fires for anyone still checked in." />
+                    <TimeField label="Record checkout as" value={form.autoCheckoutMarkTime} disabled={!form.autoCheckoutEnabled}
+                        onChange={(v) => set({ autoCheckoutMarkTime: v })} hint="The checkout time stamped on their record (e.g. office end time)." />
+                </div>
+            </section>
+
+            <div className="flex justify-end">
+                <button onClick={() => save.mutate()} disabled={save.isPending}
+                    className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors">
+                    {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Save Attendance Settings
                 </button>
             </div>
         </div>
@@ -1036,6 +1161,7 @@ const Settings = () => {
 
                     {activeTab === "lead-fields" && user?.role === "SUPER_ADMIN" && <LeadFieldsSettings />}
                     {activeTab === "lead-sla"    && user?.role === "SUPER_ADMIN" && <SlaSettings />}
+                    {activeTab === "attendance"  && user?.role === "SUPER_ADMIN" && <AttendanceSettings />}
                     {activeTab === "ai-assistant" && user?.role === "SUPER_ADMIN" && <AssistantSettings />}
                     {activeTab === "audit"       && user?.role === "SUPER_ADMIN" && <AuditLogs />}
                     {activeTab === "sessions"    && user?.role === "SUPER_ADMIN" && <SessionManager />}

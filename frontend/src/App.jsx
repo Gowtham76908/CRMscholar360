@@ -54,6 +54,7 @@ const TeamManagement         = lazy(() => import("./pages/TeamManagement"));
 const TeamPerformance        = lazy(() => import("./pages/TeamPerformance"));
 const EmployeeReport         = lazy(() => import("./pages/EmployeeReport"));
 const RevenueReport          = lazy(() => import("./pages/RevenueReport"));
+const FinanceTracker         = lazy(() => import("./pages/FinanceTracker"));
 
 // ── Fallback spinner ─────────────────────────────────────────────────────────
 const PageLoader = () => (
@@ -119,6 +120,7 @@ function App() {
               <Route path="/leaderboard"              element={<Leaderboard />} />
               <Route path="/settings"                 element={<Settings />} />
               <Route path="/invoices"                 element={<InvoiceBilling />} />
+              <Route path="/finance"                  element={<FinanceTracker />} />
               <Route path="/fasterq"                  element={<FasterqCalls />} />
               <Route path="/automations"              element={<Automations />} />
               <Route path="/whatsapp/campaigns"       element={<WhatsAppCampaigns />} />

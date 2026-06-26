@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -46,6 +47,7 @@ const SYSTEM_KEYS = new Set([
 
 export default function StudentJourneyPanel({ lead, onChanged }) {
     const qc = useQueryClient();
+    const navigate = useNavigate();
     const [actionModal, setActionModal] = useState(null); // 'enquiry', 'follow_up', 'prospect', etc.
     const [loading, setLoading] = useState(false);
     const [formValues, setFormValues] = useState({});
@@ -327,8 +329,9 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             if (currentStage === "ENQUIRY") {
                 // Log note
                 await api.post(`/leads/${lead.id}/notes`, { content: formValues.noteContent || "Enquiry note added." });
-                // Move stage
-                await moveStageMut.mutateAsync("FOLLOW_UP");
+                toast.success("Enquiry note saved");
+                onChanged();
+                setActionModal(null);
             }
             else if (currentStage === "FOLLOW_UP") {
                 await moveStageMut.mutateAsync("PROSPECT");
@@ -496,7 +499,9 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                     cas_form_number: formValues.cas_form_number || "",
                     visa_manager_approved: !!formValues.visa_manager_approved
                 });
-                await moveStageMut.mutateAsync("VISA_STATUS");
+                toast.success("Visa documentation details saved");
+                onChanged();
+                setActionModal(null);
             }
             else if (currentStage === "VISA_STATUS") {
                 await saveCustomFieldsMut.mutateAsync({
@@ -513,7 +518,12 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                     approved_visa_passport: formValues.approved_visa_passport || "",
                     flight_departure_date: formValues.flight_departure_date || null
                 });
-                await moveStageMut.mutateAsync("COMMISSION_INVOICING");
+                // Don't move the stage here — the lead advances to Commission Invoicing
+                // automatically once a commission invoice for this lead is fully paid.
+                // Send the consultant to invoicing to raise that invoice now.
+                setActionModal(null);
+                toast.success("Visa details saved. Raise the commission invoice — the lead moves to Commission Invoicing once it's fully paid.");
+                navigate(`/invoices?leadId=${lead.id}&newInvoice=1`);
             }
             else if (currentStage === "COMMISSION_INVOICING") {
                 await saveCustomFieldsMut.mutateAsync({
