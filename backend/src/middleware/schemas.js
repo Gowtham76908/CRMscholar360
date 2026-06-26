@@ -174,6 +174,8 @@ const createInvoiceSchema = z.object({
     total: z.number().min(0),
     dueDate: z.string().optional().or(z.null()),
     notes: z.string().optional(),
+    dealId: z.string().uuid().optional().or(z.literal("")).or(z.null()),
+    leadId: z.string().uuid().optional().or(z.literal("")).or(z.null()),
     items: z.array(invoiceItemSchema).min(1, "At least one item required"),
 });
 

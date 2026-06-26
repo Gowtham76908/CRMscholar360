@@ -1,4 +1,4 @@
-﻿const prisma = require("../utils/prisma");
+const prisma = require("../utils/prisma");
 const { getTeamMemberIds } = require("../services/organizationService");
 const { ApiError } = require("../utils/apiError");
 const { istDateKey } = require("../utils/istTime");
@@ -9,6 +9,36 @@ const { wonStageFilter, lostStageFilter, terminalStageFilter, isWonStage, isLost
 const WON_OR = wonStageFilter();
 const LOST_OR = lostStageFilter();
 const TERMINAL_OR = terminalStageFilter();
+
+// An invoice "belongs to" the team if it is linked to a team member's deal OR
+// directly to a lead whose SALES service is assigned to a team member. The second
+// case covers the commission-invoicing workflow where invoices attach to leads.
+function invoiceTeamFilter(teamIds) {
+    return {
+        OR: [
+            { deal: { createdById: { in: teamIds } } },
+            { lead: { leadDepartments: { some: { department: "SALES", assignedEmployeeId: { in: teamIds } } } } },
+        ],
+    };
+}
+
+// Resolve the consultant a payment's revenue is credited to: the lead's SALES
+// consultant when the invoice is lead-linked, else the deal creator (legacy).
+function paymentConsultantId(payment) {
+    const leadDepts = payment.invoice?.lead?.leadDepartments;
+    const salesDept = leadDepts?.find(ld => ld.department === "SALES") || leadDepts?.[0];
+    return salesDept?.assignedEmployeeId
+        || payment.invoice?.deal?.createdById
+        || null;
+}
+
+function invoiceConsultantId(invoice) {
+    const leadDepts = invoice.lead?.leadDepartments;
+    const salesDept = leadDepts?.find(ld => ld.department === "SALES") || leadDepts?.[0];
+    return salesDept?.assignedEmployeeId
+        || invoice.deal?.createdById
+        || null;
+}
 
 // ── Date range helper ─────────────────────────────────────────────────────────
 function dateRange(period, from, to) {
@@ -488,8 +518,8 @@ const getRevenueKPIs = async (req, res, next) => {
                 select: { amount: true },
             }),
             prisma.invoice.findMany({
-                where: { status: { not: "CANCELLED" }, deal: { createdById: { in: teamIds } } },
-                select: { total: true, status: true, payments: { select: { amount: true, type: true } } },
+                where: { status: { not: "CANCELLED" }, deletedAt: null, ...invoiceTeamFilter(teamIds) },
+                select: { total: true, status: true, dealId: true, createdAt: true, updatedAt: true, payments: { select: { amount: true, type: true } } },
             }),
         ]);
 
@@ -503,11 +533,23 @@ const getRevenueKPIs = async (req, res, next) => {
             }
         }
 
-        const pipelineValue  = activeDeals.reduce((s, d) => s + d.amount, 0);
-        const wonRevenue     = wonDeals.reduce((s, d) => s + d.amount, 0);
-        const totalDeals     = periodDeals.length;
-        const wonCount       = periodDeals.filter(d => d.stage === "WON").length;
-        const totalAmt       = periodDeals.reduce((s, d) => s + d.amount, 0);
+        const leadInvoices = invoices.filter(inv => !inv.dealId);
+        const isInRange = (date, range) => {
+            const d = new Date(date);
+            if (range.gte && d < new Date(range.gte)) return false;
+            if (range.lte && d > new Date(range.lte)) return false;
+            return true;
+        };
+
+        const periodLeadInvoices = leadInvoices.filter(inv => isInRange(inv.createdAt, dr));
+        const wonLeadInvoices = leadInvoices.filter(inv => inv.status === "PAID" && isInRange(inv.updatedAt, dr));
+        const activeLeadInvoices = leadInvoices.filter(inv => inv.status !== "PAID");
+
+        const pipelineValue  = activeDeals.reduce((s, d) => s + d.amount, 0) + activeLeadInvoices.reduce((s, inv) => s + inv.total, 0);
+        const wonRevenue     = wonDeals.reduce((s, d) => s + d.amount, 0) + wonLeadInvoices.reduce((s, inv) => s + inv.total, 0);
+        const totalDeals     = periodDeals.length + periodLeadInvoices.length;
+        const wonCount       = periodDeals.filter(d => d.stage === "WON").length + wonLeadInvoices.length;
+        const totalAmt       = periodDeals.reduce((s, d) => s + d.amount, 0) + periodLeadInvoices.reduce((s, inv) => s + inv.total, 0);
         const avgDealSize    = totalDeals > 0 ? Math.round(totalAmt / totalDeals) : 0;
         const winRate        = totalDeals > 0 ? Math.round((wonCount / totalDeals) * 100) : 0;
 
@@ -542,11 +584,11 @@ const getRevenueTrend = async (req, res, next) => {
 
         const [payments, invoices] = await Promise.all([
             prisma.paymentEntry.findMany({
-                where: { type: "CREDIT", paymentDate: dr, invoice: { deal: { createdById: { in: teamIds } } } },
+                where: { type: "CREDIT", paymentDate: dr, invoice: invoiceTeamFilter(teamIds) },
                 select: { amount: true, paymentDate: true },
             }),
             prisma.invoice.findMany({
-                where: { createdAt: dr, deal: { createdById: { in: teamIds } } },
+                where: { createdAt: dr, deletedAt: null, ...invoiceTeamFilter(teamIds) },
                 select: { total: true, createdAt: true },
             }),
         ]);
@@ -606,24 +648,51 @@ const getRevenueByEmployee = async (req, res, next) => {
         if (!teamIds.length) return res.json([]);
         const dr = dateRange(period, from, to);
 
-        const [employees, wonDeals, payments] = await Promise.all([
+        const [employees, wonDeals, wonInvoices, payments] = await Promise.all([
             prisma.user.findMany({ where: { id: { in: teamIds } }, select: { id: true, name: true } }),
             prisma.deal.findMany({
                 where: { createdById: { in: teamIds }, stage: "WON", closedAt: dr, deletedAt: null },
                 select: { amount: true, createdById: true },
             }),
+            prisma.invoice.findMany({
+                where: {
+                    dealId: null,
+                    status: "PAID",
+                    updatedAt: dr,
+                    deletedAt: null,
+                    ...invoiceTeamFilter(teamIds)
+                },
+                select: {
+                    total: true,
+                    lead: { select: { leadDepartments: { where: { department: "SALES" }, select: { assignedEmployeeId: true } } } }
+                }
+            }),
             prisma.paymentEntry.findMany({
-                where: { type: "CREDIT", paymentDate: dr, invoice: { deal: { createdById: { in: teamIds } } } },
-                select: { amount: true, invoice: { select: { deal: { select: { createdById: true } } } } },
+                where: { type: "CREDIT", paymentDate: dr, invoice: invoiceTeamFilter(teamIds) },
+                select: {
+                    amount: true,
+                    invoice: {
+                        select: {
+                            deal: { select: { createdById: true } },
+                            lead: { select: { leadDepartments: { where: { department: "SALES" }, select: { assignedEmployeeId: true } } } },
+                        },
+                    },
+                },
             }),
         ]);
 
         const wonByEmp  = {};
         const collByEmp = {};
         for (const d of wonDeals)  wonByEmp[d.createdById]  = (wonByEmp[d.createdById]  || 0) + d.amount;
+        for (const inv of wonInvoices) {
+            const eid = invoiceConsultantId(inv);
+            if (eid && teamIds.includes(eid)) {
+                wonByEmp[eid] = (wonByEmp[eid] || 0) + inv.total;
+            }
+        }
         for (const p of payments) {
-            const eid = p.invoice?.deal?.createdById;
-            if (eid) collByEmp[eid] = (collByEmp[eid] || 0) + p.amount;
+            const eid = paymentConsultantId(p);
+            if (eid && teamIds.includes(eid)) collByEmp[eid] = (collByEmp[eid] || 0) + p.amount;
         }
 
         res.json(employees.map(e => ({
@@ -754,17 +823,56 @@ const getRevenueEmployeeTable = async (req, res, next) => {
         if (!teamIds.length) return res.json([]);
         const dr = dateRange(period, from, to);
 
-        const [employees, periodDeals, wonDeals, payments, unpaidInvoices] = await Promise.all([
+        const [employees, periodDeals, wonDeals, periodInvoices, wonInvoices, payments, unpaidInvoices] = await Promise.all([
             prisma.user.findMany({ where: { id: { in: teamIds } }, select: { id: true, name: true, email: true, profilePhoto: true } }),
             prisma.deal.findMany({ where: { createdById: { in: teamIds }, deletedAt: null, createdAt: dr }, select: { amount: true, stage: true, createdById: true } }),
             prisma.deal.findMany({ where: { createdById: { in: teamIds }, deletedAt: null, stage: "WON", closedAt: dr }, select: { amount: true, createdById: true } }),
-            prisma.paymentEntry.findMany({
-                where: { type: "CREDIT", paymentDate: dr, invoice: { deal: { createdById: { in: teamIds } } } },
-                select: { amount: true, invoice: { select: { deal: { select: { createdById: true } } } } },
+            prisma.invoice.findMany({
+                where: {
+                    dealId: null,
+                    createdAt: dr,
+                    deletedAt: null,
+                    ...invoiceTeamFilter(teamIds)
+                },
+                select: {
+                    total: true,
+                    status: true,
+                    lead: { select: { leadDepartments: { where: { department: "SALES" }, select: { assignedEmployeeId: true } } } }
+                }
             }),
             prisma.invoice.findMany({
-                where: { deal: { createdById: { in: teamIds } }, status: { notIn: ["PAID", "CANCELLED"] } },
-                select: { total: true, deal: { select: { createdById: true } }, payments: { select: { amount: true, type: true } } },
+                where: {
+                    dealId: null,
+                    status: "PAID",
+                    updatedAt: dr,
+                    deletedAt: null,
+                    ...invoiceTeamFilter(teamIds)
+                },
+                select: {
+                    total: true,
+                    lead: { select: { leadDepartments: { where: { department: "SALES" }, select: { assignedEmployeeId: true } } } }
+                }
+            }),
+            prisma.paymentEntry.findMany({
+                where: { type: "CREDIT", paymentDate: dr, invoice: { deletedAt: null, ...invoiceTeamFilter(teamIds) } },
+                select: {
+                    amount: true,
+                    invoice: {
+                        select: {
+                            deal: { select: { createdById: true } },
+                            lead: { select: { leadDepartments: { where: { department: "SALES" }, select: { assignedEmployeeId: true } } } },
+                        },
+                    },
+                },
+            }),
+            prisma.invoice.findMany({
+                where: { status: { notIn: ["PAID", "CANCELLED"] }, deletedAt: null, ...invoiceTeamFilter(teamIds) },
+                select: {
+                    total: true,
+                    deal: { select: { createdById: true } },
+                    lead: { select: { leadDepartments: { where: { department: "SALES" }, select: { assignedEmployeeId: true } } } },
+                    payments: { select: { amount: true, type: true } }
+                },
             }),
         ]);
 
@@ -773,16 +881,30 @@ const getRevenueEmployeeTable = async (req, res, next) => {
             wonByEmp[d.createdById]    = (wonByEmp[d.createdById]    || 0) + d.amount;
             wonCntByEmp[d.createdById] = (wonCntByEmp[d.createdById] || 0) + 1;
         }
+        for (const inv of wonInvoices) {
+            const eid = invoiceConsultantId(inv);
+            if (eid) {
+                wonByEmp[eid]    = (wonByEmp[eid]    || 0) + inv.total;
+                wonCntByEmp[eid] = (wonCntByEmp[eid] || 0) + 1;
+            }
+        }
         for (const d of periodDeals) {
             if (!dealsByEmp[d.createdById]) dealsByEmp[d.createdById] = [];
             dealsByEmp[d.createdById].push(d);
         }
+        for (const inv of periodInvoices) {
+            const eid = invoiceConsultantId(inv);
+            if (eid) {
+                if (!dealsByEmp[eid]) dealsByEmp[eid] = [];
+                dealsByEmp[eid].push({ amount: inv.total, stage: inv.status === "PAID" ? "WON" : "NEW" });
+            }
+        }
         for (const p of payments) {
-            const eid = p.invoice?.deal?.createdById;
+            const eid = paymentConsultantId(p);
             if (eid) collByEmp[eid] = (collByEmp[eid] || 0) + p.amount;
         }
         for (const inv of unpaidInvoices) {
-            const eid = inv.deal?.createdById;
+            const eid = invoiceConsultantId(inv);
             if (!eid) continue;
             const paid = inv.payments.filter(p => p.type === "CREDIT").reduce((s, p) => s + p.amount, 0);
             outByEmp[eid] = (outByEmp[eid] || 0) + (inv.total - paid);

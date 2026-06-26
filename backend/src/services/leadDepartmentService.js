@@ -680,6 +680,32 @@ async function updateStage({ leadDepartmentId, stage, actor }) {
 }
 
 /**
+ * System-triggered advance of a lead's SALES service to COMMISSION_INVOICING once
+ * its commission invoice is fully paid (called from the invoice payment flow).
+ *
+ * Only advances when the SALES service is sitting at VISA_APPROVAL — never jumps
+ * earlier stages or re-fires once already past. Reuses updateStage so the commission
+ * award, accounts alert, and automation side-effects all run exactly as a manual
+ * move would. Runs as a privileged system actor (the move is gated by full payment,
+ * which is already true at the moment this is called).
+ *
+ * @returns {{ skipped: string } | object}  the updated row, or a skip reason.
+ */
+async function advanceSalesOnInvoicePaid(leadId, triggeredByUserId = null) {
+    const sales = await prisma.leadDepartment.findUnique({
+        where: { leadId_department: { leadId, department: "SALES" } },
+    });
+    if (!sales) return { skipped: "no_sales_service" };
+    if (sales.stage !== "VISA_APPROVAL") return { skipped: `not_at_visa_approval (${sales.stage})` };
+
+    return updateStage({
+        leadDepartmentId: sales.id,
+        stage: "COMMISSION_INVOICING",
+        actor: { userId: triggeredByUserId, role: "SUPER_ADMIN" },
+    });
+}
+
+/**
  * Remove a department's service from a lead.
  * Same authorization as allocation (Sales-side); SALES (root) cannot be removed.
  */
@@ -929,8 +955,9 @@ async function validateSalesStageMove(leadDept, currentStage, targetStage, txOrP
 
     if (currentStage === "ENQUIRY") {
         const noteCount = await txOrPrisma.note.count({ where: { leadId: leadDept.leadId } });
-        if (noteCount === 0) {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Enquiry stage: Must add at least one note message first.");
+        const reminderCount = await txOrPrisma.reminder.count({ where: { leadId: leadDept.leadId } });
+        if (noteCount === 0 && reminderCount === 0) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Enquiry stage: Must add at least one note or reminder first.");
         }
     }
 
@@ -1011,6 +1038,28 @@ async function validateSalesStageMove(leadDept, currentStage, targetStage, txOrP
             throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Visa Documentation stage: Manager approval checkbox must be ticked.");
         }
     }
+
+    if (currentStage === "VISA_STATUS") {
+        const hasDate = cf.visa_appointment_date !== undefined && cf.visa_appointment_date !== null && String(cf.visa_appointment_date).trim() !== "";
+        const hasScorecard = cf.mock_interview_scorecard !== undefined && cf.mock_interview_scorecard !== null && String(cf.mock_interview_scorecard).trim() !== "";
+        const isApproved = cf.embassy_result === "Approved";
+        if (!hasDate || !hasScorecard || !isApproved) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Visa Status stage: Visa Appointment Date, Mock Interview Scorecard, and Embassy Result (must be Approved) must be filled.");
+        }
+    }
+
+    // Commission Invoicing requires a fully-paid commission invoice for this lead.
+    // The normal path auto-advances here when the last payment lands; this guards a
+    // manual move so it can't reach Commission Invoicing (and award commission /
+    // revenue) before the money is actually collected.
+    if (targetStage === "COMMISSION_INVOICING") {
+        const paidInvoice = await txOrPrisma.invoice.count({
+            where: { leadId: leadDept.leadId, status: "PAID", deletedAt: null },
+        });
+        if (paidInvoice === 0) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move to Commission Invoicing: create an invoice for this lead and collect full payment first.");
+        }
+    }
 }
 
 module.exports = {
@@ -1032,6 +1081,7 @@ module.exports = {
     getPendingReassignmentRequests,
     getDepartmentManagers,
     updateStage,
+    advanceSalesOnInvoicePaid,
     removeDepartment,
     getDepartmentAssignments,
     // queue + membership

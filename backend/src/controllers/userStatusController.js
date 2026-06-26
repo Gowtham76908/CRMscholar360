@@ -31,6 +31,13 @@ const updateMyStatus = async (req, res, next) => {
             }
         });
 
+        // Sync with EmployeeProfile availabilityStatus
+        const empStatus = status === "ONLINE" ? "ONLINE" : "OFFLINE";
+        await prisma.employeeProfile.updateMany({
+            where: { employeeId: userId },
+            data: { availabilityStatus: empStatus }
+        });
+
         // Log the status change
         await prisma.userStatusLog.create({
             data: {

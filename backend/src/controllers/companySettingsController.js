@@ -6,7 +6,7 @@ const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
 const DEFAULT_SETTINGS = {
     companyName: "HEXITE TECHNOLOGIES PRIVATE LIMITED",
-    shortName: "HXZ",
+    shortName: "SCHOLAR360",
     gstin: "33AAHCH4159D1ZT",
     address: "No 98, Varadharajan Street Kaladipet",
     city: "Chennai",
@@ -53,7 +53,13 @@ const ALLOWED_UPDATE_FIELDS = [
     "slaWarningDays", "slaBreachDays",
     "assistantEnabled", "assistantRateLimitPerMin", "assistantMaxHistoryTurns",
     "attendanceDeadlineEnabled", "attendanceDeadlineWeekday", "attendanceDeadlineSunday",
+    "autoAbsentEnabled", "autoAbsentTime",
+    "autoCheckoutEnabled", "autoCheckoutRunTime", "autoCheckoutMarkTime",
 ];
+
+// "HH:MM" 24-hour validator — rejects malformed times so a bad UI input can't
+// silently disable a job or store garbage the scheduler can't parse.
+const isValidHHMM = (s) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(s).trim());
 
 const updateSettings = async (req, res, next) => {
     try {
@@ -71,6 +77,18 @@ const updateSettings = async (req, res, next) => {
         }
         if (data.assistantMaxHistoryTurns !== undefined) {
             data.assistantMaxHistoryTurns = clamp(parseInt(data.assistantMaxHistoryTurns, 10) || 6, 0, 50);
+        }
+
+        // Coerce booleans and validate all "HH:MM" time fields before persisting.
+        for (const k of ["attendanceDeadlineEnabled", "autoAbsentEnabled", "autoCheckoutEnabled"]) {
+            if (data[k] !== undefined) data[k] = Boolean(data[k]);
+        }
+        for (const k of ["attendanceDeadlineWeekday", "attendanceDeadlineSunday",
+                         "autoAbsentTime", "autoCheckoutRunTime", "autoCheckoutMarkTime"]) {
+            if (data[k] !== undefined && !isValidHHMM(data[k])) {
+                return res.status(400).json({ message: `Invalid time for ${k}. Use 24-hour HH:MM format.` });
+            }
+            if (data[k] !== undefined) data[k] = String(data[k]).trim();
         }
 
         const touchedAssistant = ["assistantEnabled", "assistantRateLimitPerMin", "assistantMaxHistoryTurns"]

@@ -1,30 +1,38 @@
 const prisma = require("../utils/prisma");
+const { nowIST, todayIST } = require("../utils/istTime");
 const logger = require("../utils/logger");
 
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
 /**
- * Auto-checkout job: Runs at 10:00 PM daily
- * 
- * Logic:
- * - Finds all attendance records for today with checkIn but no checkOut
- * - Sets checkOut to 8:00 PM (office end time)
- * - Only processes records where employee checked in
+ * Auto-checkout job. Fires at the admin-configured run time (CompanySettings).
+ *
+ * Finds today's records with a checkIn but no checkOut and stamps checkOut at
+ * markTime (IST "HH:MM", default 20:00 / 8 PM). Only processes employees who
+ * actually checked in.
+ *
+ * @param {string} markTime  IST wall-clock "HH:MM" to record as the checkout time.
  */
-const autoCheckout = async () => {
+const autoCheckout = async (markTime = "20:00") => {
     try {
         logger.debug("[AUTO-CHECKOUT] Job started");
 
-        // Get today's date in UTC
-        const today = new Date();
-        const todayDateOnly = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+        // IST calendar day, matched as a UTC range — consistent with how check-in
+        // stores the date (midnight UTC of the IST day) and timezone-independent.
+        const start = todayIST();
+        const end = new Date(start);
+        end.setUTCDate(end.getUTCDate() + 1);
 
-        // Create checkout time at 8:00 PM today
-        const checkoutTime = new Date();
-        checkoutTime.setHours(20, 0, 0, 0); // 8:00 PM
+        // Build the checkout instant from the IST wall-clock markTime for today.
+        const [hh, mm] = String(markTime).split(":").map(Number);
+        const ist = nowIST();
+        const checkoutTime = new Date(
+            Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate(), hh || 20, mm || 0) - IST_OFFSET_MS
+        );
 
-        // Find all attendance records for today with checkIn but no checkOut
         const attendanceRecords = await prisma.attendance.findMany({
             where: {
-                date: todayDateOnly,
+                date: { gte: start, lt: end },
                 checkIn: { not: null },
                 checkOut: null
             }
@@ -35,19 +43,17 @@ const autoCheckout = async () => {
             return;
         }
 
-        // Update each record with auto-checkout time
-        const updatePromises = attendanceRecords.map(record =>
+        await Promise.all(attendanceRecords.map(record =>
             prisma.attendance.update({
                 where: { id: record.id },
                 data: { checkOut: checkoutTime }
             })
-        );
+        ));
 
-        await Promise.all(updatePromises);
-
-        logger.info(`[AUTO-CHECKOUT] Checked out ${attendanceRecords.length} employees at 8:00 PM`);
+        logger.info(`[AUTO-CHECKOUT] Checked out ${attendanceRecords.length} employee(s) at ${markTime} IST`);
     } catch (error) {
         logger.error({ err: error }, "[AUTO-CHECKOUT] Error");
+        throw error;
     }
 };
 

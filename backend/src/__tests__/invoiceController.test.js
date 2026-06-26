@@ -25,6 +25,7 @@ jest.mock("../utils/prisma", () => ({
     paymentEntry: {
         create: jest.fn(),
         delete: jest.fn(),
+        findUnique: jest.fn(),
     },
     deal: { findUnique: jest.fn() },
     companySettings: { findFirst: jest.fn() },
@@ -343,8 +344,7 @@ describe("addPayment", () => {
     });
 
     test("status remains unchanged when DEBIT is recorded (no credit sum change toward 0)", async () => {
-        // A DEBIT alone: totalPaid (credit only) = 0, balance = total
-        const mockInvoice = { id: "inv-1", total: 500, payments: [], status: "SENT", dealId: null };
+        const mockInvoice = { id: "inv-1", total: 500, payments: [{ type: "CREDIT", amount: 200 }], status: "PARTIALLY_PAID", dealId: null };
         prisma.invoice.findUnique.mockResolvedValue(mockInvoice);
         prisma.paymentEntry.create.mockResolvedValue({ id: "pay-1", type: "DEBIT", amount: 50 });
         prisma.invoice.update.mockResolvedValue({});
@@ -353,9 +353,22 @@ describe("addPayment", () => {
         const res = mockRes();
         await invoke(addPayment, req, res);
 
-        // totalPaid (credits only) = 0, which is NOT >= 500 and NOT > 0
-        const updateCall = prisma.invoice.update.mock.calls[0][0];
-        expect(updateCall.data.status).toBe("SENT"); // unchanged
+        expect(prisma.invoice.update).toHaveBeenCalledWith(
+            expect.objectContaining({ data: expect.objectContaining({ status: "PARTIALLY_PAID" }) })
+        );
+    });
+
+    test("throws validation error if DEBIT amount exceeds total paid amount", async () => {
+        const mockInvoice = { id: "inv-1", total: 500, payments: [{ type: "CREDIT", amount: 100 }], status: "SENT", dealId: null };
+        prisma.invoice.findUnique.mockResolvedValue(mockInvoice);
+
+        const req = makeReq({ params: { id: "inv-1" }, body: { amount: 150, type: "DEBIT" } });
+        const res = mockRes();
+        await invoke(addPayment, req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        const responseData = res.json.mock.calls[0][0];
+        expect(responseData.message).toContain("Refund exceeds the total amount paid");
     });
 });
 
@@ -363,6 +376,7 @@ describe("addPayment", () => {
 
 describe("deletePayment — status recalculation", () => {
     test("recalculates to PAID if remaining payments still cover total", async () => {
+        prisma.paymentEntry.findUnique.mockResolvedValue({ id: "pay-old", invoiceId: "inv-1" });
         prisma.paymentEntry.delete.mockResolvedValue({});
         prisma.invoice.findUnique.mockResolvedValue({
             id: "inv-1",
@@ -382,6 +396,7 @@ describe("deletePayment — status recalculation", () => {
     });
 
     test("recalculates to SENT when all payments removed", async () => {
+        prisma.paymentEntry.findUnique.mockResolvedValue({ id: "pay-last", invoiceId: "inv-1" });
         prisma.paymentEntry.delete.mockResolvedValue({});
         prisma.invoice.findUnique.mockResolvedValue({
             id: "inv-1", total: 300, status: "PAID", payments: [],

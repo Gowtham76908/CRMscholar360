@@ -1,4 +1,4 @@
-﻿const prisma = require("../utils/prisma");
+const prisma = require("../utils/prisma");
 const { calculateCompOffBalance, calculateCompOffBalanceBulk } = require("../utils/attendance");
 const { nowIST, todayIST } = require("../utils/istTime");
 const { getTeamMemberIds } = require("../services/organizationService");
@@ -99,6 +99,10 @@ const checkIn = async (req, res, next) => {
             where: { id: userId },
             data: { onlineStatus: "ONLINE", breakStartedAt: null }
         });
+        await prisma.employeeProfile.updateMany({
+            where: { employeeId: userId },
+            data: { availabilityStatus: "ONLINE" }
+        });
         await prisma.userStatusLog.create({
             data: { userId, status: "ONLINE", note: "Checked in" }
         });
@@ -142,6 +146,10 @@ const checkOut = async (req, res, next) => {
         await prisma.user.update({
             where: { id: userId },
             data: { onlineStatus: "OFFLINE", breakStartedAt: null }
+        });
+        await prisma.employeeProfile.updateMany({
+            where: { employeeId: userId },
+            data: { availabilityStatus: "OFFLINE" }
         });
         await prisma.userStatusLog.create({
             data: { userId, status: "OFFLINE", note: "Checked out" }
@@ -197,9 +205,15 @@ const getAllAttendance = async (req, res, next) => {
             where.userId = { in: allowed };
         }
         if (date) {
-            const targetDate = new Date(date);
-            targetDate.setHours(0, 0, 0, 0);
-            where.date = targetDate;
+            // Attendance dates are stored as midnight UTC of the IST calendar day
+            // (see todayIST). Match a UTC day range so this is independent of the
+            // server's local timezone — setHours() would snap to local midnight and
+            // miss the record on a non-UTC server.
+            const day = String(date).slice(0, 10);
+            const start = new Date(`${day}T00:00:00.000Z`);
+            const end = new Date(start);
+            end.setUTCDate(end.getUTCDate() + 1);
+            where.date = { gte: start, lt: end };
         }
 
         const attendance = await prisma.attendance.findMany({

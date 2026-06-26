@@ -1,4 +1,4 @@
-﻿const prisma = require("../utils/prisma");
+const prisma = require("../utils/prisma");
 const paginate = require("../utils/paginate");
 const { canAccessLead } = require("./permissionService");
 
@@ -244,10 +244,14 @@ const getDealInvoices = async (id, userId, role) => {
         const totalPaid = inv.payments
             .filter(p => p.type === "CREDIT")
             .reduce((s, p) => s + p.amount, 0);
+        const totalDebited = inv.payments
+            .filter(p => p.type === "DEBIT")
+            .reduce((s, p) => s + p.amount, 0);
+        const netPaid = totalPaid - totalDebited;
         return {
             ...inv,
             totalPaid: parseFloat(totalPaid.toFixed(2)),
-            balance: parseFloat((inv.total - totalPaid).toFixed(2)),
+            balance: parseFloat((inv.total - netPaid).toFixed(2)),
         };
     });
 };

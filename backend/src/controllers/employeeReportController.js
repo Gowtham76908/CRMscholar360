@@ -1,4 +1,4 @@
-﻿const prisma = require("../utils/prisma");
+const prisma = require("../utils/prisma");
 const { getTeamMemberIds } = require("../services/organizationService");
 const { ApiError } = require("../utils/apiError");
 const { istDateKey } = require("../utils/istTime");
@@ -9,6 +9,31 @@ const { wonStageFilter, lostStageFilter, terminalStageFilter, isWonStage, isLost
 const WON_OR = wonStageFilter();
 const LOST_OR = lostStageFilter();
 const TERMINAL_OR = terminalStageFilter();
+
+function employeeInvoiceFilter(employeeId) {
+    return {
+        OR: [
+            { deal: { createdById: employeeId } },
+            { lead: { leadDepartments: { some: { department: "SALES", assignedEmployeeId: employeeId } } } },
+        ],
+    };
+}
+
+function paymentConsultantId(payment) {
+    const leadDepts = payment.invoice?.lead?.leadDepartments;
+    const salesDept = leadDepts?.find(ld => ld.department === "SALES") || leadDepts?.[0];
+    return salesDept?.assignedEmployeeId
+        || payment.invoice?.deal?.createdById
+        || null;
+}
+
+function invoiceConsultantId(invoice) {
+    const leadDepts = invoice.lead?.leadDepartments;
+    const salesDept = leadDepts?.find(ld => ld.department === "SALES") || leadDepts?.[0];
+    return salesDept?.assignedEmployeeId
+        || invoice.deal?.createdById
+        || null;
+}
 
 // ── Date range helper ─────────────────────────────────────────────────────────
 function dateRange(period, from, to) {
@@ -477,8 +502,14 @@ const getRevenueKPIs = async (req, res, next) => {
             prisma.deal.findMany({ where: { createdById: employeeId, deletedAt: null, createdAt: dr }, select: { amount: true, stage: true } }),
             prisma.deal.findMany({ where: { createdById: employeeId, deletedAt: null, stage: "WON", closedAt: dr }, select: { amount: true } }),
             prisma.deal.findMany({ where: { createdById: employeeId, deletedAt: null, stage: { in: ["NEW", "NEGOTIATION"] } }, select: { amount: true } }),
-            prisma.invoice.findMany({ where: { deal: { createdById: employeeId }, status: { not: "CANCELLED" } }, select: { total: true, status: true, payments: { select: { amount: true, type: true } } } }),
-            prisma.deal.aggregate({ where: { deletedAt: null, stage: "WON", closedAt: dr }, _sum: { amount: true } }),
+            prisma.invoice.findMany({
+                where: { deletedAt: null, status: { not: "CANCELLED" }, ...employeeInvoiceFilter(employeeId) },
+                select: { total: true, status: true, dealId: true, createdAt: true, updatedAt: true, payments: { select: { amount: true, type: true } } }
+            }),
+            prisma.invoice.aggregate({
+                where: { status: "PAID", updatedAt: dr, deletedAt: null },
+                _sum: { total: true }
+            })
         ]);
 
         let collectedRevenue = 0, outstandingRevenue = 0;
@@ -488,16 +519,30 @@ const getRevenueKPIs = async (req, res, next) => {
             if (inv.status !== "PAID") outstandingRevenue += inv.total - paid;
         }
 
-        const revenueGenerated = wonDeals.reduce((s, d) => s + d.amount, 0);
-        const pipelineValue    = activeDeals.reduce((s, d) => s + d.amount, 0);
-        const totalAmt         = allDeals.reduce((s, d) => s + d.amount, 0);
-        const avgDealSize      = allDeals.length > 0 ? Math.round(totalAmt / allDeals.length) : 0;
-        const teamTotal        = teamRevRow._sum.amount || 1;
+        const leadInvoices = invoices.filter(inv => !inv.dealId);
+        const isInRange = (date, range) => {
+            const d = new Date(date);
+            if (range.gte && d < new Date(range.gte)) return false;
+            if (range.lte && d > new Date(range.lte)) return false;
+            return true;
+        };
+
+        const periodLeadInvoices = leadInvoices.filter(inv => isInRange(inv.createdAt, dr));
+        const wonLeadInvoices = leadInvoices.filter(inv => inv.status === "PAID" && isInRange(inv.updatedAt, dr));
+        const activeLeadInvoices = leadInvoices.filter(inv => inv.status !== "PAID");
+
+        const revenueGenerated = wonDeals.reduce((s, d) => s + d.amount, 0) + wonLeadInvoices.reduce((s, inv) => s + inv.total, 0);
+        const pipelineValue    = activeDeals.reduce((s, d) => s + d.amount, 0) + activeLeadInvoices.reduce((s, inv) => s + inv.total, 0);
+        const totalAmt         = allDeals.reduce((s, d) => s + d.amount, 0) + periodLeadInvoices.reduce((s, inv) => s + inv.total, 0);
+        const totalDealsCount  = allDeals.length + periodLeadInvoices.length;
+        const avgDealSize      = totalDealsCount > 0 ? Math.round(totalAmt / totalDealsCount) : 0;
+        
+        const teamTotal        = teamRevRow._sum.total || 1;
         const contribution     = revenueGenerated > 0 ? Math.round((revenueGenerated / teamTotal) * 100) : 0;
 
         res.json({
             revenueGenerated:  parseFloat(revenueGenerated.toFixed(2)),
-            wonDeals:          wonDeals.length,
+            wonDeals:          wonDeals.length + wonLeadInvoices.length,
             pipelineValue:     parseFloat(pipelineValue.toFixed(2)),
             avgDealSize,
             collectedRevenue:  parseFloat(collectedRevenue.toFixed(2)),
@@ -518,8 +563,8 @@ const getRevenueTrend = async (req, res, next) => {
         const dr = dateRange(period, from, to);
 
         const [payments, invoices] = await Promise.all([
-            prisma.paymentEntry.findMany({ where: { type: "CREDIT", paymentDate: dr, invoice: { deal: { createdById: employeeId } } }, select: { amount: true, paymentDate: true } }),
-            prisma.invoice.findMany({ where: { createdAt: dr, deal: { createdById: employeeId } }, select: { total: true, createdAt: true } }),
+            prisma.paymentEntry.findMany({ where: { type: "CREDIT", paymentDate: dr, invoice: { deletedAt: null, ...employeeInvoiceFilter(employeeId) } }, select: { amount: true, paymentDate: true } }),
+            prisma.invoice.findMany({ where: { createdAt: dr, deletedAt: null, ...employeeInvoiceFilter(employeeId) }, select: { total: true, createdAt: true } }),
         ]);
 
         const dayCount = Math.max(Math.ceil((Date.now() - new Date(dr.gte)) / 86_400_000), 1);
@@ -563,7 +608,7 @@ const getInvoiceCollectionTrend = async (req, res, next) => {
         const dr = dateRange(period, from, to);
 
         const invoices = await prisma.invoice.findMany({
-            where: { deal: { createdById: employeeId }, status: { not: "CANCELLED" }, createdAt: dr },
+            where: { status: { not: "CANCELLED" }, deletedAt: null, createdAt: dr, ...employeeInvoiceFilter(employeeId) },
             select: { total: true, status: true, createdAt: true, payments: { select: { amount: true, type: true } } },
         });
 

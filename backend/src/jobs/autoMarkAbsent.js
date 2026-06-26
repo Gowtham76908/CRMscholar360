@@ -19,9 +19,9 @@ async function autoMarkAbsent() {
         const users = await prisma.user.findMany({
             where: {
                 isActive: true,
-                role: { in: ["ADMIN", "MANAGER", "EMPLOYEE"] }
+                role: { in: ["ADMIN", "TEAM_LEADER", "EMPLOYEE"] }
             },
-            select: { userId: true, name: true, role: true }
+            select: { id: true, name: true, role: true }
         });
 
         if (users.length === 0) {
@@ -38,25 +38,22 @@ async function autoMarkAbsent() {
         const checkedInUserIds = new Set(existingAttendance.map(a => a.userId));
         
         // Find users who haven't checked in
-        const absentUsers = users.filter(u => !checkedInUserIds.has(u.userId));
+        const absentUsers = users.filter(u => !checkedInUserIds.has(u.id));
 
         if (absentUsers.length === 0) {
             logger.info("[AutoMarkAbsent] All users have checked in today");
             return;
         }
 
-        // Create ABSENT records for users who didn't check in
+        // Create ABSENT records for users who didn't check in. Only fields that
+        // exist on the Attendance model — location is a single nullable Json column.
         const absentRecords = absentUsers.map(user => ({
-            userId: user.userId,
+            userId: user.id,
             date: today,
             status: "ABSENT",
             checkIn: null,
             checkOut: null,
-            checkInLatitude: null,
-            checkInLongitude: null,
-            checkOutLatitude: null,
-            checkOutLongitude: null,
-            breakMinutes: 0,
+            location: null,
         }));
 
         await prisma.attendance.createMany({

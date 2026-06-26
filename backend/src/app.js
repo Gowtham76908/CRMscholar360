@@ -36,7 +36,8 @@ const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:5000",
   "https://scholar360.vercel.app",
-  "https://crmscholar360.onrender.com"
+  "https://crmscholar360.onrender.com",
+  "https://cr-mscholar360.vercel.app",
 ];
 if (process.env.FRONTEND_URL) {
     allowedOrigins.push(process.env.FRONTEND_URL);
@@ -77,7 +78,7 @@ app.use("/uploads", uploadAccess, express.static("uploads")); // catch-all: gate
 // Auth rate limit — 20 attempts per 15 minutes (login, etc.)
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 20,
+    max: process.env.NODE_ENV === "production" ? 20 : 1000,
     message: { error: "Too many login attempts. Please try again after 15 minutes." },
     standardHeaders: true,
     legacyHeaders: false,
@@ -198,6 +199,7 @@ app.use("/api/user-status", require("./routes/userStatus"));
 app.use("/api/invoices", require("./routes/invoice"));
 app.use("/api/fasterq", require("./routes/fasterq"));
 app.use("/api/company-settings", require("./routes/companySettings"));
+app.use("/api/expenses", require("./routes/expense"));
 app.use("/api/notifications", require("./routes/notification"));
 app.use("/api/automations", require("./routes/automation"));
 app.use("/api/whatsapp", require("./routes/whatsapp"));

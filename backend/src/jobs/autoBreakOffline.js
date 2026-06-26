@@ -22,6 +22,11 @@ const autoBreakOffline = async () => {
             data: { onlineStatus: "OFFLINE", breakStartedAt: null }
         });
 
+        await prisma.employeeProfile.updateMany({
+            where: { employeeId: { in: usersOnBreak.map(u => u.id) } },
+            data: { availabilityStatus: "OFFLINE" }
+        });
+
         await prisma.userStatusLog.createMany({
             data: usersOnBreak.map(u => ({
                 userId: u.id,

@@ -4,6 +4,7 @@ const logActivity = require("../utils/activityLogger");
 const paginate = require("../utils/paginate");
 const { ApiError, ERROR_CODES } = require("../utils/apiError");
 const { getTeamMemberIds } = require("../services/organizationService");
+const { advanceSalesOnInvoicePaid } = require("../services/leadDepartmentService");
 
 // Limits invoice reads to a manager's own hierarchy. An invoice belongs to a
 // team if its creator, its deal's owner/assigned employee, or the deal's lead
@@ -72,7 +73,7 @@ const computeInvoiceTotals = (items, { companyGstin, clientGstin } = {}) => {
 
 const generateInvoiceNumber = async (type, tx) => {
     const settings = await tx.companySettings.findFirst();
-    const base = settings?.shortName || "HXZ";
+    const base = settings?.shortName || "SCHOLAR360";
     const prefix = type === "PROFORMA" ? `${base}-PRO` : base;
 
     // Atomic increment inside a transaction so that if invoice creation later
@@ -94,7 +95,8 @@ const getPaymentSummary = (payments) => {
     const totalDebited = payments
         .filter((p) => p.type === "DEBIT")
         .reduce((sum, p) => sum + p.amount, 0);
-    return { totalPaid, totalDebited };
+    const netPaid = totalPaid - totalDebited;
+    return { totalPaid, totalDebited, netPaid };
 };
 
 // ─── Controllers ────────────────────────────────────────────────────────────
@@ -113,6 +115,7 @@ const createInvoice = async (req, res, next) => {
             dueDate,
             notes,
             dealId,
+            leadId,
         } = req.body;
 
         if (!clientName) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Client name is required");
@@ -140,23 +143,23 @@ const createInvoice = async (req, res, next) => {
                     dueDate: dueDate ? new Date(dueDate) : null,
                     notes,
                     createdById: userId,
-                    dealId: dealId ?? null,
+                    dealId: dealId || null,
+                    leadId: leadId || null,
                     items: { create: processedItems },
                 },
                 include: { items: true, payments: true, createdBy: { select: { id: true, name: true } } },
             });
         });
 
-        if (invoice.dealId) {
-            const leadId = await getLeadIdFromInvoice(invoice);
-            if (leadId) {
-                await logActivity({
-                    leadId,
-                    userId,
-                    action: "INVOICE_CREATED",
-                    metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, amount: invoice.total },
-                });
-            }
+        // Prefer the directly-linked lead; fall back to the deal's lead for legacy invoices.
+        const activityLeadId = invoice.leadId || (invoice.dealId ? await getLeadIdFromInvoice(invoice) : null);
+        if (activityLeadId) {
+            await logActivity({
+                leadId: activityLeadId,
+                userId,
+                action: "INVOICE_CREATED",
+                metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, amount: invoice.total },
+            });
         }
 
         res.status(201).json(invoice);
@@ -169,12 +172,13 @@ const getInvoices = async (req, res, next) => {
     try {
         const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
         const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 100));
-        const { status, type, dealId } = req.query;
+        const { status, type, dealId, leadId } = req.query;
 
         const where = { deletedAt: null, ...(await invoiceScope(req.user)) };
         if (status) where.status = status;
         if (type)   where.invoiceType = type;
         if (dealId) where.dealId = dealId;
+        if (leadId) where.leadId = leadId;
 
         // items are not needed in the list view — only in detail view (getInvoice)
         const [total, invoices] = await prisma.$transaction([
@@ -196,6 +200,7 @@ const getInvoices = async (req, res, next) => {
                     createdAt: true,
                     updatedAt: true,
                     dealId: true,
+                    leadId: true,
                     payments: {
                         select: { amount: true, type: true },
                         orderBy: { paymentDate: "desc" },
@@ -209,8 +214,8 @@ const getInvoices = async (req, res, next) => {
         ]);
 
         const enriched = invoices.map((inv) => {
-            const { totalPaid } = getPaymentSummary(inv.payments);
-            return { ...inv, totalPaid: parseFloat(totalPaid.toFixed(2)), balance: parseFloat((inv.total - totalPaid).toFixed(2)) };
+            const { totalPaid, netPaid } = getPaymentSummary(inv.payments);
+            return { ...inv, totalPaid: parseFloat(totalPaid.toFixed(2)), balance: parseFloat((inv.total - netPaid).toFixed(2)) };
         });
 
         res.json(paginate(enriched, total, page, limit));
@@ -232,8 +237,8 @@ const getInvoice = async (req, res, next) => {
         });
         if (!invoice) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Invoice not found");
 
-        const { totalPaid } = getPaymentSummary(invoice.payments);
-        res.json({ ...invoice, totalPaid: parseFloat(totalPaid.toFixed(2)), balance: parseFloat((invoice.total - totalPaid).toFixed(2)) });
+        const { totalPaid, netPaid } = getPaymentSummary(invoice.payments);
+        res.json({ ...invoice, totalPaid: parseFloat(totalPaid.toFixed(2)), balance: parseFloat((invoice.total - netPaid).toFixed(2)) });
     } catch (error) {
         return next(error);
     }
@@ -349,15 +354,20 @@ const addPayment = async (req, res, next) => {
 
         // Atomic read-modify-write so concurrent payments can't miscompute status
         // or push total paid past the invoice total.
-        const { invoice, payment, totalPaid, newStatus } = await prisma.$transaction(async (tx) => {
+        const { invoice, payment, totalPaid, netPaid, newStatus } = await prisma.$transaction(async (tx) => {
             const invoice = await tx.invoice.findUnique({ where: { id }, include: { payments: true } });
             if (!invoice) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Invoice not found");
 
             if (type === "CREDIT") {
-                const { totalPaid: already } = getPaymentSummary(invoice.payments);
+                const { netPaid: already } = getPaymentSummary(invoice.payments);
                 const remaining = parseFloat((invoice.total - already).toFixed(2));
                 if (amt > remaining + 0.01) {
                     throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, `Payment exceeds the outstanding balance of ₹${remaining.toFixed(2)}`);
+                }
+            } else if (type === "DEBIT") {
+                const { netPaid: already } = getPaymentSummary(invoice.payments);
+                if (amt > already + 0.01) {
+                    throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, `Refund exceeds the total amount paid of ₹${already.toFixed(2)}`);
                 }
             }
 
@@ -371,17 +381,19 @@ const addPayment = async (req, res, next) => {
                 },
             });
 
-            const { totalPaid } = getPaymentSummary([...invoice.payments, payment]);
+            const { totalPaid, netPaid } = getPaymentSummary([...invoice.payments, payment]);
             let newStatus = invoice.status;
-            if (totalPaid >= invoice.total) newStatus = "PAID";
-            else if (totalPaid > 0) newStatus = "PARTIALLY_PAID";
+            if (netPaid >= invoice.total) newStatus = "PAID";
+            else if (netPaid > 0) newStatus = "PARTIALLY_PAID";
+            else if (invoice.status === "PAID" || invoice.status === "PARTIALLY_PAID") newStatus = "SENT";
 
             await tx.invoice.update({ where: { id }, data: { status: newStatus } });
-            return { invoice, payment, totalPaid, newStatus };
+            return { invoice, payment, totalPaid, netPaid, newStatus };
         });
 
-        if (type === "CREDIT" && invoice.dealId) {
-            const leadId = await getLeadIdFromInvoice(invoice);
+        if (type === "CREDIT") {
+            // Prefer the directly-linked lead; fall back to the deal's lead (legacy).
+            const leadId = invoice.leadId || (invoice.dealId ? await getLeadIdFromInvoice(invoice) : null);
             if (leadId) {
                 await logActivity({
                     leadId,
@@ -395,10 +407,21 @@ const addPayment = async (req, res, next) => {
                         status: newStatus,
                     },
                 });
+
+                // Fully paid → advance the lead's SALES service to Commission Invoicing.
+                if (newStatus === "PAID") {
+                    try {
+                        await advanceSalesOnInvoicePaid(leadId, req.user.userId);
+                    } catch (err) {
+                        // Don't fail the payment if the stage move is rejected (e.g. gates);
+                        // the payment is recorded and the move can be retried/done manually.
+                        console.error("[Invoice] Auto-advance to Commission Invoicing failed:", err.message);
+                    }
+                }
             }
         }
 
-        res.status(201).json({ payment, totalPaid: parseFloat(totalPaid.toFixed(2)), balance: parseFloat((invoice.total - totalPaid).toFixed(2)), status: newStatus });
+        res.status(201).json({ payment, totalPaid: parseFloat(totalPaid.toFixed(2)), balance: parseFloat((invoice.total - netPaid).toFixed(2)), status: newStatus });
     } catch (error) {
         return next(error);
     }
@@ -417,10 +440,10 @@ const deletePayment = async (req, res, next) => {
 
         // Recalculate invoice status after deletion
         const invoice = await prisma.invoice.findUnique({ where: { id }, include: { payments: true } });
-        const { totalPaid } = getPaymentSummary(invoice.payments);
+        const { totalPaid, netPaid } = getPaymentSummary(invoice.payments);
         let newStatus = "SENT";
-        if (totalPaid >= invoice.total) newStatus = "PAID";
-        else if (totalPaid > 0) newStatus = "PARTIALLY_PAID";
+        if (netPaid >= invoice.total) newStatus = "PAID";
+        else if (netPaid > 0) newStatus = "PARTIALLY_PAID";
         else if (invoice.status === "PAID" || invoice.status === "PARTIALLY_PAID") newStatus = "SENT";
 
         await prisma.invoice.update({ where: { id }, data: { status: newStatus } });
@@ -441,11 +464,15 @@ const getBalanceSheet = async (req, res, next) => {
 
         // Aggregate summary in the DB (scoped to the requester's hierarchy) —
         // avoids loading all invoices into JS while respecting team boundaries.
-        const [invoicedAgg, receivedAgg, statusCounts, overdueCount, total, pageInvoices] = await Promise.all([
+        const [invoicedAgg, receivedAgg, debitedAgg, statusCounts, overdueCount, total, pageInvoices] = await Promise.all([
             prisma.invoice.aggregate({ _sum: { total: true }, where }),
             prisma.paymentEntry.aggregate({
                 _sum: { amount: true },
                 where: { type: "CREDIT", invoice: { status: { not: "CANCELLED" }, deletedAt: null, ...scope } },
+            }),
+            prisma.paymentEntry.aggregate({
+                _sum: { amount: true },
+                where: { type: "DEBIT", invoice: { status: { not: "CANCELLED" }, deletedAt: null, ...scope } },
             }),
             prisma.invoice.groupBy({
                 by: ["status"],
@@ -466,13 +493,15 @@ const getBalanceSheet = async (req, res, next) => {
         ]);
 
         const totalInvoiced    = parseFloat(Number(invoicedAgg._sum.total ?? 0).toFixed(2));
-        const totalReceived    = parseFloat(Number(receivedAgg._sum.amount ?? 0).toFixed(2));
+        const totalReceivedCredit = parseFloat(Number(receivedAgg._sum.amount ?? 0).toFixed(2));
+        const totalDebitedSum  = parseFloat(Number(debitedAgg._sum.amount ?? 0).toFixed(2));
+        const totalReceived    = parseFloat((totalReceivedCredit - totalDebitedSum).toFixed(2));
         const totalOutstanding = parseFloat((totalInvoiced - totalReceived).toFixed(2));
         const paidCount        = statusCounts.find(s => s.status === "PAID")?._count?.status ?? 0;
         const partialCount     = statusCounts.find(s => s.status === "PARTIALLY_PAID")?._count?.status ?? 0;
 
         const ledger = pageInvoices.map((inv) => {
-            const { totalPaid } = getPaymentSummary(inv.payments);
+            const { totalPaid, netPaid } = getPaymentSummary(inv.payments);
             return {
                 id: inv.id,
                 invoiceNumber: inv.invoiceNumber,
@@ -482,7 +511,7 @@ const getBalanceSheet = async (req, res, next) => {
                 dueDate: inv.dueDate,
                 total: inv.total,
                 totalPaid: parseFloat(totalPaid.toFixed(2)),
-                balance: parseFloat((inv.total - totalPaid).toFixed(2)),
+                balance: parseFloat((inv.total - netPaid).toFixed(2)),
                 status: inv.status,
                 payments: inv.payments,
             };

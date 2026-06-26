@@ -1,4 +1,6 @@
 const cron = require("node-cron");
+const prisma = require("./utils/prisma");
+const { nowIST } = require("./utils/istTime");
 const { processReminders } = require("./services/reminderService");
 const autoCheckout = require("./jobs/autoCheckout");
 const autoBreakOffline = require("./jobs/autoBreakOffline");
@@ -25,6 +27,34 @@ async function withRetry(name, fn, maxAttempts = 3) {
     }
 }
 
+// Current IST wall-clock time as "HH:MM" (nowIST encodes IST in UTC accessors).
+const istHHMM = () => {
+    const d = nowIST();
+    return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+};
+
+// Attendance automation runs on admin-configurable times (CompanySettings, IST).
+// We tick every minute and fire each job when the current IST time matches its
+// configured time — this honors live settings changes without a restart, which a
+// fixed cron expression (registered once at boot) cannot do.
+async function attendanceAutomationTick() {
+    const s = await prisma.companySettings.findFirst({
+        select: {
+            autoAbsentEnabled: true, autoAbsentTime: true,
+            autoCheckoutEnabled: true, autoCheckoutRunTime: true, autoCheckoutMarkTime: true,
+        },
+    });
+    if (!s) return;
+    const now = istHHMM();
+
+    if (s.autoAbsentEnabled !== false && s.autoAbsentTime === now) {
+        await withRetry("autoMarkAbsent", autoMarkAbsent);
+    }
+    if (s.autoCheckoutEnabled !== false && s.autoCheckoutRunTime === now) {
+        await withRetry("autoCheckout", () => autoCheckout(s.autoCheckoutMarkTime));
+    }
+}
+
 const startScheduler = () => {
     logger.info("[Scheduler] Starting background jobs...");
 
@@ -33,8 +63,10 @@ const startScheduler = () => {
     // NOTE: leads are no longer auto-marked LOST after 7 days. Going-cold leads are
     // surfaced as a pull-based follow-up suggestion (followUpSuggestionService →
     // detectNoActivity), so reps get nudged without notification spam or losing the lead.
-    cron.schedule("0 12 * * *",  () => withRetry("autoMarkAbsent", autoMarkAbsent), { timezone: "Asia/Kolkata" });
-    cron.schedule("0 22 * * *",  () => withRetry("autoCheckout", autoCheckout), { timezone: "Asia/Kolkata" });
+    // Auto-mark-absent and auto-checkout fire from this per-minute tick at the
+    // times configured in Company Settings (see attendanceAutomationTick).
+    cron.schedule("* * * * *", () => attendanceAutomationTick().catch(err =>
+        logger.error({ err }, "[Scheduler] attendanceAutomationTick failed")));
     cron.schedule("0 9 * * *",   () => withRetry("notifyTasksDueSoon", notifyTasksDueSoon), { timezone: "Asia/Kolkata" });
     cron.schedule("0 9 * * *",   () => withRetry("notifyOverdueTasks", notifyOverdueTasks), { timezone: "Asia/Kolkata" });
     cron.schedule("0 */6 * * *", () => withRetry("runNoActivityRules", runNoActivityRules));

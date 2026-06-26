@@ -56,6 +56,7 @@ model User {
   notesAuthored      ManagerNote[] @relation("NoteAuthor")
   notesReceived      ManagerNote[] @relation("NoteSubject")
   importJobs         ImportJob[]
+  expenses           Expense[]
   assistantRequestLogs AssistantRequestLog[]
   chatChannels       ChatChannel[]
   chatMembers        ChatMember[]
@@ -139,6 +140,7 @@ model Lead {
   notes           Note[]
   tasks           Task[]
   deals           Deal[]
+  invoices        Invoice[]       @relation("LeadInvoices")
   automationLogs  AutomationLog[]
   assignmentHistories AssignmentHistory[]
   whatsappMessages WhatsAppMessage[]
@@ -755,6 +757,7 @@ model Invoice {
   emailSentTo   String?
   createdById   String
   dealId        String?
+  leadId        String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
@@ -762,8 +765,10 @@ model Invoice {
   payments      PaymentEntry[]
   createdBy     User          @relation("CreatedInvoices", fields: [createdById], references: [id])
   deal          Deal?         @relation("DealInvoices", fields: [dealId], references: [id], onDelete: SetNull)
+  lead          Lead?         @relation("LeadInvoices", fields: [leadId], references: [id], onDelete: SetNull)
 
   @@index([dealId])
+  @@index([leadId])
   @@index([deletedAt])
 }
 
@@ -851,6 +856,15 @@ model CompanySettings {
   attendanceDeadlineEnabled Boolean @default(true)
   attendanceDeadlineWeekday String  @default("11:50")
   attendanceDeadlineSunday  String  @default("12:30")
+  // Auto-mark-absent job (IST). Runs daily at autoAbsentTime; anyone with no
+  // attendance record by then is marked ABSENT. Times are "HH:MM".
+  autoAbsentEnabled Boolean @default(true)
+  autoAbsentTime    String  @default("12:00")
+  // Auto-checkout job (IST). Fires at autoCheckoutRunTime and stamps anyone still
+  // checked in with a checkout of autoCheckoutMarkTime. Times are "HH:MM".
+  autoCheckoutEnabled  Boolean @default(true)
+  autoCheckoutRunTime  String  @default("22:00")
+  autoCheckoutMarkTime String  @default("20:00")
   updatedAt       DateTime @updatedAt
 }
 
@@ -1117,4 +1131,20 @@ model University {
   createdAt DateTime @default(now())
 
   @@unique([name, countryId])
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  title       String
+  amount      Float
+  category    String
+  date        DateTime @default(now())
+  description String?
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdById])
+  @@index([date])
 }
