@@ -20,7 +20,7 @@ const { isMemberOfDepartment } = require("./leadDepartmentService");
  */
 
 // Build the LeadDepartment `where` scope for an actor + department.
-async function buildScope(department, actor, assignedEmployeeId, startDate, endDate) {
+async function buildScope(department, actor, assignedEmployeeId, startDate, endDate, source) {
     if (!isValidDepartment(department)) {
         throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, `Invalid department: ${department}`);
     }
@@ -57,6 +57,12 @@ async function buildScope(department, actor, assignedEmployeeId, startDate, endD
         };
     }
 
+    if (source) {
+        where.lead = {
+            source: source
+        };
+    }
+
     return where;
 }
 
@@ -65,8 +71,8 @@ async function buildScope(department, actor, assignedEmployeeId, startDate, endD
  * totals, today's intake, unassigned count, won/lost/active counts, conversion
  * rate, and an aging breakdown of active services.
  */
-async function getDepartmentDashboard({ department, actor, assignedEmployeeId, startDate, endDate }) {
-    const where = await buildScope(department, actor, assignedEmployeeId, startDate, endDate);
+async function getDepartmentDashboard({ department, actor, assignedEmployeeId, startDate, endDate, source }) {
+    const where = await buildScope(department, actor, assignedEmployeeId, startDate, endDate, source);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);

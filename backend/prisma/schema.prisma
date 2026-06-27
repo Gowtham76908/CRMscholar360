@@ -110,6 +110,7 @@ model UserStatusLog {
 
 model Lead {
   id              String      @id @default(uuid())
+  leadId          String?     @unique
   name            String
   email           String?
   phone           String?

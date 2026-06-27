@@ -729,8 +729,15 @@ const Leads = () => {
                             >
                                 {/* Card top — name + SLA */}
                                 <Link to={`/leads/${lead.id}`} className="px-4 pt-4 pb-3 flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                        <h3 className="font-semibold text-gray-900 truncate text-sm group-hover:text-indigo-600 transition-colors">{lead.name}</h3>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            <h3 className="font-semibold text-gray-900 truncate text-sm group-hover:text-indigo-600 transition-colors">{lead.name}</h3>
+                                            {lead.leadId && (
+                                                <span className="text-[9px] font-mono font-bold bg-gray-100 text-gray-500 px-1 py-0.2 rounded border border-gray-200 select-all">
+                                                    {lead.leadId}
+                                                </span>
+                                            )}
+                                        </div>
                                         <p className="text-xs text-gray-400 mt-0.5 capitalize truncate">{lead.enquiryType?.toLowerCase().replace(/_/g, " ") || "—"}</p>
                                     </div>
                                     <div className="flex items-center gap-1 flex-shrink-0">
@@ -806,11 +813,15 @@ const Leads = () => {
                                 </div>
 
                                 {/* Action bar */}
-                                <div className="px-3 pb-3 flex items-center gap-1">
+                                <div className="px-3 pb-3 flex items-center gap-1.5 mt-auto">
                                     <button
                                         onClick={() => handleClick2Call(lead)}
                                         disabled={!!callingLeadId}
-                                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${callingLeadId === lead.id ? "bg-green-50 text-green-600 animate-pulse" : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"} disabled:opacity-50`}
+                                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                                            callingLeadId === lead.id 
+                                                ? "bg-green-50 text-green-600 border-green-200 animate-pulse" 
+                                                : "bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border-indigo-100"
+                                        } disabled:opacity-50`}
                                     >
                                         {callingLeadId === lead.id ? <PhoneCall className="h-3.5 w-3.5" /> : <Phone className="h-3.5 w-3.5" />}
                                         {callingLeadId === lead.id ? "Calling…" : "Call"}
@@ -818,7 +829,7 @@ const Leads = () => {
                                     {latestRecording && (
                                         <button
                                             onClick={() => handlePlayRecording(latestRecording)}
-                                            className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                                            className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100 transition-colors cursor-pointer"
                                             title="Play recording"
                                         >
                                             {playingRecording === latestRecording.id ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
@@ -827,9 +838,9 @@ const Leads = () => {
                                             )}
                                         </button>
                                     )}
-                                    <button onClick={() => setSelectedLeadForCalls(lead)} className="p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 transition-colors" title="Call details"><Phone className="h-3.5 w-3.5" /></button>
-                                    <button onClick={() => setSelectedLeadForActivity(lead)} className="p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 transition-colors" title="Timeline"><History className="h-3.5 w-3.5" /></button>
-                                    <button onClick={() => setEditingLead(lead)} className="p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 transition-colors" title="Edit"><Edit className="h-3.5 w-3.5" /></button>
+                                    <button onClick={() => setSelectedLeadForCalls(lead)} className="p-1.5 rounded-lg bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 border border-slate-250/30 hover:border-indigo-200 transition-colors cursor-pointer" title="Call details"><Phone className="h-3.5 w-3.5" /></button>
+                                    <button onClick={() => setSelectedLeadForActivity(lead)} className="p-1.5 rounded-lg bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 border border-slate-250/30 hover:border-indigo-200 transition-colors cursor-pointer" title="Timeline"><History className="h-3.5 w-3.5" /></button>
+                                    <button onClick={() => setEditingLead(lead)} className="p-1.5 rounded-lg bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 border border-slate-250/30 hover:border-indigo-200 transition-colors cursor-pointer" title="Edit"><Edit className="h-3.5 w-3.5" /></button>
                                 </div>
                             </div>
                         );
@@ -872,7 +883,14 @@ const Leads = () => {
                                     return (
                                         <tr key={lead.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-4 py-3">
-                                                <Link to={`/leads/${lead.id}`} className="font-medium text-gray-900 hover:text-indigo-600 text-sm">{lead.name}</Link>
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <Link to={`/leads/${lead.id}`} className="font-medium text-gray-900 hover:text-indigo-600 text-sm">{lead.name}</Link>
+                                                    {lead.leadId && (
+                                                        <span className="text-[10px] font-mono font-semibold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 select-all">
+                                                            {lead.leadId}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p className="text-xs text-gray-400 capitalize">{lead.enquiryType?.toLowerCase().replace(/_/g, " ") || "—"}</p>
                                             </td>
                                             <td className="px-4 py-3">
@@ -961,7 +979,7 @@ const Leads = () => {
             {isMergeModalOpen && (
                 <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
                     <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={() => setIsMergeModalOpen(false)}></div>
+                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" aria-hidden="true" onClick={() => setIsMergeModalOpen(false)}></div>
                         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
                         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
                             <MergeLeadModal
@@ -996,7 +1014,7 @@ const Leads = () => {
             {selectedLeadForActivity && (
                 <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
                     <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={() => setSelectedLeadForActivity(null)}></div>
+                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" aria-hidden="true" onClick={() => setSelectedLeadForActivity(null)}></div>
                         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
                         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
                             <LeadActivityModal

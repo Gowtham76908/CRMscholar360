@@ -41,7 +41,22 @@ async function createLead(data, { createdByUserId, salesAssigneeId, forceAssignT
     const salesAssignee = assigneeId;
 
     return prisma.$transaction(async (tx) => {
-        const lead = await tx.lead.create({ data });
+        const rows = await tx.$queryRaw`
+            INSERT INTO "InvoiceCounter" ("prefix", "currentValue")
+            VALUES ('LEAD', 10000)
+            ON CONFLICT ("prefix") DO UPDATE
+                SET "currentValue" = "InvoiceCounter"."currentValue" + 1
+            RETURNING "currentValue"
+        `;
+        const nextVal = rows[0].currentValue;
+        const leadId = `L-${String(nextVal).padStart(5, '0')}`;
+
+        const lead = await tx.lead.create({
+            data: {
+                ...data,
+                leadId
+            }
+        });
         // changedByUserId attributes the "enquiry received" event to the creator when
         // there is one; programmatic sources (no createdByUserId) record a null actor.
         await createSalesAssignment(tx, lead.id, salesAssignee, createdByUserId || null);
@@ -91,7 +106,11 @@ const getLeads = async ({
             .map((d) => ({ department: d, stage: getInitialStage(d) }))
             .filter((b) => b.stage) // skip departments with no configured workflow
             .map((b) => ({ department: b.department, assignedEmployeeId: null, stage: b.stage }));
-        visScope.OR = [{ assignedEmployeeId: userId }, ...claimable];
+        if (claimable.length === 0) {
+            visScope.assignedEmployeeId = userId;
+        } else {
+            visScope.OR = [{ assignedEmployeeId: userId }, ...claimable];
+        }
     } else if (role === "ADMIN" || role === "TEAM_LEADER") {
         if (filters.assignedTo) {
             // Manager/Team Leader filtering to a single consultant — constrained to the departments
@@ -219,6 +238,15 @@ const getLeads = async ({
                     select: {
                         id: true, department: true, stage: true, assignedEmployeeId: true,
                         assignedEmployee: { select: { id: true, name: true, email: true, profilePhoto: true } },
+                    },
+                },
+                // Recent history preview for the My Day action queue — latest 3 activities.
+                activities: {
+                    orderBy: { createdAt: "desc" },
+                    take: 3,
+                    select: {
+                        id: true, action: true, createdAt: true,
+                        user: { select: { id: true, name: true } },
                     },
                 },
                 // Avoid N+1 and bloated responses: only fetch latest 1 call log

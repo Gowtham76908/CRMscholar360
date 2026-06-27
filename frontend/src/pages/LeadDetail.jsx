@@ -13,7 +13,7 @@ import {
     ChevronDown, ChevronRight, Play, Clock, AlertCircle, ChevronLeft,
     Zap, Users, Save, SlidersHorizontal, Eye, MousePointerClick, GitBranch,
     TrendingUp, IndianRupee, Pencil, Paperclip, ArrowRight,
-    PanelRightOpen, PanelRightClose, Archive, MoreVertical, RefreshCw, RotateCcw,
+    PanelRightOpen, PanelRightClose, Archive, MoreVertical, RefreshCw, RotateCcw, Copy,
 } from "lucide-react";
 import { Modal } from "../components/Modal";
 import SlidePanel from "../components/SlidePanel";
@@ -30,52 +30,13 @@ import PostCallPanel from "../components/lead/PostCallPanel";
 import ComposeEmailModal from "../components/ComposeEmailModal";
 import { useLeadPresence } from "../hooks/useLeadPresence";
 import { useLeadDepartments, useWorkflows } from "../hooks/useDepartments";
+import { ACTION_CONFIG, relTime } from "../lib/activity";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const SOURCE_LABEL = {
     FACEBOOK: "Facebook", INSTAGRAM: "Instagram", GMAIL: "Gmail",
     WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn",
-};
-
-const ACTION_CONFIG = {
-    LEAD_CREATED:   { icon: "✦", color: "text-blue-500",   bg: "bg-blue-50 border-blue-100",   label: "Lead created" },
-    LEAD_UPDATED:   { icon: "✎", color: "text-gray-500",   bg: "bg-gray-50 border-gray-100",   label: "Lead updated" },
-    STATUS_CHANGED: { icon: "⇄", color: "text-indigo-500", bg: "bg-indigo-50 border-indigo-100",label: "Status changed" },
-    CALL_MADE:      { icon: "📞", color: "text-green-500",  bg: "bg-green-50 border-green-100", label: "Call made" },
-    NOTE_ADDED:     { icon: "📝", color: "text-amber-500",  bg: "bg-amber-50 border-amber-100", label: "Note added" },
-    TASK_CREATED:   { icon: "☑", color: "text-teal-500",   bg: "bg-teal-50 border-teal-100",   label: "Task created" },
-    TASK_UPDATED:   { icon: "✎", color: "text-teal-600",   bg: "bg-teal-50 border-teal-100",   label: "Task updated" },
-    TASK_DELETED:   { icon: "✕", color: "text-red-500",    bg: "bg-red-50 border-red-100",     label: "Task deleted" },
-    TASK_COMPLETED: { icon: "✓", color: "text-green-600",  bg: "bg-green-50 border-green-100", label: "Task completed" },
-    REMINDER_SET:   { icon: "⏰", color: "text-orange-500", bg: "bg-orange-50 border-orange-100",label: "Reminder set" },
-    ASSIGNED:            { icon: "→", color: "text-violet-500",  bg: "bg-violet-50 border-violet-100",  label: "Assigned" },
-    LEAD_ASSIGNED:       { icon: "→", color: "text-violet-500",  bg: "bg-violet-50 border-violet-100",  label: "Lead assigned" },
-    LEAD_REASSIGNED:     { icon: "⇄", color: "text-violet-600",  bg: "bg-violet-50 border-violet-100",  label: "Lead reassigned" },
-    LEAD_MERGED:         { icon: "⊕", color: "text-gray-600",    bg: "bg-gray-50 border-gray-100",      label: "Lead merged" },
-    LEAD_BULK_UPDATE:    { icon: "✎", color: "text-gray-500",    bg: "bg-gray-50 border-gray-100",      label: "Bulk update" },
-    LEAD_BULK_ASSIGN:    { icon: "→", color: "text-indigo-500",  bg: "bg-indigo-50 border-indigo-100",  label: "Bulk assigned" },
-    LEAD_CREATED_VIA_WEBHOOK: { icon: "⚡", color: "text-blue-500", bg: "bg-blue-50 border-blue-100",  label: "Lead via webhook" },
-    WEBHOOK_DUPLICATE_HIT:    { icon: "!", color: "text-amber-600", bg: "bg-amber-50 border-amber-100", label: "Duplicate detected" },
-    WHATSAPP_SENT:  { icon: "→", color: "text-emerald-500", bg: "bg-emerald-50 border-emerald-100", label: "WhatsApp sent" },
-    WHATSAPP_REPLY: { icon: "←", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100", label: "WhatsApp reply" },
-    EMAIL_SENT:     { icon: "✉", color: "text-blue-500",    bg: "bg-blue-50 border-blue-100",       label: "Email sent" },
-    CALL_INITIATED: { icon: "📞", color: "text-green-500",  bg: "bg-green-50 border-green-100",  label: "Call initiated" },
-    CALL_COMPLETED: { icon: "📞", color: "text-green-600",  bg: "bg-green-50 border-green-100",  label: "Call completed" },
-    DEPARTMENTS_ALLOCATED: { icon: "⊞", color: "text-indigo-500", bg: "bg-indigo-50 border-indigo-100", label: "Departments allocated" },
-    CONSULTANT_ASSIGNED:   { icon: "👤", color: "text-violet-500", bg: "bg-violet-50 border-violet-100", label: "Consultant assigned" },
-    REASSIGNMENT_REQUESTED:{ icon: "⇄", color: "text-violet-400", bg: "bg-violet-50 border-violet-100", label: "Reassignment requested" },
-    REASSIGNMENT_REJECTED: { icon: "✕", color: "text-red-500",    bg: "bg-red-50 border-red-100",      label: "Reassignment rejected" },
-    STAGE_UPDATED:         { icon: "⇄", color: "text-indigo-500", bg: "bg-indigo-50 border-indigo-100", label: "Stage updated" },
-    DEPARTMENT_REMOVED:    { icon: "⊟", color: "text-red-400",    bg: "bg-red-50 border-red-100",      label: "Department removed" },
-    DEAL_CREATED:          { icon: "💵", color: "text-green-500",  bg: "bg-green-50 border-green-100",   label: "Deal created" },
-    DEAL_STAGE_CHANGED:    { icon: "⇄", color: "text-green-600",  bg: "bg-green-50 border-green-100",   label: "Deal stage updated" },
-    DEAL_UPDATED:          { icon: "✎", color: "text-green-500",  bg: "bg-green-50 border-green-100",   label: "Deal updated" },
-    INVOICE_CREATED:       { icon: "🧾", color: "text-emerald-500", bg: "bg-emerald-50 border-emerald-100", label: "Invoice created" },
-    INVOICE_UPDATED:       { icon: "✎", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100", label: "Invoice updated" },
-    PAYMENT_RECEIVED:      { icon: "💰", color: "text-emerald-700", bg: "bg-emerald-100 border-emerald-200", label: "Payment received" },
-    RESUME_UPLOADED:       { icon: "📎", color: "text-indigo-500", bg: "bg-indigo-50 border-indigo-100", label: "Resume uploaded" },
-    DEFAULT:        { icon: "·", color: "text-gray-400",   bg: "bg-gray-50 border-gray-100",   label: "Activity" },
 };
 
 const FILTER_PILLS = [
@@ -90,18 +51,6 @@ const FILTER_PILLS = [
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const relTime = (date) => {
-    const diff = Date.now() - new Date(date).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    if (days < 7) return `${days}d ago`;
-    return new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-};
 
 const dayLabel = (date) => {
     const d = new Date(date);
@@ -732,6 +681,7 @@ function CustomFieldsPanel({ leadId, lead }) {
     const qc = useQueryClient();
     const [editing, setEditing] = useState(false);
     const [values, setValues] = useState({});
+    const [isOpen, setIsOpen] = useState(false); // Closed by default
 
     const { data: allDefs = [] } = useQuery({
         queryKey: ["lead-fields"],
@@ -781,15 +731,16 @@ function CustomFieldsPanel({ leadId, lead }) {
 
     return (
         <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-1.5">
+            <div className="flex items-center justify-between mb-0 cursor-pointer select-none" onClick={() => !editing && setIsOpen(!isOpen)}>
+                <div className="flex items-center gap-1.5 py-1">
+                    {isOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
                     <SlidersHorizontal className="h-3.5 w-3.5 text-gray-400" />
                     <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Lead Fields</h3>
                 </div>
                 {!editing ? (
-                    <button onClick={handleEdit} className="text-xs text-indigo-500 hover:underline font-semibold">Edit</button>
+                    isOpen && <button onClick={(e) => { e.stopPropagation(); handleEdit(); }} className="text-xs text-indigo-500 hover:underline font-semibold">Edit</button>
                 ) : (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                         <button onClick={() => setEditing(false)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
                         <button
                             onClick={() => save.mutate()}
@@ -802,56 +753,59 @@ function CustomFieldsPanel({ leadId, lead }) {
                     </div>
                 )}
             </div>
-            <div className="space-y-2.5">
-                {visibleFields.map(def => {
-                    const displayVal = editing ? (values[def.fieldKey] ?? "") : getLeadValue(def);
-                    return (
-                        <div key={def.id}>
-                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">{def.name}</p>
-                            {!editing ? (
-                                <p className="text-sm text-gray-800 break-words">
-                                    {displayVal !== "" && displayVal !== null && displayVal !== undefined
-                                        ? (ENUM_LABELS[displayVal] ?? String(displayVal))
-                                        : <span className="text-gray-300">—</span>}
-                                </p>
-                            ) : def.type === "SELECT" ? (
-                                <select
-                                    className="w-full h-8 px-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                                    value={values[def.fieldKey] ?? ""}
-                                    onChange={e => setValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
-                                >
-                                    <option value="">— Select —</option>
-                                    {(def.options || []).map(o => <option key={o} value={o}>{ENUM_LABELS[o] ?? o}</option>)}
-                                </select>
-                            ) : def.type === "TEXTAREA" ? (
-                                <textarea
-                                    rows={3}
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 resize-none"
-                                    value={values[def.fieldKey] ?? ""}
-                                    onChange={e => setValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
-                                />
-                            ) : def.type === "CHECKBOX" ? (
-                                <input
-                                    type="checkbox"
-                                    checked={!!values[def.fieldKey]}
-                                    onChange={e => setValues(v => ({ ...v, [def.fieldKey]: e.target.checked }))}
-                                    className="accent-indigo-600 h-4 w-4"
-                                />
-                            ) : (
-                                <input
-                                    type={def.type === "NUMBER" ? "number" : def.type === "DATE" ? "date" : "text"}
-                                    className="w-full h-8 px-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                                    value={values[def.fieldKey] ?? ""}
-                                    onChange={e => setValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
-                                />
-                            )}
-                        </div>
-                    );
-                })}
-            </div>
+            {isOpen && (
+                <div className="space-y-2.5 mt-3 pt-3 border-t border-gray-100">
+                    {visibleFields.map(def => {
+                        const displayVal = editing ? (values[def.fieldKey] ?? "") : getLeadValue(def);
+                        return (
+                            <div key={def.id}>
+                                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">{def.name}</p>
+                                {!editing ? (
+                                    <p className="text-sm text-gray-800 break-words">
+                                        {displayVal !== "" && displayVal !== null && displayVal !== undefined
+                                            ? (ENUM_LABELS[displayVal] ?? String(displayVal))
+                                            : <span className="text-gray-300">—</span>}
+                                    </p>
+                                ) : def.type === "SELECT" ? (
+                                    <select
+                                        className="w-full h-8 px-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                        value={values[def.fieldKey] ?? ""}
+                                        onChange={e => setValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
+                                    >
+                                        <option value="">— Select —</option>
+                                        {(def.options || []).map(o => <option key={o} value={o}>{ENUM_LABELS[o] ?? o}</option>)}
+                                    </select>
+                                ) : def.type === "TEXTAREA" ? (
+                                    <textarea
+                                        rows={3}
+                                        className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 resize-none"
+                                        value={values[def.fieldKey] ?? ""}
+                                        onChange={e => setValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
+                                    />
+                                ) : def.type === "CHECKBOX" ? (
+                                    <input
+                                        type="checkbox"
+                                        checked={!!values[def.fieldKey]}
+                                        onChange={e => setValues(v => ({ ...v, [def.fieldKey]: e.target.checked }))}
+                                        className="accent-indigo-600 h-4 w-4"
+                                    />
+                                ) : (
+                                    <input
+                                        type={def.type === "NUMBER" ? "number" : def.type === "DATE" ? "date" : "text"}
+                                        className="w-full h-8 px-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                        value={values[def.fieldKey] ?? ""}
+                                        onChange={e => setValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
+                                    />
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 }
+
 
 // ─── Deal Stage helpers ───────────────────────────────────────────────────────
 
@@ -974,63 +928,71 @@ function ConvertToDealModal({ leadId, leadName, onClose, onSuccess }) {
 // ─── DealsPanel ───────────────────────────────────────────────────────────────
 
 function DealsPanel({ deals, loading, onAdd }) {
+    const [isOpen, setIsOpen] = useState(false);
     const totalValue = deals.reduce((s, d) => s + d.amount, 0);
     const wonDeals = deals.filter(d => d.stage === "WON");
 
     return (
         <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+            <div className="flex items-center justify-between mb-0 cursor-pointer select-none" onClick={() => setIsOpen(!isOpen)}>
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5 py-1">
+                    {isOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
                     <TrendingUp className="h-3.5 w-3.5 text-violet-500" />
                     Deals {deals.length > 0 && <span className="text-violet-600">({deals.length})</span>}
                 </h3>
-                <button onClick={onAdd} className="text-violet-600 hover:text-violet-800 transition-colors" title="New deal">
-                    <Plus className="h-3.5 w-3.5" />
-                </button>
+                {isOpen && (
+                    <button onClick={(e) => { e.stopPropagation(); onAdd(); }} className="text-violet-600 hover:text-violet-800 transition-colors" title="New deal">
+                        <Plus className="h-3.5 w-3.5" />
+                    </button>
+                )}
             </div>
 
-            {loading ? (
-                <div className="flex justify-center py-2"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /></div>
-            ) : deals.length === 0 ? (
-                <div className="text-center py-3">
-                    <p className="text-xs text-gray-400 mb-2">No deals yet</p>
-                    <button onClick={onAdd} className="text-xs text-violet-600 hover:underline font-medium">
-                        + Convert to deal
-                    </button>
-                </div>
-            ) : (
-                <>
-                    {deals.length > 0 && (
-                        <div className="flex gap-3 mb-3 p-2 bg-violet-50 rounded-lg">
-                            <div className="flex-1">
-                                <p className="text-[10px] text-gray-500">Pipeline</p>
-                                <p className="text-sm font-black text-violet-700">{fmtAmt(totalValue)}</p>
-                            </div>
-                            {wonDeals.length > 0 && (
-                                <div className="flex-1">
-                                    <p className="text-[10px] text-gray-500">Won</p>
-                                    <p className="text-sm font-black text-green-700">{fmtAmt(wonDeals.reduce((s, d) => s + d.amount, 0))}</p>
+            {isOpen && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                    {loading ? (
+                        <div className="flex justify-center py-2"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /></div>
+                    ) : deals.length === 0 ? (
+                        <div className="text-center py-3">
+                            <p className="text-xs text-gray-400 mb-2">No deals yet</p>
+                            <button onClick={onAdd} className="text-xs text-violet-600 hover:underline font-medium">
+                                + Convert to deal
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            {deals.length > 0 && (
+                                <div className="flex gap-3 mb-3 p-2 bg-violet-50 rounded-lg">
+                                    <div className="flex-1">
+                                        <p className="text-[10px] text-gray-500">Pipeline</p>
+                                        <p className="text-sm font-black text-violet-700">{fmtAmt(totalValue)}</p>
+                                    </div>
+                                    {wonDeals.length > 0 && (
+                                        <div className="flex-1">
+                                            <p className="text-[10px] text-gray-500">Won</p>
+                                            <p className="text-sm font-black text-green-700">{fmtAmt(wonDeals.reduce((s, d) => s + d.amount, 0))}</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
-                        </div>
-                    )}
-                    <div className="space-y-2">
-                        {deals.map(deal => (
-                            <div key={deal.id} className="flex items-start justify-between gap-2 py-1 border-b border-gray-100 last:border-0">
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-semibold text-gray-800 truncate">{deal.title}</p>
-                                    <p className="text-[11px] text-gray-500">{fmtAmt(deal.amount, deal.currency)}</p>
-                                </div>
-                                <span className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${DEAL_STAGE_STYLE[deal.stage] ?? "bg-gray-100 text-gray-600"}`}>
-                                    {deal.stage}
-                                </span>
+                            <div className="space-y-2">
+                                {deals.map(deal => (
+                                    <div key={deal.id} className="flex items-start justify-between gap-2 py-1 border-b border-gray-100 last:border-0">
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-semibold text-gray-800 truncate">{deal.title}</p>
+                                            <p className="text-[11px] text-gray-500">{fmtAmt(deal.amount, deal.currency)}</p>
+                                        </div>
+                                        <span className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${DEAL_STAGE_STYLE[deal.stage] ?? "bg-gray-100 text-gray-600"}`}>
+                                            {deal.stage}
+                                        </span>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
-                    <Link to="/deals" className="block text-center text-[11px] text-violet-600 hover:underline mt-2">
-                        View all deals →
-                    </Link>
-                </>
+                            <Link to="/deals" className="block text-center text-[11px] text-violet-600 hover:underline mt-2">
+                                View all deals →
+                            </Link>
+                        </>
+                    )}
+                </div>
             )}
         </div>
     );
@@ -1056,6 +1018,9 @@ export default function LeadDetail() {
     const [showEmailModal, setShowEmailModal] = useState(false);
     const [showDealModal, setShowDealModal] = useState(false);
     const [showDetails, setShowDetails] = useState(false);
+    const [departmentsOpen, setDepartmentsOpen] = useState(false);
+    const [teamActivityOpen, setTeamActivityOpen] = useState(false);
+    const [automationsOpen, setAutomationsOpen] = useState(false);
     const [timelineFilter, setTimelineFilter] = useState("all");
     const [expandedGroups, setExpandedGroups] = useState(new Set());
     const noteRef = useRef(null);
@@ -1556,7 +1521,7 @@ export default function LeadDetail() {
                 {/* Hero row: avatar + name + status + score */}
                 <div className="p-6">
                     <div className="flex items-start gap-5">
-                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-md">
+                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-md ring-4 ring-indigo-50">
                             <span className="text-xl font-black text-white">{initials(lead.name)}</span>
                         </div>
 
@@ -1565,6 +1530,21 @@ export default function LeadDetail() {
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2.5 flex-wrap mb-1">
                                         <h1 className="text-2xl font-black text-gray-900 truncate leading-tight">{lead.name}</h1>
+                                        {lead.leadId && (
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 select-all">
+                                                <span>{lead.leadId}</span>
+                                                <button
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(lead.leadId);
+                                                        toast.success("Lead ID copied!");
+                                                    }}
+                                                    title="Copy Lead ID"
+                                                    className="hover:text-indigo-900 transition-colors p-0.5 cursor-pointer"
+                                                >
+                                                    <Copy className="h-3 w-3" />
+                                                </button>
+                                            </span>
+                                        )}
                                         {primaryDept?.stage && (
                                             <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide ${
                                                 primaryDept.stage === "ARCHIVE" 
@@ -1577,7 +1557,7 @@ export default function LeadDetail() {
                                                     ? "bg-amber-100 text-amber-700 border border-amber-200"
                                                     : "bg-indigo-100 text-indigo-700 border border-indigo-200"
                                             }`}>
-                                                {stageLabel(primaryDept.stage)}
+                                                {stageLabel(primaryDept.department, primaryDept.stage)}
                                             </span>
                                         )}
                                     </div>
@@ -1626,16 +1606,6 @@ export default function LeadDetail() {
                                     </span>
                                 )}
                             </div>
-
-                            {/* Available at every stage: opens this lead's invoice if one
-                                exists, otherwise creates a new one linked to the lead. */}
-                            <button
-                                onClick={() => navigate(`/invoices?leadId=${id}&invoiceForLead=1`)}
-                                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm"
-                            >
-                                <IndianRupee className="h-3.5 w-3.5" />
-                                Create / Update Invoice
-                            </button>
                         </div>
                     </div>
 
@@ -1698,7 +1668,7 @@ export default function LeadDetail() {
                                 onClick={() => initiateCall.mutate()}
                                 disabled={initiateCall.isPending || !lead.phone}
                                 title={!lead.phone ? "No phone number on record" : "Initiate call"}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-100 disabled:text-gray-400 text-white text-sm font-bold rounded-lg shadow-sm transition-all disabled:shadow-none disabled:cursor-not-allowed"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-bold rounded-lg shadow-sm transition-all disabled:shadow-none disabled:cursor-not-allowed cursor-pointer"
                             >
                                 {initiateCall.isPending
                                     ? <Loader2 className="h-4 w-4 animate-spin" />
@@ -1709,7 +1679,7 @@ export default function LeadDetail() {
                             <button
                                 onClick={() => lead.phone ? setShowWaModal(true) : toast.warning("No phone number on record")}
                                 title={!lead.whatsappOptIn ? "Lead has not opted in to WhatsApp" : "Send WhatsApp message"}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-lg shadow-sm transition-all relative"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow-sm transition-all relative cursor-pointer"
                             >
                                 <MessageSquare className="h-4 w-4" />
                                 WhatsApp
@@ -1720,14 +1690,14 @@ export default function LeadDetail() {
 
                             <button
                                 onClick={() => setShowEmailModal(true)}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg shadow-sm transition-all"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow-sm transition-all cursor-pointer"
                             >
                                 <Mail className="h-4 w-4" /> Email
                             </button>
 
                             <button
                                 onClick={() => setTimeout(() => noteRef.current?.focus(), 100)}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-lg shadow-sm transition-all"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow-sm transition-all cursor-pointer"
                             >
                                 <FileText className="h-4 w-4" /> Note
                             </button>
@@ -1737,7 +1707,7 @@ export default function LeadDetail() {
                             {isAdmin && (
                                 <button
                                     onClick={() => setShowEditLead(true)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold border border-gray-200 rounded-lg transition-all"
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-indigo-50 hover:text-indigo-600 border border-gray-200 hover:border-indigo-200 text-gray-700 text-sm font-semibold rounded-lg transition-all cursor-pointer"
                                 >
                                     <Pencil className="h-3.5 w-3.5" /> Edit Lead
                                 </button>
@@ -1745,14 +1715,20 @@ export default function LeadDetail() {
                             {isAdmin && (
                                 <button
                                     onClick={() => setShowTaskModal(true)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold border border-gray-200 rounded-lg transition-all"
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-indigo-50 hover:text-indigo-600 border border-gray-200 hover:border-indigo-200 text-gray-700 text-sm font-semibold rounded-lg transition-all cursor-pointer"
                                 >
                                     <Plus className="h-3.5 w-3.5" /> Task
                                 </button>
                             )}
+                            <button
+                                onClick={() => navigate(`/invoices?leadId=${id}&invoiceForLead=1`)}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-all cursor-pointer shadow-sm"
+                            >
+                                <IndianRupee className="h-3.5 w-3.5" /> Invoice
+                            </button>
                             <Link
                                 to={`/leads/${id}/journey`}
-                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold border border-gray-200 rounded-lg transition-all"
+                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-indigo-50 hover:text-indigo-600 border border-gray-200 hover:border-indigo-200 text-gray-700 text-sm font-semibold rounded-lg transition-all"
                             >
                                 <GitBranch className="h-3.5 w-3.5" /> Journey
                             </Link>
@@ -1762,7 +1738,7 @@ export default function LeadDetail() {
                                         ref={dropdownButtonRef}
                                         onClick={() => setShowStageDropdown(!showStageDropdown)}
                                         disabled={stageMut.isPending}
-                                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-semibold rounded-lg shadow-sm transition-all"
+                                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
                                     >
                                         {stageMut.isPending ? (
                                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1920,8 +1896,13 @@ export default function LeadDetail() {
                                             ref={noteRef}
                                             value={noteText}
                                             onChange={e => setNoteText(e.target.value)}
-                                            onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleNoteSubmit(e); }}
-                                            placeholder="Add a note… (Ctrl+Enter to save)"
+                                            onKeyDown={e => {
+                                                if (e.key === "Enter" && !e.shiftKey) {
+                                                    e.preventDefault();
+                                                    handleNoteSubmit(e);
+                                                }
+                                            }}
+                                            placeholder="Add a note… (Enter to save, Shift+Enter for new line)"
                                             rows={2}
                                             className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400"
                                         />
@@ -2019,7 +2000,7 @@ export default function LeadDetail() {
                         </div>
 
                         {/* Timeline content */}
-                        <div className="p-5">
+                        <div className="p-5 max-h-[550px] overflow-y-auto">
                             {timelineGroups.length === 0 ? (
                                 <p className="text-sm text-gray-400 text-center py-8">No activity yet.</p>
                             ) : (
@@ -2140,6 +2121,65 @@ export default function LeadDetail() {
                             )}
                         </div>
                     </div>
+
+                    {/* ── Tasks Section ───────────────────────────────────── */}
+                    <div className="bg-white border border-gray-200/70 rounded-2xl shadow-sm overflow-hidden">
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                            <div className="flex items-center gap-3">
+                                <div className="h-8 w-8 rounded-lg bg-indigo-50 flex items-center justify-center">
+                                    <CheckCircle className="h-4 w-4 text-indigo-500" />
+                                </div>
+                                <div>
+                                    <h2 className="text-sm font-bold text-gray-900">Tasks</h2>
+                                    <p className="text-xs text-gray-400">
+                                        {tasksLoading ? "Loading…" : tasks.length === 0 ? "No tasks yet" : `${openTasks.length} open · ${tasks.length - openTasks.length} done`}
+                                    </p>
+                                </div>
+                            </div>
+                            {isAdmin && (
+                                <button
+                                    onClick={() => setShowTaskModal(true)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all shadow-sm shadow-indigo-100 cursor-pointer"
+                                >
+                                    <Plus className="h-3.5 w-3.5" /> New Task
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Body */}
+                        {tasksLoading ? (
+                            <div className="flex justify-center py-10">
+                                <Loader2 className="h-5 w-5 animate-spin text-indigo-400" />
+                            </div>
+                        ) : tasks.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                                <div className="h-14 w-14 rounded-full bg-gray-50 flex items-center justify-center mb-3">
+                                    <CheckCircle className="h-7 w-7 text-gray-200" />
+                                </div>
+                                <p className="text-sm font-semibold text-gray-500">No tasks yet</p>
+                                <p className="text-xs text-gray-400 mt-0.5 max-w-xs">Create a task to track follow-ups, calls, or action items for this lead.</p>
+                                {isAdmin && (
+                                    <button
+                                        onClick={() => setShowTaskModal(true)}
+                                        className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-indigo-600 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all cursor-pointer"
+                                    >
+                                        <Plus className="h-3.5 w-3.5" /> Add First Task
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-gray-50">
+                                {tasks.map(task => {
+                                    return (
+                                        <div key={task.id} className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/70 transition-colors group">
+                                            <TaskRow task={task} leadId={id} />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* ── RIGHT: lead context (collapsible, sticky on desktop) ─────── */}
@@ -2168,7 +2208,20 @@ export default function LeadDetail() {
                     )}
 
                     {/* ── Departments (multi-department services) ──────────────── */}
-                    <LeadDepartmentsPanel leadId={id} />
+                    <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
+                        <div className="flex items-center justify-between mb-0 cursor-pointer select-none" onClick={() => setDepartmentsOpen(!departmentsOpen)}>
+                            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5 py-1">
+                                {departmentsOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+                                <GitBranch className="h-3.5 w-3.5 text-gray-400" />
+                                Departments
+                            </h3>
+                        </div>
+                        {departmentsOpen && (
+                            <div className="mt-3 pt-3 border-t border-gray-100">
+                                <LeadDepartmentsPanel leadId={id} />
+                            </div>
+                        )}
+                    </div>
 
                     {/* ── Custom Fields ───────────────────────────────────────── */}
                     <CustomFieldsPanel leadId={id} lead={lead} />
@@ -2176,153 +2229,73 @@ export default function LeadDetail() {
                     {/* ── Deals ───────────────────────────────────────────────── */}
                     <DealsPanel deals={leadDeals} loading={dealsLoading} onAdd={() => setShowDealModal(true)} />
 
-                    {/* ── Tasks (compact count — full list is below) ───────── */}
-                    <div className="bg-white border border-gray-200/70 rounded-2xl px-4 py-3 shadow-sm">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <CheckCircle className="h-3.5 w-3.5 text-gray-400" />
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Tasks</h3>
-                                {openTasks.length > 0 && (
-                                    <span className="text-xs font-bold text-white bg-indigo-500 rounded-full px-1.5 py-0.5 leading-none">{openTasks.length}</span>
-                                )}
-                            </div>
-                            {isAdmin && (
-                                <button
-                                    onClick={() => setShowTaskModal(true)}
-                                    className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
-                                    title="Add task"
-                                >
-                                    <Plus className="h-3.5 w-3.5" /> Add
-                                </button>
-                            )}
-                        </div>
-                        {tasksLoading ? (
-                            <div className="flex justify-center py-2"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /></div>
-                        ) : openTasks.length === 0 ? (
-                            <p className="text-xs text-gray-400 text-center py-1 mt-1">No open tasks</p>
-                        ) : (
-                            <p className="text-xs text-gray-500 mt-1">
-                                {openTasks.slice(0, 2).map(t => t.title).join(", ")}{openTasks.length > 2 ? ` +${openTasks.length - 2} more` : ""}
-                            </p>
-                        )}
-                    </div>
-
                     {/* ── Related Team Activity ────────────────────────────────── */}
                     {teamActivity.length > 0 && (
                         <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
-                            <div className="flex items-center gap-1.5 mb-3">
-                                <Users className="h-3.5 w-3.5 text-gray-400" />
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Team Activity</h3>
+                            <div className="flex items-center justify-between mb-0 cursor-pointer select-none" onClick={() => setTeamActivityOpen(!teamActivityOpen)}>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5 py-1">
+                                    {teamActivityOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+                                    <Users className="h-3.5 w-3.5 text-gray-400" />
+                                    Team Activity
+                                </h3>
                             </div>
-                            <div className="space-y-3">
-                                {teamActivity.map(a => {
-                                    const cfg = ACTION_CONFIG[a.action] ?? ACTION_CONFIG.DEFAULT;
-                                    return (
-                                        <div key={a.id} className="flex items-start gap-2">
-                                            <div className="h-5 w-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                                <span className="text-[9px] font-bold text-indigo-600">
-                                                    {a.user?.name?.charAt(0).toUpperCase()}
-                                                </span>
+                            {teamActivityOpen && (
+                                <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
+                                    {teamActivity.map(a => {
+                                        const cfg = ACTION_CONFIG[a.action] ?? ACTION_CONFIG.DEFAULT;
+                                        return (
+                                            <div key={a.id} className="flex items-start gap-2">
+                                                <div className="h-5 w-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                    <span className="text-[9px] font-bold text-indigo-600">
+                                                        {a.user?.name?.charAt(0).toUpperCase()}
+                                                    </span>
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs text-gray-700 leading-snug">
+                                                        <span className="font-semibold">{a.user?.name}</span>
+                                                        {" "}{cfg.label.toLowerCase()}
+                                                    </p>
+                                                    <p className="text-[10px] text-gray-400">{relTime(a.createdAt)}</p>
+                                                </div>
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-xs text-gray-700 leading-snug">
-                                                    <span className="font-semibold">{a.user?.name}</span>
-                                                    {" "}{cfg.label.toLowerCase()}
-                                                </p>
-                                                <p className="text-[10px] text-gray-400">{relTime(a.createdAt)}</p>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     )}
 
                     {/* ── Active Automations ───────────────────────────────────── */}
                     {activeAutomations.length > 0 && (
                         <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
-                            <div className="flex items-center gap-1.5 mb-3">
-                                <Zap className="h-3.5 w-3.5 text-violet-500" />
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Active Automations</h3>
+                            <div className="flex items-center justify-between mb-0 cursor-pointer select-none" onClick={() => setAutomationsOpen(!automationsOpen)}>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5 py-1">
+                                    {automationsOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+                                    <Zap className="h-3.5 w-3.5 text-violet-500" />
+                                    Active Automations
+                                </h3>
                             </div>
-                            <div className="space-y-2">
-                                {activeAutomations.slice(0, 4).map(auto => (
-                                    <div key={auto.id} className="flex items-center gap-2">
-                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                                        <p className="text-xs text-gray-700 truncate flex-1">{auto.name}</p>
-                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 flex-shrink-0">
-                                            ON
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                            {activeAutomations.length > 4 && (
-                                <Link to="/automations" className="text-[10px] text-indigo-600 hover:underline mt-2 block">
-                                    +{activeAutomations.length - 4} more
-                                </Link>
+                            {automationsOpen && (
+                                <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+                                    {activeAutomations.slice(0, 4).map(auto => (
+                                        <div key={auto.id} className="flex items-center gap-2">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                                            <p className="text-xs text-gray-700 truncate flex-1">{auto.name}</p>
+                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 flex-shrink-0">
+                                                ON
+                                            </span>
+                                        </div>
+                                    ))}
+                                    {activeAutomations.length > 4 && (
+                                        <Link to="/automations" className="text-[10px] text-indigo-600 hover:underline mt-2 block">
+                                            +{activeAutomations.length - 4} more
+                                        </Link>
+                                    )}
+                                </div>
                             )}
                         </div>
                     )}
                 </div>
-                )}
-            </div>
-
-            {/* ── Full-width Tasks Section ───────────────────────────────────── */}
-            <div className="bg-white border border-gray-200/70 rounded-2xl shadow-sm overflow-hidden">
-                {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                    <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-lg bg-indigo-50 flex items-center justify-center">
-                            <CheckCircle className="h-4 w-4 text-indigo-500" />
-                        </div>
-                        <div>
-                            <h2 className="text-sm font-bold text-gray-900">Tasks</h2>
-                            <p className="text-xs text-gray-400">
-                                {tasksLoading ? "Loading…" : tasks.length === 0 ? "No tasks yet" : `${openTasks.length} open · ${tasks.length - openTasks.length} done`}
-                            </p>
-                        </div>
-                    </div>
-                    {isAdmin && (
-                        <button
-                            onClick={() => setShowTaskModal(true)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all shadow-sm shadow-indigo-100"
-                        >
-                            <Plus className="h-3.5 w-3.5" /> New Task
-                        </button>
-                    )}
-                </div>
-
-                {/* Body */}
-                {tasksLoading ? (
-                    <div className="flex justify-center py-10">
-                        <Loader2 className="h-5 w-5 animate-spin text-indigo-400" />
-                    </div>
-                ) : tasks.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-center px-4">
-                        <div className="h-14 w-14 rounded-full bg-gray-50 flex items-center justify-center mb-3">
-                            <CheckCircle className="h-7 w-7 text-gray-200" />
-                        </div>
-                        <p className="text-sm font-semibold text-gray-500">No tasks yet</p>
-                        <p className="text-xs text-gray-400 mt-0.5 max-w-xs">Create a task to track follow-ups, calls, or action items for this lead.</p>
-                        {isAdmin && (
-                            <button
-                                onClick={() => setShowTaskModal(true)}
-                                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-indigo-600 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all"
-                            >
-                                <Plus className="h-3.5 w-3.5" /> Add First Task
-                            </button>
-                        )}
-                    </div>
-                ) : (
-                    <div className="divide-y divide-gray-50">
-                        {tasks.map(task => {
-                            return (
-                                <div key={task.id} className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/70 transition-colors group">
-                                    <TaskRow task={task} leadId={id} />
-                                </div>
-                            );
-                        })}
-                    </div>
                 )}
             </div>
 

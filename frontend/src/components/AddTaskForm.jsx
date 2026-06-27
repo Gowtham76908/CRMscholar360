@@ -4,7 +4,7 @@ import * as z from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import FileDropzone from "./FileDropzone";
 import { toast } from "sonner";
 
@@ -16,6 +16,84 @@ const taskSchema = z.object({
     leadId: z.string().optional(),
 });
 
+// A custom searchable select component with a click-outside listener
+const SearchableSelect = ({ label, options, placeholder, value, onChange, disabled, error }) => {
+    const [search, setSearch] = useState("");
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (containerRef.current && !containerRef.current.contains(e.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const filteredOptions = options?.filter(opt => 
+        opt.label.toLowerCase().includes(search.toLowerCase())
+    ) || [];
+
+    const selectedOption = options?.find(opt => opt.value === value);
+
+    return (
+        <div className="relative" ref={containerRef}>
+            <label className="block text-sm font-medium text-gray-700 font-semibold mb-1">{label}</label>
+            <div className="relative">
+                <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="w-full flex items-center justify-between rounded-xl border border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-3 bg-gray-50/50 transition-all text-left disabled:opacity-50"
+                >
+                    <span className={selectedOption ? "text-gray-900 font-medium" : "text-gray-400"}>
+                        {selectedOption ? selectedOption.label : placeholder}
+                    </span>
+                    <span className="text-gray-400 text-xs">▼</span>
+                </button>
+
+                {isOpen && !disabled && (
+                    <div className="absolute z-50 mt-1 w-full bg-white border border-gray-250 rounded-xl shadow-xl max-h-60 overflow-y-auto p-2 space-y-2">
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search..."
+                            className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-550"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                        <div className="space-y-1">
+                            {filteredOptions.length === 0 ? (
+                                <p className="text-xs text-gray-400 text-center py-2">No options found</p>
+                            ) : (
+                                filteredOptions.map(opt => (
+                                    <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={() => {
+                                            onChange(opt.value);
+                                            setIsOpen(false);
+                                            setSearch("");
+                                        }}
+                                        className={`w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-indigo-50 hover:text-indigo-600 transition-colors ${
+                                            value === opt.value ? "bg-indigo-50 text-indigo-600 font-bold" : "text-gray-700"
+                                        }`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+            {error && <p className="text-red-500 text-xs mt-1 font-medium">{error.message}</p>}
+        </div>
+    );
+};
+
 const AddTaskForm = ({ onClose, leadId: initialLeadId }) => {
     const queryClient = useQueryClient();
     const [files, setFiles] = useState([]);
@@ -24,13 +102,25 @@ const AddTaskForm = ({ onClose, leadId: initialLeadId }) => {
     const {
         register,
         handleSubmit,
+        setValue,
+        watch,
         formState: { errors },
     } = useForm({
         resolver: zodResolver(taskSchema),
         defaultValues: {
             leadId: initialLeadId || "",
+            assignedToId: "",
         }
     });
+
+    const assignedToId = watch("assignedToId");
+    const leadId = watch("leadId");
+
+    // Explicitly register Hook Form virtual fields
+    useEffect(() => {
+        register("assignedToId");
+        register("leadId");
+    }, [register]);
 
     // Fetch potential assignees (Team members)
     const { data: team } = useQuery({
@@ -83,7 +173,7 @@ const AddTaskForm = ({ onClose, leadId: initialLeadId }) => {
                 dueDate: new Date(data.dueDate).toISOString(),
                 files: uploadedFiles,
                 assignedTo: data.assignedToId,
-                leadId: data.leadId || null, // Convert empty string to null
+                leadId: initialLeadId || data.leadId || null, // Fix React Hook Form disabled field omission bug
             });
         } catch (error) {
             console.error("Submission error:", error);
@@ -116,38 +206,23 @@ const AddTaskForm = ({ onClose, leadId: initialLeadId }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 font-semibold mb-1">Assign To</label>
-                    <select
-                        {...register("assignedToId")}
-                        className="block w-full rounded-xl border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-3 bg-gray-50/50 appearance-none transition-all"
-                    >
-                        <option value="">Select a member</option>
-                        {team?.filter(m => m.isActive).map(member => (
-                            <option key={member.id} value={member.id}>
-                                {member.name}
-                            </option>
-                        ))}
-                    </select>
-                    {errors.assignedToId && <p className="text-red-500 text-xs mt-1 font-medium">{errors.assignedToId.message}</p>}
-                </div>
+                <SearchableSelect
+                    label="Assign To"
+                    placeholder="Select a member"
+                    options={team?.filter(m => m.isActive).map(member => ({ value: member.id, label: member.name })) || []}
+                    value={assignedToId}
+                    onChange={(val) => setValue("assignedToId", val, { shouldValidate: true })}
+                    error={errors.assignedToId}
+                />
 
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 font-semibold mb-1">Associate Lead</label>
-                    <select
-                        {...register("leadId")}
-                        className="block w-full rounded-xl border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-3 bg-gray-50/50 appearance-none transition-all"
-                        disabled={!!initialLeadId}
-                    >
-                        <option value="">Select a lead</option>
-                        {leads?.map(lead => (
-                            <option key={lead.id} value={lead.id}>
-                                {lead.name}
-                            </option>
-                        ))}
-                    </select>
-                    {errors.leadId && <p className="text-red-500 text-xs mt-1 font-medium">{errors.leadId.message}</p>}
-                </div>
+                <SearchableSelect
+                    label="Associate Lead"
+                    placeholder="Select a lead"
+                    options={leads?.map(lead => ({ value: lead.id, label: lead.name })) || []}
+                    value={leadId}
+                    onChange={(val) => setValue("leadId", val, { shouldValidate: true })}
+                    error={errors.leadId}
+                />
 
                 <div>
                     <label className="block text-sm font-medium text-gray-700 font-semibold mb-1">Due Date</label>

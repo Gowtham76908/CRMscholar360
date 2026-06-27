@@ -221,7 +221,7 @@ const getBoardQueue = async (req, res, next) => {
     }
 };
 
-// GET /api/lead-departments/dashboard?department=SALES&assignedEmployeeId=&startDate=&endDate=
+// GET /api/lead-departments/dashboard?department=SALES&assignedEmployeeId=&startDate=&endDate=&source=
 const getDashboard = async (req, res, next) => {
     try {
         const data = await departmentAnalyticsService.getDepartmentDashboard({
@@ -229,6 +229,7 @@ const getDashboard = async (req, res, next) => {
             assignedEmployeeId: req.query.assignedEmployeeId || undefined,
             startDate: req.query.startDate || undefined,
             endDate: req.query.endDate || undefined,
+            source: req.query.source || undefined,
             actor: actorOf(req),
         });
         res.json(data);

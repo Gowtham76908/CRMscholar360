@@ -98,6 +98,9 @@ export function useDepartmentDashboard(department, filters = {}) {
             api.get("/lead-departments/dashboard", { params: { department, ...filters } }).then((r) => r.data),
         enabled: Boolean(department),
         staleTime: 60 * 1000,
+        // Keep showing the previous department's/filter's counts while the new
+        // ones load, so changing a filter never blanks the KPI grid.
+        placeholderData: (prev) => prev,
     });
 }
 

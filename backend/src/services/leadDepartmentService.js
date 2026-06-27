@@ -816,7 +816,7 @@ async function getDepartmentQueue({ department, actor, filters = {} }) {
     return prisma.leadDepartment.findMany({
         where,
         include: {
-            lead: { select: { id: true, name: true, email: true, phone: true, source: true, score: true, category: true, enquiryType: true, createdAt: true } },
+            lead: { select: LEAD_SELECT_FOR_BOARD },
             assignedEmployee: { select: { id: true, name: true, email: true, profilePhoto: true } },
         },
         orderBy: { updatedAt: "desc" },
@@ -824,13 +824,27 @@ async function getDepartmentQueue({ department, actor, filters = {} }) {
 }
 
 const LEAD_SELECT_FOR_BOARD = {
-    id: true, name: true, email: true, phone: true, source: true,
+    id: true, leadId: true, name: true, email: true, phone: true, source: true,
     enquiryType: true, score: true, category: true, updatedAt: true,
     tasks: {
         orderBy: { createdAt: "desc" },
         take: 1,
         select: { id: true, title: true, description: true, status: true, priority: true, dueDate: true },
     },
+    leadDepartments: {
+        select: {
+            id: true,
+            department: true,
+            stage: true,
+            assignedEmployee: {
+                select: {
+                    id: true,
+                    name: true,
+                    profilePhoto: true,
+                }
+            }
+        }
+    }
 };
 
 /**

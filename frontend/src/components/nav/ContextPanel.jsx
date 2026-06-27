@@ -11,9 +11,28 @@ import {
     Clock, Calendar, ChevronRight, TrendingUp, IndianRupee, AlertCircle, Sparkles,
 } from "lucide-react";
 
+// Query params that distinguish sibling "views" sharing the same path (e.g. the
+// /leads tabs). A query-less link (like "All Leads") stays inactive while one of
+// these filtered views is active, so the current tab — not the base — highlights.
+const SIBLING_FILTER_KEYS = ["mine", "score_min", "view", "filter", "status"];
+
+function isLinkActive(location, to) {
+    const [toPath, toQuery] = to.split("?");
+    const onPath = location.pathname === toPath || location.pathname.startsWith(toPath + "/");
+    if (!onPath) return false;
+    const search = new URLSearchParams(location.search);
+    if (toQuery) {
+        // Filtered view: active only when all of its query params match the URL.
+        const want = new URLSearchParams(toQuery);
+        return [...want.entries()].every(([k, v]) => search.get(k) === v);
+    }
+    // Base view: active unless a sibling filtered view is currently applied.
+    return !SIBLING_FILTER_KEYS.some(k => search.has(k));
+}
+
 function PanelLink({ to, icon: Icon, label, count, active, dot }) {
     const location = useLocation();
-    const isActive = active ?? (location.pathname === to || (to !== "/dashboard" && location.pathname.startsWith(to)));
+    const isActive = active ?? isLinkActive(location, to);
     return (
         <Link
             to={to}
@@ -55,6 +74,7 @@ function WorkloadPanel() {
         <PanelSection title="Today">
             <PanelLink to="/my-day" icon={LayoutDashboard} label="My Day" />
             <PanelLink to="/dashboard" icon={BarChart} label="Dashboard" />
+            <PanelLink to="/leads?view=kanban" icon={KanbanSquare} label="Board View" />
         </PanelSection>
     );
 }
@@ -76,7 +96,6 @@ function CRMPanel() {
             <PanelSection title="Views">
                 <PanelLink to="/leads?mine=true" icon={Star} label="My Leads" />
                 <PanelLink to="/leads?score_min=61" icon={Star} label="Hot Leads" />
-                <PanelLink to="/leads?view=kanban" icon={KanbanSquare} label="Board View" />
                 <PanelLink to="/search-leads" icon={SearchCheck} label="Search Leads" />
                 <PanelLink to="/linkedin-leads" icon={Linkedin} label="LinkedIn Leads" />
             </PanelSection>

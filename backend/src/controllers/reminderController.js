@@ -57,7 +57,15 @@ const getMyReminders = async (req, res, next) => {
         if (leadIds.length) {
             const leads = await prisma.lead.findMany({
                 where: { id: { in: leadIds } },
-                select: { id: true, name: true },
+                select: {
+                    id: true, name: true, phone: true, email: true,
+                    leadDepartments: {
+                        select: {
+                            id: true, department: true, stage: true,
+                            assignedEmployee: { select: { id: true, name: true } },
+                        },
+                    },
+                },
             });
             leadMap = Object.fromEntries(leads.map(l => [l.id, l]));
         }

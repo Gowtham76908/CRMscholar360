@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
+import { fileUrl } from "../utils/fileUrl";
 import TaskModal from "../components/TaskModal";
 import {
     ChevronLeft,
@@ -182,7 +183,7 @@ const TaskDetail = () => {
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <a 
-                                                href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001'}${file.fileUrl}`} 
+                                                href={fileUrl(file.fileUrl)} 
                                                 target="_blank" 
                                                 rel="noopener noreferrer"
                                                 className="p-2 hover:bg-white rounded-lg text-gray-400 hover:text-indigo-600 transition-colors shadow-sm bg-gray-100/50"
@@ -191,7 +192,7 @@ const TaskDetail = () => {
                                                 <ExternalLink className="h-4 w-4" />
                                             </a>
                                             <a 
-                                                href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001'}${file.fileUrl}`} 
+                                                href={fileUrl(file.fileUrl)} 
                                                 download={file.fileName}
                                                 className="p-2 hover:bg-indigo-600 rounded-lg text-gray-400 hover:text-white transition-all shadow-sm bg-gray-100/50"
                                                 title="Download"

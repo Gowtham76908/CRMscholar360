@@ -148,12 +148,28 @@ router.post("/task-files", (req, res, next) => {
             return res.status(400).json({ message: "No files uploaded" });
         }
 
-        const filesData = req.files.map(file => ({
-            fileName: file.originalname,
-            fileUrl: `/uploads/tasks/${file.filename}`, // stored bare; signed at read time
-            fileSize: file.size,
-            mimeType: file.mimetype
-        }));
+        const filesData = [];
+
+        for (const file of req.files) {
+            let fileUrl = await uploadToCloudinary(file.path, "tasks");
+
+            if (fileUrl) {
+                // Delete local file immediately if Cloudinary succeeds
+                fs.unlink(file.path, (err) => {
+                    if (err) console.error("Error deleting local file after Cloudinary task upload:", err);
+                });
+            } else {
+                // Fallback to local URL path
+                fileUrl = `/uploads/tasks/${file.filename}`;
+            }
+
+            filesData.push({
+                fileName: file.originalname,
+                fileUrl: fileUrl,
+                fileSize: file.size,
+                mimeType: file.mimetype
+            });
+        }
 
         res.json({
             message: "Files uploaded successfully",

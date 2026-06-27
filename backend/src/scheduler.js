@@ -1,6 +1,6 @@
 const cron = require("node-cron");
 const prisma = require("./utils/prisma");
-const { nowIST } = require("./utils/istTime");
+const { nowIST, istDateKey } = require("./utils/istTime");
 const { processReminders } = require("./services/reminderService");
 const autoCheckout = require("./jobs/autoCheckout");
 const autoBreakOffline = require("./jobs/autoBreakOffline");
@@ -33,10 +33,15 @@ const istHHMM = () => {
     return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 };
 
+// State to track the last date (YYYY-MM-DD in IST) each job was run.
+// This prevents double-execution if the minute tick fires multiple times,
+// and enables "catch-up" runs if the server was offline/restarting during the exact configured minute.
+let lastAbsentRunDate = null;
+let lastCheckoutRunDate = null;
+
 // Attendance automation runs on admin-configurable times (CompanySettings, IST).
-// We tick every minute and fire each job when the current IST time matches its
-// configured time — this honors live settings changes without a restart, which a
-// fixed cron expression (registered once at boot) cannot do.
+// We tick every minute and fire each job when the current IST time is past its
+// configured time and it hasn't run yet today.
 async function attendanceAutomationTick() {
     const s = await prisma.companySettings.findFirst({
         select: {
@@ -46,11 +51,14 @@ async function attendanceAutomationTick() {
     });
     if (!s) return;
     const now = istHHMM();
+    const todayStr = istDateKey(nowIST());
 
-    if (s.autoAbsentEnabled !== false && s.autoAbsentTime === now) {
+    if (s.autoAbsentEnabled !== false && now >= s.autoAbsentTime && lastAbsentRunDate !== todayStr) {
+        lastAbsentRunDate = todayStr;
         await withRetry("autoMarkAbsent", autoMarkAbsent);
     }
-    if (s.autoCheckoutEnabled !== false && s.autoCheckoutRunTime === now) {
+    if (s.autoCheckoutEnabled !== false && now >= s.autoCheckoutRunTime && lastCheckoutRunDate !== todayStr) {
+        lastCheckoutRunDate = todayStr;
         await withRetry("autoCheckout", () => autoCheckout(s.autoCheckoutMarkTime));
     }
 }

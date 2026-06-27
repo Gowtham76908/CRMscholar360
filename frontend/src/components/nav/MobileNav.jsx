@@ -1,4 +1,4 @@
-﻿import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Users, MessageSquare, Zap, Settings2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { cn } from "../../lib/utils";
@@ -10,7 +10,7 @@ export default function MobileNav({ onModeClick, unreadCounts = {} }) {
     const { user }  = useAuth();
     const isSuperAdmin = user?.role === "SUPER_ADMIN";
     const isManager    = isSuperAdmin || user?.role === "ADMIN";
-    const activeMode   = getModeFromPath(location.pathname);
+    const activeMode   = getModeFromPath(location.pathname, location.search);
 
     const visibleModes = MODES.filter(m => !m.adminOnly || isManager);
 

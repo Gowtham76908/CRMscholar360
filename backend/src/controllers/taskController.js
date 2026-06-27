@@ -7,7 +7,17 @@ const logActivity = require("../utils/activityLogger");
 const { canAccessLead } = require("../services/permissionService");
 
 const taskInclude = {
-    lead: { select: { id: true, name: true, phone: true, email: true } },
+    lead: {
+        select: {
+            id: true, name: true, phone: true, email: true,
+            leadDepartments: {
+                select: {
+                    id: true, department: true, stage: true,
+                    assignedEmployee: { select: { id: true, name: true } },
+                },
+            },
+        },
+    },
     assignedTo: { select: { id: true, name: true, email: true } },
     createdBy: { select: { id: true, name: true, email: true } },
     sprint: { select: { id: true, name: true, status: true } },

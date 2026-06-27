@@ -61,7 +61,10 @@ export const MODES = [
     },
 ];
 
-export function getModeFromPath(pathname) {
+export function getModeFromPath(pathname, search = "") {
+    if (pathname === "/leads" && search.includes("view=kanban")) {
+        return "workload";
+    }
     for (const mode of MODES) {
         if (mode.paths.some(p => pathname === p || pathname.startsWith(p + "/"))) {
             return mode.id;
@@ -77,7 +80,7 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
     const { user, onlineStatus } = useAuth();
     const isSuperAdmin = user?.role === "SUPER_ADMIN";
     const isManager = isSuperAdmin || user?.role === "ADMIN" || user?.role === "TEAM_LEADER";
-    const activeMode = getModeFromPath(location.pathname);
+    const activeMode = getModeFromPath(location.pathname, location.search);
 
     // The Admin mode is shown to everyone; AdminPanel gates individual links
     // so managers/employees only see what they have access to.

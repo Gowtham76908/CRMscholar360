@@ -288,6 +288,9 @@ const SearchLeads = () => {
                                                     <div>
                                                         <div className="flex items-center gap-2">
                                                             <p className="font-medium text-gray-900">{lead.name}</p>
+                                                            {lead.leadId && (
+                                                                <span className="text-[10px] font-mono bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">{lead.leadId}</span>
+                                                            )}
                                                             {isImported && (
                                                                 <span className="text-xs font-medium text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">Added</span>
                                                             )}

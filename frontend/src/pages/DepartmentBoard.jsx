@@ -20,6 +20,7 @@ import {
 } from "../hooks/useDepartments";
 import { departmentLabel, departmentStyle } from "../lib/departments";
 import { getScoreStyle } from "../utils/leadScore";
+import Avatar from "../components/Avatar";
 
 /**
  * Department Board — a per-department Kanban over LeadDepartment services. Each
@@ -278,6 +279,7 @@ function StageColumn({ stage, department, accent, rows, stages, canAssign, onMov
 // ─── Card ────────────────────────────────────────────────────────────────────
 
 function ServiceCard({ row, department, stages, canAssign = false, onMove, moveLoading, overlay = false }) {
+    const [showOtherAssignees, setShowOtherAssignees] = useState(false);
     const lead = row.lead || {};
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: row.id });
     const style = !overlay ? { transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.35 : 1 } : {};
@@ -299,9 +301,14 @@ function ServiceCard({ row, department, stages, canAssign = false, onMove, moveL
                 <Link
                     to={`/leads/${lead.id}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="text-sm font-bold text-gray-900 leading-tight flex-1 min-w-0 truncate pr-1 hover:text-indigo-700 transition-colors"
+                    className="text-sm font-bold text-gray-900 leading-tight flex-1 min-w-0 truncate pr-1 hover:text-indigo-700 transition-colors flex items-center gap-1.5 flex-wrap"
                 >
                     {lead.name || "—"}
+                    {lead.leadId && (
+                        <span className="text-[9px] font-mono font-bold bg-slate-100 text-slate-500 px-1 py-0.2 rounded border border-slate-200 select-all">
+                            {lead.leadId}
+                        </span>
+                    )}
                 </Link>
                 {typeof lead.score === "number" && (
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${getScoreStyle(lead.score)}`}>{lead.score}</span>
@@ -318,15 +325,50 @@ function ServiceCard({ row, department, stages, canAssign = false, onMove, moveL
 
             <p className="mt-1 ml-5 text-xs text-gray-400 truncate">{lead.phone || lead.email || ""}</p>
 
+            {/* Expanded Department Assignees list (triggered by clicking the avatar/assignee badge) */}
+            {showOtherAssignees && (
+                <div className="mt-3 ml-5 space-y-1.5 border-t border-slate-100 pt-2.5 animate-fadeIn">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Department Assignees</p>
+                    {(lead.leadDepartments || []).map(ld => {
+                        const dotColor = 
+                            ld.department === "SALES" ? "bg-indigo-500" :
+                            ld.department === "APPLICATION_VISA" ? "bg-sky-500" :
+                            ld.department === "LOAN" ? "bg-emerald-500" :
+                            ld.department === "ACCOMMODATION_TICKETS" ? "bg-amber-500" :
+                            ld.department === "FOREX" ? "bg-violet-500" :
+                            "bg-slate-400";
+                        return (
+                            <div key={ld.id} className="flex items-center justify-between text-[11px] font-semibold py-0.5">
+                                <div className="flex items-center gap-1.5">
+                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+                                    <span className="text-slate-500">{departmentLabel(ld.department)} Team:</span>
+                                </div>
+                                <span className="text-slate-800 truncate pl-2 max-w-[120px]">
+                                    {ld.assignedEmployee?.name || <span className="text-slate-400 italic font-normal">Unassigned</span>}
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
             <div className="mt-2 ml-5 flex items-center justify-between">
-                <span className="flex items-center gap-1 text-[11px] text-gray-600 min-w-0">
+                <button
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowOtherAssignees(!showOtherAssignees);
+                    }}
+                    className={`flex items-center gap-1 text-[11px] text-gray-600 min-w-0 hover:text-indigo-600 transition-colors focus:outline-none px-1 rounded hover:bg-slate-100 ${showOtherAssignees ? "text-indigo-600 bg-indigo-50/70 hover:bg-indigo-55/70" : ""}`}
+                    title="Click to view all department assignees"
+                >
                     <User className="h-3 w-3 shrink-0" />
                     {row.assignedEmployee ? (
-                        <span className="truncate">{row.assignedEmployee.name}</span>
+                        <span className="truncate font-semibold">{row.assignedEmployee.name}</span>
                     ) : (
                         <span className="italic text-amber-600">Unassigned</span>
                     )}
-                </span>
+                </button>
                 {!overlay && canAssign && (
                     <AssignControl leadDepartmentId={row.id} department={department} currentId={row.assignedEmployeeId} />
                 )}

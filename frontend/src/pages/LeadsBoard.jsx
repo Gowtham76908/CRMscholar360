@@ -252,6 +252,7 @@ function formatLastUpdated(date) {
 }
 
 function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
+    const [showOtherAssignees, setShowOtherAssignees] = useState(false);
     const lead = row.lead || {};
     const sla = getSLAStatus(lead, slaWarningDays, slaBreachDays);
     const category = getCategoryFromScore(lead.score ?? 0);
@@ -277,8 +278,13 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
         >
             {/* Row 1 — name + SLA badge */}
             <div className="flex items-start justify-between gap-2">
-                <span className="font-bold text-base text-slate-800 truncate group-hover:text-indigo-650 transition-colors">
+                <span className="font-bold text-base text-slate-800 truncate group-hover:text-indigo-650 transition-colors flex items-center gap-1.5 flex-wrap">
                     {lead.name}
+                    {lead.leadId && (
+                        <span className="text-[9px] font-mono font-bold bg-slate-100 text-slate-500 px-1 py-0.2 rounded border border-slate-200 select-all">
+                            {lead.leadId}
+                        </span>
+                    )}
                 </span>
                 {sla && (
                     <span className={`flex-shrink-0 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border shadow-sm ${
@@ -295,12 +301,12 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
             <div className="mt-3.5 space-y-2">
                 {lead.phone && (
                     <p className="flex items-center gap-2 text-sm text-slate-500 truncate font-semibold hover:text-slate-800 transition-colors">
-                        <Phone className="h-4 w-4 text-slate-450 shrink-0" /> {lead.phone}
+                        <Phone className="h-4 w-4 text-slate-455 shrink-0" /> {lead.phone}
                     </p>
                 )}
                 {lead.email && (
                     <p className="flex items-center gap-2 text-sm text-slate-500 truncate font-semibold hover:text-slate-800 transition-colors">
-                        <Mail className="h-4 w-4 text-slate-450 shrink-0" /> {lead.email}
+                        <Mail className="h-4 w-4 text-slate-455 shrink-0" /> {lead.email}
                     </p>
                 )}
             </div>
@@ -323,9 +329,36 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
 
             {/* Row 4 — last activity */}
             <div className="mt-4 flex items-center gap-2 text-xs text-slate-450 font-semibold">
-                <Calendar className="h-3.5 w-3.5 text-slate-350" />
+                <Calendar className="h-3.5 w-3.5 text-slate-355" />
                 <span>Active {formatLastUpdated(lead.updatedAt)}</span>
             </div>
+
+            {/* Expanded Department Assignees list (triggered by clicking the avatar/assignee badge) */}
+            {showOtherAssignees && (
+                <div className="mt-4 space-y-2 border-t border-slate-100 pt-3.5 animate-fadeIn">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Department Assignees</p>
+                    {(lead.leadDepartments || []).map(ld => {
+                        const dotColor = 
+                            ld.department === "SALES" ? "bg-indigo-500" :
+                            ld.department === "APPLICATION_VISA" ? "bg-sky-500" :
+                            ld.department === "LOAN" ? "bg-emerald-500" :
+                            ld.department === "ACCOMMODATION_TICKETS" ? "bg-amber-500" :
+                            ld.department === "FOREX" ? "bg-violet-500" :
+                            "bg-slate-400";
+                        return (
+                            <div key={ld.id} className="flex items-center justify-between text-xs font-semibold py-1 border-b border-slate-50 last:border-0">
+                                <div className="flex items-center gap-2">
+                                    <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
+                                    <span className="text-slate-500">{departmentLabel(ld.department)} Team:</span>
+                                </div>
+                                <span className="text-slate-800 truncate pl-2 max-w-[170px]">
+                                    {ld.assignedEmployee?.name || <span className="text-slate-400 italic font-normal">Unassigned</span>}
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
 
             {/* Row 5 — footer */}
             <div className="flex items-center justify-between border-t border-slate-100 pt-3.5 mt-4">
@@ -333,16 +366,32 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
                     {category} · {lead.score ?? 0}
                 </span>
                 {row.assignedEmployee ? (
-                    <div className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200/50 pl-1 pr-3 py-1 rounded-full shadow-sm max-w-[160px] transition-colors duration-200" title={row.assignedEmployee.name}>
+                    <button
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowOtherAssignees(!showOtherAssignees);
+                        }}
+                        className={`flex items-center gap-2 bg-slate-50 hover:bg-indigo-50 border border-slate-200/50 pl-1 pr-3 py-1 rounded-full shadow-sm max-w-[160px] transition-all duration-200 hover:border-indigo-300 ring-offset-2 focus:outline-none ${showOtherAssignees ? "ring-2 ring-indigo-400 bg-indigo-50/50 border-indigo-300" : ""}`}
+                        title="Click to view all department assignees"
+                    >
                         <Avatar user={row.assignedEmployee} size="xs" className="w-5.5 h-5.5 ring-2 ring-white" />
                         <span className="text-[10px] text-slate-655 font-bold truncate">
                             {row.assignedEmployee.name.split(" ")[0]}
                         </span>
-                    </div>
+                    </button>
                 ) : (
-                    <span className="text-[10px] text-slate-400 font-bold bg-slate-50 border border-slate-200/40 px-2.5 py-1 rounded-full shadow-sm" title="Unassigned">
+                    <button
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowOtherAssignees(!showOtherAssignees);
+                        }}
+                        className={`text-[10px] text-slate-400 font-bold bg-slate-50 border border-slate-200/40 px-2.5 py-1 rounded-full shadow-sm hover:bg-indigo-50 hover:border-indigo-350 transition-all focus:outline-none ${showOtherAssignees ? "ring-2 ring-indigo-400 bg-indigo-50 border-indigo-300" : ""}`}
+                        title="Click to view all department assignees"
+                    >
                         Unassigned
-                    </span>
+                    </button>
                 )}
             </div>
 

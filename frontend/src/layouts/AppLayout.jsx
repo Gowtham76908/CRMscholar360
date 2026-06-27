@@ -22,7 +22,7 @@ export default function AppLayout() {
         localStorage.getItem("nav-panel-open") !== "false"
     );
 
-    const activeMode = useMemo(() => getModeFromPath(location.pathname), [location.pathname]);
+    const activeMode = useMemo(() => getModeFromPath(location.pathname, location.search), [location.pathname, location.search]);
 
     const handleModeClick = useCallback((modeId, defaultPath) => {
         if (modeId === activeMode) {

@@ -755,22 +755,38 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
             }
 
             await prisma.$transaction(async (tx) => {
+                const countToInsert = chunk.length;
+                const counterRows = await tx.$queryRaw`
+                    INSERT INTO "InvoiceCounter" ("prefix", "currentValue")
+                    VALUES ('LEAD', 10000)
+                    ON CONFLICT ("prefix") DO UPDATE
+                        SET "currentValue" = "InvoiceCounter"."currentValue" + ${countToInsert}
+                    RETURNING "currentValue"
+                `;
+                const finalVal = counterRows[0].currentValue;
+                const startVal = finalVal - countToInsert + 1;
+
                 const { count } = await tx.lead.createMany({
-                    data: chunk.map(r => ({
-                        name: r.name,
-                        email: r.email || null,
-                        phone: r.phone,
-                        phoneNormalized: r.normalized,
-                        company: r.company || null,
-                        biodata: r.biodata || null,
-                        jobTitle: r.jobTitle || null,
-                        linkedinUrl: r.linkedinUrl || null,
-                        source: r.source,
-                        enquiryType: r.enquiryType,
-                        score: r.score,
-                        category: r.category,
-                        ...(r.customFields && Object.keys(r.customFields).length > 0 ? { customFields: r.customFields } : {}),
-                    })),
+                    data: chunk.map((r, idx) => {
+                        const nextVal = startVal + idx;
+                        const leadId = `L-${String(nextVal).padStart(5, '0')}`;
+                        return {
+                            name: r.name,
+                            email: r.email || null,
+                            phone: r.phone,
+                            phoneNormalized: r.normalized,
+                            company: r.company || null,
+                            biodata: r.biodata || null,
+                            jobTitle: r.jobTitle || null,
+                            linkedinUrl: r.linkedinUrl || null,
+                            source: r.source,
+                            enquiryType: r.enquiryType,
+                            score: r.score,
+                            category: r.category,
+                            leadId,
+                            ...(r.customFields && Object.keys(r.customFields).length > 0 ? { customFields: r.customFields } : {}),
+                        };
+                    }),
                     skipDuplicates: true,
                 });
 

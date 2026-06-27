@@ -2,11 +2,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useDepartmentSelection, useDepartmentDashboard, useDepartmentMembers } from "../hooks/useDepartments";
+import { useDepartmentSelection, useDepartmentDashboard, useDepartmentMembers, useWorkflows } from "../hooks/useDepartments";
 import api from "../api/axios";
-import { DashboardSkeleton } from "../components/ui/Skeleton";
 import Badge from "../components/ui/Badge";
 import Avatar from "../components/Avatar";
+import CountUp from "../components/ui/CountUp";
+import * as XLSX from "xlsx";
 import {
     CheckCircle, Clock, Sparkles, X, ArrowRight,
     Users, AlertCircle, Bell,
@@ -14,7 +15,8 @@ import {
     Wallet, BarChart2, Trophy, Banknote, TrendingDown, KanbanSquare,
     CalendarClock, HelpCircle, GraduationCap, Hourglass, FolderOpen,
     ShieldAlert, BadgeCheck, Landmark, CheckCircle2, XCircle, ShieldCheck,
-    Settings, Search, CalendarDays, FileText, Inbox, CheckSquare
+    Settings, Search, CalendarDays, FileText, Inbox, CheckSquare, SlidersHorizontal,
+    Download, Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../lib/utils";
@@ -449,6 +451,7 @@ const Dashboard = () => {
     const [showStageModal, setShowStageModal] = useState(false);
     const [stageLeadsPage, setStageLeadsPage] = useState(1);
     const stageLeadsLimit = 50; // Load 50 leads per page
+    const [exportingStage, setExportingStage] = useState(false);
 
     // Today's Attendance modal state
     const [showAttendanceModal, setShowAttendanceModal] = useState(false);
@@ -523,6 +526,7 @@ const Dashboard = () => {
     const paramYearRange = searchParams.get("yearRange");
     const paramDept = searchParams.get("department");
     const paramConsultant = searchParams.get("consultantId");
+    const paramSource = searchParams.get("source");
 
     const defaultStartDate = useMemo(() => {
         const d = new Date();
@@ -540,6 +544,7 @@ const Dashboard = () => {
     const intake = paramIntake !== null ? paramIntake : defaultIntake;
     const yearRange = paramYearRange !== null ? paramYearRange : "All Time";
     const selectedConsultantId = paramConsultant !== null ? paramConsultant : "";
+    const source = paramSource !== null ? paramSource : "";
 
     // Department selection hook
     const { department, setDepartment, options } = useDepartmentSelection();
@@ -567,6 +572,7 @@ const Dashboard = () => {
     const [tempYearRange, setTempYearRange] = useState(yearRange);
     const [tempDepartment, setTempDepartment] = useState(null);
     const [tempSelectedConsultantId, setTempSelectedConsultantId] = useState(selectedConsultantId);
+    const [tempSource, setTempSource] = useState(source);
 
     // Sync temp states with URL query params when they change
     useEffect(() => {
@@ -575,7 +581,8 @@ const Dashboard = () => {
         setTempIntake(intake);
         setTempYearRange(yearRange);
         setTempSelectedConsultantId(selectedConsultantId);
-    }, [startDate, endDate, intake, yearRange, selectedConsultantId]);
+        setTempSource(source);
+    }, [startDate, endDate, intake, yearRange, selectedConsultantId, source]);
 
     // Sync tempDepartment with department once it loads/resolves initially
     useEffect(() => {
@@ -678,6 +685,12 @@ const Dashboard = () => {
             nextParams.delete("consultantId");
         }
 
+        if (tempSource !== null && tempSource !== undefined) {
+            nextParams.set("source", tempSource);
+        } else {
+            nextParams.delete("source");
+        }
+
         setSearchParams(nextParams);
     };
 
@@ -700,6 +713,7 @@ const Dashboard = () => {
         setTempIntake("All Intakes");
         setTempYearRange("All Time");
         setTempSelectedConsultantId("");
+        setTempSource("");
         setTempDepartment(activeDept);
         
         const nextParams = new URLSearchParams(searchParams);
@@ -708,6 +722,7 @@ const Dashboard = () => {
         nextParams.set("intake", "All Intakes");
         nextParams.delete("yearRange");
         nextParams.delete("consultantId");
+        nextParams.delete("source");
         nextParams.set("department", activeDept);
         
         setSearchParams(nextParams);
@@ -715,7 +730,7 @@ const Dashboard = () => {
     };
 
     // ── Shared queries ─────────────────────────────────────────────────────────
-    const { data: stats, isLoading: statsLoading } = useQuery({
+    const { data: stats } = useQuery({
         queryKey: ["dashboard-stats"],
         queryFn: () => api.get("/leads/stats").then(r => r.data),
         staleTime: 120_000,
@@ -812,6 +827,48 @@ const Dashboard = () => {
         setStageLeadsPage(1); // Reset pagination
     };
 
+    // Export every lead in the selected stage (not just the current page) to Excel.
+    const handleExportStage = async () => {
+        if (!selectedStage || exportingStage) return;
+        setExportingStage(true);
+        try {
+            const res = await api.get("/leads", {
+                params: {
+                    department,
+                    stage: selectedStage.code,
+                    assignedTo: selectedConsultantId || undefined,
+                    page: 1,
+                    limit: Math.max(stageLeadsTotal || 0, 1000),
+                },
+            });
+            const rows = (res.data?.data || []).map((lead, i) => ({
+                "#": i + 1,
+                Name: lead.name || "",
+                Phone: lead.phone || "",
+                Email: lead.email || "",
+                Consultant: lead.assignedTo?.name || "",
+                Score: lead.leadScore ?? "",
+                Stage: formatStageLabel(selectedStage.code),
+                Department: department || "",
+            }));
+            if (rows.length === 0) {
+                toast.error("No leads to export");
+                return;
+            }
+            const ws = XLSX.utils.json_to_sheet(rows);
+            ws["!cols"] = [{ wch: 5 }, { wch: 24 }, { wch: 16 }, { wch: 28 }, { wch: 20 }, { wch: 8 }, { wch: 20 }, { wch: 18 }];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, formatStageLabel(selectedStage.code).slice(0, 31));
+            const stamp = new Date().toISOString().slice(0, 10);
+            XLSX.writeFile(wb, `${(department || "leads")}_${selectedStage.code}_${stamp}.xlsx`);
+            toast.success(`Exported ${rows.length} leads`);
+        } catch (err) {
+            toast.error("Failed to export leads");
+        } finally {
+            setExportingStage(false);
+        }
+    };
+
     const handleNextPage = () => {
         if (stageLeadsPage < stageLeadsTotalPages) {
             setStageLeadsPage(prev => prev + 1);
@@ -889,10 +946,24 @@ const Dashboard = () => {
         assignedEmployeeId: selectedConsultantId || undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
+        source: source || undefined,
     });
 
     // Load consultants list for the selected department
     const { data: consultants = [] } = useDepartmentMembers(tempDepartment || department);
+
+    // Static-ish workflow config — lets us render the KPI grid structure (stage
+    // labels) instantly while the live counts are still loading.
+    const { getStages } = useWorkflows();
+
+    // KPI cards: real funnel once loaded, else the workflow's stages as
+    // placeholders (count undefined → show a loader), else generic skeletons.
+    const funnelCards = useMemo(() => {
+        if (dashData?.funnel) return dashData.funnel;
+        const stages = getStages(department);
+        if (stages.length) return stages.map(s => ({ code: s.code, count: undefined }));
+        return Array.from({ length: 8 }, (_, i) => ({ code: `__skeleton_${i}`, count: undefined, skeleton: true }));
+    }, [dashData, department, getStages]);
 
     // ── Employee own revenue query ─────────────────────────────────────────────
     const { data: myRevKPIs } = useQuery({
@@ -909,24 +980,25 @@ const Dashboard = () => {
             (tempEndDate === "" || tempEndDate === null) &&
             (tempIntake === "All Intakes") &&
             (tempYearRange === "All Time") &&
-            (tempSelectedConsultantId === "");
+            (tempSelectedConsultantId === "") &&
+            (tempSource === "");
             
         const isTempDefault = 
             (tempStartDate === defaultStartDate) &&
             (tempEndDate === defaultEndDate) &&
             (tempIntake === defaultIntake) &&
             (tempYearRange === "All Time") &&
-            (tempSelectedConsultantId === "");
+            (tempSelectedConsultantId === "") &&
+            (tempSource === "");
             
         if (isTempCleared || isTempDefault) {
             return false;
         }
         return true;
-    }, [tempStartDate, tempEndDate, tempIntake, tempYearRange, tempSelectedConsultantId, defaultStartDate, defaultEndDate, defaultIntake]);
+    }, [tempStartDate, tempEndDate, tempIntake, tempYearRange, tempSelectedConsultantId, tempSource, defaultStartDate, defaultEndDate, defaultIntake]);
 
-    const isLoading = statsLoading || dashLoading;
-    if (isLoading) return <DashboardSkeleton />;
-
+    // No full-page gate — render chrome (header, filters, pills, KPI grid)
+    // immediately and let individual counts show their own loaders.
     const pendingTasks      = (tasks || []).filter(t => t.status === "PENDING");
     const upcomingReminders = (reminders || []).filter(r => !r.isSent).slice(0, 5);
 
@@ -1006,7 +1078,7 @@ const Dashboard = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     {/* Check-in/Check-out Widget */}
-                    <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-xl">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-white ring-1 ring-slate-200/80 rounded-xl shadow-[0_1px_2px_rgb(0,0,0,0.04)]">
                         {myTodayAttendance ? (
                             <>
                                 <div className="flex items-center gap-2">
@@ -1102,7 +1174,7 @@ const Dashboard = () => {
             {activeTab === "overview" && (
                 <>
                     {/* Filter Row */}
-                    <div className="bg-white border border-gray-200/70 rounded-2xl p-5 shadow-sm flex flex-wrap items-center gap-6">
+                    <div className="bg-white ring-1 ring-slate-200/80 rounded-2xl p-5 shadow-[0_1px_3px_rgb(0,0,0,0.04)] flex flex-wrap items-center gap-6">
                         <div className="flex items-center gap-4 flex-wrap flex-1 min-w-[280px]">
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">From</span>
@@ -1110,7 +1182,7 @@ const Dashboard = () => {
                                     type="date"
                                     value={tempStartDate}
                                     onChange={(e) => handleStartDateChange(e.target.value)}
-                                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 bg-gray-50/50 text-gray-700 w-36 cursor-pointer"
+                                    className="px-3 py-2 rounded-xl text-xs font-semibold outline-none bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 text-slate-700 w-36 cursor-pointer"
                                 />
                             </div>
                             <div className="flex flex-col">
@@ -1119,7 +1191,7 @@ const Dashboard = () => {
                                     type="date"
                                     value={tempEndDate}
                                     onChange={(e) => handleEndDateChange(e.target.value)}
-                                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 bg-gray-50/50 text-gray-700 w-36 cursor-pointer"
+                                    className="px-3 py-2 rounded-xl text-xs font-semibold outline-none bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 text-slate-700 w-36 cursor-pointer"
                                 />
                             </div>
                         </div>
@@ -1130,7 +1202,7 @@ const Dashboard = () => {
                                 <select
                                     value={tempYearRange}
                                     onChange={(e) => handleYearRangeChange(e.target.value)}
-                                    className="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 bg-gray-50/50 text-gray-700 min-w-[140px] cursor-pointer"
+                                    className="px-3.5 py-2 rounded-xl text-xs font-semibold outline-none bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 text-slate-700 min-w-[140px] cursor-pointer"
                                 >
                                     <option value="All Time">All Time</option>
                                     <option value="Last 1 Year">Last 1 Year</option>
@@ -1145,7 +1217,7 @@ const Dashboard = () => {
                                 <select
                                     value={tempIntake}
                                     onChange={(e) => handleIntakeChange(e.target.value)}
-                                    className="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 bg-gray-50/50 text-gray-700 min-w-[150px] cursor-pointer"
+                                    className="px-3.5 py-2 rounded-xl text-xs font-semibold outline-none bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 text-slate-700 min-w-[150px] cursor-pointer"
                                 >
                                     <option value="All Intakes">All Intakes</option>
                                     {availableIntakes.map((intake) => (
@@ -1163,7 +1235,7 @@ const Dashboard = () => {
                                 <select
                                     value={tempSelectedConsultantId}
                                     onChange={(e) => setTempSelectedConsultantId(e.target.value)}
-                                    className="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 bg-gray-50/50 text-gray-700 min-w-[165px] cursor-pointer"
+                                    className="px-3.5 py-2 rounded-xl text-xs font-semibold outline-none bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 text-slate-700 min-w-[165px] cursor-pointer"
                                 >
                                     <option value="">All Consultants</option>
                                     {consultants.map((c) => (
@@ -1171,6 +1243,23 @@ const Dashboard = () => {
                                             {c.name}
                                         </option>
                                     ))}
+                                </select>
+                            </div>
+
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Lead Source</span>
+                                <select
+                                    value={tempSource}
+                                    onChange={(e) => setTempSource(e.target.value)}
+                                    className="px-3.5 py-2 rounded-xl text-xs font-semibold outline-none bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 text-slate-700 min-w-[150px] cursor-pointer"
+                                >
+                                    <option value="">All Sources</option>
+                                    <option value="FACEBOOK">Facebook</option>
+                                    <option value="INSTAGRAM">Instagram</option>
+                                    <option value="GMAIL">Gmail</option>
+                                    <option value="WEBSITE">Website</option>
+                                    <option value="PHONE_CALL">Phone Call</option>
+                                    <option value="LINKEDIN">LinkedIn</option>
                                 </select>
                             </div>
 
@@ -1195,7 +1284,7 @@ const Dashboard = () => {
                     </div>
 
                     {/* Department Pills */}
-                    <div className="flex flex-wrap gap-2.5 my-6">
+                    <div className="flex flex-wrap gap-2 my-6">
                         {visiblePills.map(pill => {
                             const isSelected = department === pill.key;
                             return (
@@ -1203,10 +1292,10 @@ const Dashboard = () => {
                                     key={pill.key}
                                     onClick={() => handlePillClick(pill.key)}
                                     className={cn(
-                                        "px-5 py-2.5 rounded-full text-xs font-bold tracking-wider transition-all duration-200 shadow-sm",
+                                        "px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all duration-200",
                                         isSelected
-                                            ? "bg-indigo-600 text-white shadow-indigo-200"
-                                            : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                                            ? "bg-indigo-600 text-white ring-1 ring-indigo-600 shadow-[0_2px_8px_-2px_rgb(79,70,229,0.4)]"
+                                            : "bg-white text-slate-600 ring-1 ring-slate-200/80 hover:ring-indigo-300 hover:text-indigo-600"
                                     )}
                                 >
                                     {pill.label}
@@ -1217,26 +1306,47 @@ const Dashboard = () => {
 
                     {/* 12 KPI Grid (dynamic by selected workflow) */}
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                        {dashData?.funnel?.map(stage => {
-                            const Icon = STAGE_ICONS[stage.code] || FileText;
+                        {funnelCards.map(stage => {
+                            const loading = stage.count === undefined || stage.count === null;
+                            const Icon = stage.skeleton ? FileText : (STAGE_ICONS[stage.code] || FileText);
                             return (
                                 <button
                                     key={stage.code}
-                                    onClick={() => handleStageClick(stage)}
-                                    className="flex flex-col items-center justify-center p-6 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 text-center group border-t-4 border-t-transparent hover:border-t-indigo-600 cursor-pointer"
+                                    onClick={() => !loading && handleStageClick(stage)}
+                                    disabled={loading}
+                                    className={cn(
+                                        "group relative flex flex-col p-5 bg-white rounded-2xl ring-1 ring-slate-200/80 shadow-[0_1px_3px_rgb(0,0,0,0.04)] transition-all duration-200 text-left overflow-hidden",
+                                        loading
+                                            ? "cursor-default"
+                                            : "hover:shadow-[0_10px_28px_-12px_rgb(0,0,0,0.2)] hover:ring-indigo-200 cursor-pointer"
+                                    )}
                                 >
-                                    <div className="h-12 w-12 rounded-full bg-indigo-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200">
-                                        <Icon className="h-6 w-6 text-indigo-600" />
+                                    <span className="absolute left-0 inset-y-0 w-1 bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <div className="flex items-center justify-between">
+                                        <div className={cn(
+                                            "h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ring-1",
+                                            stage.skeleton ? "bg-slate-100 text-slate-300 ring-slate-200" : "bg-indigo-50 text-indigo-600 ring-indigo-100"
+                                        )}>
+                                            <Icon className="h-5 w-5" />
+                                        </div>
+                                        {!loading && (
+                                            <ArrowRight className="h-4 w-4 text-indigo-500 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                                        )}
                                     </div>
-                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-2 select-none">
-                                        {formatStageLabel(stage.code)}
-                                    </span>
-                                    <span className="text-3xl font-black text-indigo-950 leading-tight">
-                                        {stage.count}
-                                    </span>
-                                    <span className="text-[10px] text-indigo-600 font-medium mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        View Details →
-                                    </span>
+                                    {loading ? (
+                                        <span className="flex items-center h-9 mt-4">
+                                            <Loader2 className="h-6 w-6 animate-spin text-indigo-300" />
+                                        </span>
+                                    ) : (
+                                        <CountUp value={stage.count} className="text-3xl font-black text-indigo-950 leading-none tabular-nums mt-4" />
+                                    )}
+                                    {stage.skeleton ? (
+                                        <span className="h-3 w-20 rounded bg-slate-100 mt-3" />
+                                    ) : (
+                                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide leading-tight mt-2 select-none">
+                                            {formatStageLabel(stage.code)}
+                                        </span>
+                                    )}
                                 </button>
                             );
                         })}
@@ -1258,7 +1368,9 @@ const Dashboard = () => {
                                 <div className="space-y-4">
                                     <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-4 flex items-center justify-between">
                                         <div>
-                                            <p className="text-3xl font-black text-amber-700">{dashData?.aging?.warning ?? 0}</p>
+                                            {dashLoading
+                                                ? <Loader2 className="h-7 w-7 animate-spin text-amber-400" />
+                                                : <CountUp value={dashData?.aging?.warning ?? 0} className="text-3xl font-black text-amber-700" />}
                                             <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mt-0.5">3–7 Days Idle</p>
                                         </div>
                                         <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center">
@@ -1267,7 +1379,9 @@ const Dashboard = () => {
                                     </div>
                                     <div className="rounded-xl bg-rose-50/60 border border-rose-100 p-4 flex items-center justify-between">
                                         <div>
-                                            <p className="text-3xl font-black text-rose-700">{dashData?.aging?.stale ?? 0}</p>
+                                            {dashLoading
+                                                ? <Loader2 className="h-7 w-7 animate-spin text-rose-400" />
+                                                : <CountUp value={dashData?.aging?.stale ?? 0} className="text-3xl font-black text-rose-700" />}
                                             <p className="text-[10px] font-bold text-rose-600 uppercase tracking-wider mt-0.5">7+ Days Idle</p>
                                         </div>
                                         <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center">
@@ -1405,12 +1519,25 @@ const Dashboard = () => {
                                     {selectedStage.count} {selectedStage.count === 1 ? 'lead' : 'leads'} in this stage
                                 </p>
                             </div>
-                            <button
-                                onClick={closeStageModal}
-                                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                            >
-                                <X className="h-5 w-5 text-gray-500" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handleExportStage}
+                                    disabled={exportingStage || stageLeadsTotal === 0}
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold text-emerald-700 bg-emerald-50 ring-1 ring-emerald-200 hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Download these leads as Excel"
+                                >
+                                    {exportingStage
+                                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                                        : <Download className="h-4 w-4" />}
+                                    Excel
+                                </button>
+                                <button
+                                    onClick={closeStageModal}
+                                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                                >
+                                    <X className="h-5 w-5 text-gray-500" />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Modal Body */}

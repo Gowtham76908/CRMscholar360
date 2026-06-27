@@ -16,3 +16,5 @@ router.patch("/:id",        ctrl.updateRule);
 router.delete("/:id",       ctrl.deleteRule);
 
 module.exports = router;
+
+ 
