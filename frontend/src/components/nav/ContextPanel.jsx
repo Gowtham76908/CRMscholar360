@@ -37,18 +37,18 @@ function PanelLink({ to, icon: Icon, label, count, active, dot }) {
         <Link
             to={to}
             className={cn(
-                "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm transition-colors group",
+                "flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-200 group hover:translate-x-0.5",
                 isActive
-                    ? "bg-indigo-50 text-indigo-700 font-medium"
+                    ? "bg-indigo-50 text-indigo-700 font-semibold shadow-sm"
                     : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
             )}
         >
             {dot && <span className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0", dot)} />}
-            {Icon && <Icon className={cn("h-3.5 w-3.5 flex-shrink-0", isActive ? "text-indigo-600" : "text-gray-400")} />}
+            {Icon && <Icon className={cn("h-4 w-4 flex-shrink-0 transition-colors duration-200", isActive ? "text-indigo-600" : "text-gray-400 group-hover:text-gray-600")} />}
             <span className="flex-1 truncate">{label}</span>
             {count != null && count > 0 && (
                 <span className={cn(
-                    "text-[10px] font-bold px-1.5 rounded-full",
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
                     isActive ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-500"
                 )}>
                     {count}
@@ -60,9 +60,9 @@ function PanelLink({ to, icon: Icon, label, count, active, dot }) {
 
 function PanelSection({ title, children }) {
     return (
-        <div className="mb-4">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2.5 mb-1">{title}</p>
-            <div className="space-y-0.5">{children}</div>
+        <div className="mb-6">
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-3.5 mb-2">{title}</p>
+            <div className="space-y-1">{children}</div>
         </div>
     );
 }
@@ -102,12 +102,12 @@ function CRMPanel() {
 
 
 
-            <div className="px-2.5 pt-1">
+            <div className="px-3.5 pt-2">
                 <Link
                     to="/leads?new=1"
-                    className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
+                    className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-850 font-bold transition-all duration-200 hover:translate-x-0.5"
                 >
-                    <Plus className="h-3.5 w-3.5" /> New Lead
+                    <Plus className="h-4 w-4" /> New Lead
                 </Link>
             </div>
         </>
@@ -149,9 +149,9 @@ function CommunicatePanel() {
                 {campaigns.length === 0 && (
                     <Link
                         to="/whatsapp/campaigns"
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-indigo-600 hover:bg-indigo-50 transition-colors font-medium"
+                        className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs text-indigo-600 hover:bg-indigo-50 transition-colors font-semibold"
                     >
-                        <Plus className="h-3 w-3" /> New Campaign
+                        <Plus className="h-3.5 w-3.5" /> New Campaign
                     </Link>
                 )}
                 {campaigns.map(c => (
@@ -279,11 +279,11 @@ export default function ContextPanel({ activeMode, open, onClose }) {
             {/* Desktop sidebar */}
             <aside
                 className={cn(
-                    "fixed inset-y-0 left-14 z-20 w-60 bg-white border-r border-gray-200 hidden md:flex flex-col transition-transform duration-300",
+                    "fixed inset-y-0 left-16 z-20 w-64 bg-white border-r border-gray-200 hidden md:flex flex-col transition-transform duration-300",
                     open ? "translate-x-0" : "-translate-x-full"
                 )}
             >
-                <div className="flex items-center px-4 h-14 border-b border-gray-100">
+                <div className="flex items-center px-5 h-16 border-b border-gray-100">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
                         {title}
                     </p>

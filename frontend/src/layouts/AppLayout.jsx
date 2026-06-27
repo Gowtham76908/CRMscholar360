@@ -68,7 +68,7 @@ export default function AppLayout() {
             <div
                 className={cn(
                     "flex-1 flex flex-col transition-all duration-300 min-w-0",
-                    panelOpen ? "ml-0 md:ml-[296px]" : "ml-0 md:ml-14"
+                    panelOpen ? "ml-0 md:ml-[320px]" : "ml-0 md:ml-16"
                 )}
             >
                 <Navbar onMenuClick={() => handleModeClick(activeMode, location.pathname)} />

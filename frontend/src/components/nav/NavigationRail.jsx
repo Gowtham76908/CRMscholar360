@@ -105,23 +105,23 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
     }, [visibleModes, onModeClick, user]);
 
     return (
-        <aside className="fixed inset-y-0 left-0 z-30 w-14 bg-white border-r border-gray-200 hidden md:flex flex-col items-center py-3">
+        <aside className="fixed inset-y-0 left-0 z-30 w-16 bg-white border-r border-gray-200 hidden md:flex flex-col items-center py-5">
             {/* Logo mark */}
-            <div className="mb-2" title="scholar360">
+            <div className="mb-4 transform hover:scale-105 transition-transform" title="scholar360">
                 <Scholar360Logo size="sm" showText={false} />
             </div>
 
-            <div className="w-8 h-px bg-gray-100 mb-2" />
+            <div className="w-10 h-px bg-gray-100 mb-4" />
 
             {/* Avatar */}
-            <div className="mb-3 cursor-pointer" title={user?.name}>
+            <div className="mb-4 cursor-pointer transform hover:scale-105 transition-transform" title={user?.name}>
                 <Avatar user={user} size="sm" status={onlineStatus} />
             </div>
 
-            <div className="w-8 h-px bg-gray-100 mb-3" />
+            <div className="w-10 h-px bg-gray-100 mb-4" />
 
             {/* Mode icons */}
-            <nav className="flex-1 flex flex-col items-center gap-1 w-full px-2">
+            <nav className="flex-1 flex flex-col items-center gap-3 w-full px-2">
                 {visibleModes.map((mode) => {
                     const isActive = activeMode === mode.id;
                     const badge = unreadCounts[mode.id];
@@ -137,20 +137,20 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
                             }}
                             title={`${mode.id === "admin" && user?.role === "EMPLOYEE" ? "Settings" : mode.label} (${mode.shortcut})`}
                             className={cn(
-                                "relative w-full flex items-center justify-center p-2.5 rounded-xl transition-all duration-150",
+                                "relative w-full flex items-center justify-center p-3 rounded-2xl transition-all duration-200 transform hover:scale-105 active:scale-95",
                                 isActive
-                                    ? "bg-indigo-50 text-indigo-600"
-                                    : "text-gray-400 hover:text-gray-700 hover:bg-gray-50"
+                                    ? "bg-indigo-50 text-indigo-600 shadow-sm"
+                                    : "text-gray-400 hover:text-gray-700 hover:bg-gray-50/80"
                             )}
                         >
                             <mode.icon className="h-5 w-5" />
                             {/* Active indicator bar */}
                             {isActive && panelOpen && (
-                                <span className="absolute -right-px top-1/2 -translate-y-1/2 h-5 w-0.5 bg-indigo-600 rounded-l-full" />
+                                <span className="absolute -right-px top-1/2 -translate-y-1/2 h-6 w-0.5 bg-indigo-600 rounded-l-full" />
                             )}
                             {/* Unread badge */}
                             {badge > 0 && (
-                                <span className="absolute top-1 right-1 h-4 min-w-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                                <span className="absolute top-1.5 right-1.5 h-4 min-w-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
                                     {badge > 99 ? "99+" : badge}
                                 </span>
                             )}
@@ -159,7 +159,7 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
                 })}
             </nav>
 
-            <div className="w-8 h-px bg-gray-100 my-2" />
+            <div className="w-10 h-px bg-gray-100 my-4" />
 
             {/* Command palette trigger */}
             <button
@@ -168,7 +168,7 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
                     window.dispatchEvent(e);
                 }}
                 title="Command palette (Ctrl+K)"
-                className="p-2.5 rounded-xl text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                className="p-3 rounded-2xl text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all duration-200 transform hover:scale-105 active:scale-95"
             >
                 <Command className="h-4 w-4" />
             </button>
