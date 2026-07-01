@@ -18,7 +18,7 @@ function DuplicateGroup({ group, index }) {
             toast.success("Leads merged successfully");
             queryClient.invalidateQueries({ queryKey: ["lead-duplicates"] });
         },
-        onError: (e) => toast.error(e.response?.data?.message || "Merge failed"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Merge failed"),
     });
 
     const nonPrimary = group.leads.filter(l => l.id !== primaryId);

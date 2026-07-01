@@ -18,6 +18,40 @@ const fmtDate = (d) => {
     return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 };
 
+const getCountryFlag = (name) => {
+    if (!name) return "";
+    const clean = name.trim().toLowerCase();
+    const map = {
+        "united kingdom": "🇬🇧",
+        "uk": "🇬🇧",
+        "united states": "🇺🇸",
+        "usa": "🇺🇸",
+        "us": "🇺🇸",
+        "canada": "🇨🇦",
+        "australia": "🇦🇺",
+        "ireland": "🇮🇪",
+        "germany": "🇩🇪",
+        "new zealand": "🇳🇿",
+        "singapore": "🇸🇬",
+        "france": "🇫🇷",
+        "sweden": "🇸🇪",
+        "netherlands": "🇳🇱",
+        "italy": "🇮🇹",
+        "spain": "🇪🇸",
+        "switzerland": "🇨🇭",
+        "united arab emirates": "🇦🇪",
+        "uae": "🇦🇪",
+        "malaysia": "🇲🇾",
+        "japan": "🇯🇵",
+        "south korea": "🇰🇷",
+        "finland": "🇫🇮",
+        "norway": "🇳🇴",
+        "denmark": "🇩🇰",
+        "india": "🇮🇳",
+    };
+    return map[clean] || "🌐";
+};
+
 const STAGE_THEME = {
     // Lead Intake
     ENQUIRY: { border: "border-t-indigo-500" },
@@ -145,9 +179,10 @@ export default function LeadsBoard({
                 <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-indigo-500" /></div>
             ) : (
                 <>
-                    {/* Bounded height so horizontal scrolling columns look like Trello */}
+                    {/* Board fills the viewport down to the bottom; each column's card
+                        area scrolls internally so there's no dead gap below the board. */}
                     <div
-                        className={`flex gap-5 overflow-x-auto pb-6 pt-2 items-start transition-opacity duration-150 select-none scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent ${isFetching ? "opacity-60" : ""}`}
+                        className={`flex gap-5 overflow-x-auto pb-4 pt-2 items-stretch transition-opacity duration-150 select-none scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent h-[calc(100vh-200px)] ${isFetching ? "opacity-60" : ""}`}
                     >
                         {stages.map((stage) => (
                             <StageColumn
@@ -160,13 +195,6 @@ export default function LeadsBoard({
                                 onPreviewTask={setPreviewTask}
                             />
                         ))}
-                    </div>
-
-                    {/* Total leads count */}
-                    <div className="sticky bottom-0 z-10 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 bg-white border-t border-slate-200/80 flex items-center justify-center">
-                        <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
-                            {total === 0 ? "0 leads" : `${total} lead${total === 1 ? "" : "s"} in ${departmentLabel(department)}`}
-                        </p>
                     </div>
                 </>
             )}
@@ -194,7 +222,7 @@ function StageColumn({ stage, rows, totalInStage, slaWarningDays, slaBreachDays,
     const theme = STAGE_THEME[stage.code] || { border: "border-t-indigo-500" };
 
     return (
-        <div className={`w-[370px] min-w-[370px] flex-shrink-0 flex flex-col bg-slate-50/60 backdrop-blur-md rounded-2xl border border-slate-200/50 overflow-hidden shadow-sm hover:shadow-md hover:border-slate-300/60 transition-all duration-300 border-t-4 ${theme.border}`}>
+        <div className={`w-[390px] min-w-[390px] flex-shrink-0 flex flex-col bg-slate-50/60 backdrop-blur-md rounded-2xl border border-slate-200/50 overflow-hidden shadow-sm hover:shadow-md hover:border-slate-300/60 transition-all duration-300 border-t-4 ${theme.border} h-full`}>
             {/* Column Header */}
             <div className="px-4 py-3.5 flex items-center justify-between border-b border-slate-200/40 bg-white/95 backdrop-blur-md sticky top-0 z-10">
                 <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border whitespace-nowrap shadow-sm ${stageColor(stage.code)}`}>
@@ -205,7 +233,7 @@ function StageColumn({ stage, rows, totalInStage, slaWarningDays, slaBreachDays,
                 </span>
             </div>
             {/* Column Card Container with dynamic height limits */}
-            <div className="p-3.5 space-y-3.5 overflow-y-auto flex-1 min-h-[350px] max-h-[calc(100vh-320px)] scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+            <div className="p-3.5 space-y-3.5 overflow-y-auto flex-1 min-h-0 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                 {rows.map((row) => (
                     <LeadCard key={row.id} row={row} slaWarningDays={slaWarningDays} slaBreachDays={slaBreachDays} onPreviewTask={onPreviewTask} />
                 ))}
@@ -258,6 +286,10 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
     const category = getCategoryFromScore(lead.score ?? 0);
     const task = lead.tasks?.[0];
 
+    const destinationCountriesStr = lead.customFields?.destinationCountries || "";
+    const countries = destinationCountriesStr ? destinationCountriesStr.split(", ") : [];
+    const flags = countries.map(getCountryFlag).filter(Boolean);
+
     const categoryColors = {
         PREMIUM: "bg-purple-50 text-purple-700 border-purple-100/60 shadow-sm shadow-purple-50",
         HOT: "bg-rose-50 text-rose-700 border-rose-100/60 shadow-sm shadow-rose-50",
@@ -268,26 +300,26 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
     return (
         <Link
             to={`/leads/${lead.id}`}
-            className={`group block bg-white rounded-2xl border transition-all duration-355 p-5 relative overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-indigo-400/80 ${
+            className={`group block bg-white rounded-2xl border transition-all duration-355 p-6.5 relative overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1.5 hover:border-indigo-400/80 ${
                 sla?.level === "breach" 
-                    ? "border-red-200 bg-gradient-to-br from-white to-red-50/5 border-l-4 border-l-red-500" 
+                    ? "border-red-200 bg-gradient-to-br from-white to-red-50/5 border-l-[5px] border-l-red-500" 
                     : sla?.level === "warning"
-                    ? "border-amber-200 bg-gradient-to-br from-white to-amber-50/5 border-l-4 border-l-amber-500"
-                    : "border-slate-200/75 border-l-4 border-l-indigo-400/30"
+                    ? "border-amber-200 bg-gradient-to-br from-white to-amber-50/5 border-l-[5px] border-l-amber-500"
+                    : "border-slate-200/75 border-l-[5px] border-l-indigo-400/30"
             }`}
         >
             {/* Row 1 — name + SLA badge */}
-            <div className="flex items-start justify-between gap-2">
-                <span className="font-bold text-base text-slate-800 truncate group-hover:text-indigo-650 transition-colors flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-start justify-between gap-3">
+                <span className="font-extrabold text-lg md:text-xl text-slate-800 truncate group-hover:text-indigo-650 transition-colors flex items-center gap-2 flex-wrap">
                     {lead.name}
                     {lead.leadId && (
-                        <span className="text-[9px] font-mono font-bold bg-slate-100 text-slate-500 px-1 py-0.2 rounded border border-slate-200 select-all">
+                        <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200 select-all">
                             {lead.leadId}
                         </span>
                     )}
                 </span>
                 {sla && (
-                    <span className={`flex-shrink-0 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border shadow-sm ${
+                    <span className={`flex-shrink-0 text-xs font-extrabold px-3 py-1 rounded-full border shadow-sm ${
                         sla.level === "breach" 
                             ? "bg-red-100/80 text-red-700 border-red-200" 
                             : "bg-amber-100/80 text-amber-700 border-amber-200"
@@ -298,45 +330,45 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
             </div>
 
             {/* Row 2 — contact (phone + email, both when available) */}
-            <div className="mt-3.5 space-y-2">
+            <div className="mt-4.5 space-y-2.5">
                 {lead.phone && (
-                    <p className="flex items-center gap-2 text-sm text-slate-500 truncate font-semibold hover:text-slate-800 transition-colors">
-                        <Phone className="h-4 w-4 text-slate-455 shrink-0" /> {lead.phone}
+                    <p className="flex items-center gap-2.5 text-[15px] text-slate-500 truncate font-semibold hover:text-slate-800 transition-colors">
+                        <Phone className="h-4.5 w-4.5 text-slate-455 shrink-0" /> {lead.phone}
                     </p>
                 )}
                 {lead.email && (
-                    <p className="flex items-center gap-2 text-sm text-slate-500 truncate font-semibold hover:text-slate-800 transition-colors">
-                        <Mail className="h-4 w-4 text-slate-455 shrink-0" /> {lead.email}
+                    <p className="flex items-center gap-2.5 text-[15px] text-slate-500 truncate font-semibold hover:text-slate-800 transition-colors">
+                        <Mail className="h-4.5 w-4.5 text-slate-455 shrink-0" /> {lead.email}
                     </p>
                 )}
             </div>
 
             {/* Row 3 — source + enquiry type */}
             {(lead.source || lead.enquiryType) && (
-                <div className="mt-4 flex items-center gap-2 flex-wrap">
+                <div className="mt-5 flex items-center gap-2.5 flex-wrap">
                     {lead.source && (
-                        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200/40">
-                            <Globe className="h-3.5 w-3.5 shrink-0 text-slate-400" /> {lead.source.toLowerCase().replace(/_/g, " ")}
+                        <span className="inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/40">
+                            <Globe className="h-4 w-4 shrink-0 text-slate-400" /> {lead.source.toLowerCase().replace(/_/g, " ")}
                         </span>
                     )}
                     {lead.enquiryType && (
-                        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full bg-indigo-50/70 text-indigo-750 border border-indigo-100/30">
-                            <Tag className="h-3.5 w-3.5 shrink-0 text-indigo-400" /> {lead.enquiryType.toLowerCase().replace(/_/g, " ")}
+                        <span className="inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full bg-indigo-50/70 text-indigo-750 border border-indigo-100/30">
+                            <Tag className="h-4 w-4 shrink-0 text-indigo-400" /> {lead.enquiryType.toLowerCase().replace(/_/g, " ")}
                         </span>
                     )}
                 </div>
             )}
 
             {/* Row 4 — last activity */}
-            <div className="mt-4 flex items-center gap-2 text-xs text-slate-450 font-semibold">
-                <Calendar className="h-3.5 w-3.5 text-slate-355" />
+            <div className="mt-5 flex items-center gap-2 text-sm text-slate-450 font-semibold">
+                <Calendar className="h-4 w-4 text-slate-355" />
                 <span>Active {formatLastUpdated(lead.updatedAt)}</span>
             </div>
 
             {/* Expanded Department Assignees list (triggered by clicking the avatar/assignee badge) */}
             {showOtherAssignees && (
-                <div className="mt-4 space-y-2 border-t border-slate-100 pt-3.5 animate-fadeIn">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Department Assignees</p>
+                <div className="mt-5 space-y-2.5 border-t border-slate-100 pt-4.5 animate-fadeIn">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Department Assignees</p>
                     {(lead.leadDepartments || []).map(ld => {
                         const dotColor = 
                             ld.department === "SALES" ? "bg-indigo-500" :
@@ -346,12 +378,12 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
                             ld.department === "FOREX" ? "bg-violet-500" :
                             "bg-slate-400";
                         return (
-                            <div key={ld.id} className="flex items-center justify-between text-xs font-semibold py-1 border-b border-slate-50 last:border-0">
-                                <div className="flex items-center gap-2">
-                                    <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
+                            <div key={ld.id} className="flex items-center justify-between text-sm font-semibold py-1.5 border-b border-slate-55 last:border-0">
+                                <div className="flex items-center gap-2.5">
+                                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${dotColor}`} />
                                     <span className="text-slate-500">{departmentLabel(ld.department)} Team:</span>
                                 </div>
-                                <span className="text-slate-800 truncate pl-2 max-w-[170px]">
+                                <span className="text-slate-800 truncate pl-2 max-w-[190px]">
                                     {ld.assignedEmployee?.name || <span className="text-slate-400 italic font-normal">Unassigned</span>}
                                 </span>
                             </div>
@@ -361,10 +393,29 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
             )}
 
             {/* Row 5 — footer */}
-            <div className="flex items-center justify-between border-t border-slate-100 pt-3.5 mt-4">
-                <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border shadow-sm ${categoryColors[category] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+            <div className="flex items-center justify-between border-t border-slate-100 pt-4.5 mt-5">
+                <span className={`text-xs font-extrabold px-3 py-1.5 rounded-full border shadow-sm ${categoryColors[category] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
                     {category} · {lead.score ?? 0}
                 </span>
+
+                {/* Country flags stack in the middle */}
+                {countries.length > 0 && (
+                    <div className="flex items-center -space-x-1 hover:-space-x-0.5 transition-all duration-200">
+                        {countries.map((c, i) => (
+                            <span 
+                                key={i} 
+                                className="group/flag relative w-6 h-6 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center text-sm shadow-xs select-none hover:scale-110 hover:z-10 transition-all duration-200 cursor-help"
+                            >
+                                {getCountryFlag(c)}
+                                {/* Custom Tooltip */}
+                                <span className="pointer-events-none absolute bottom-full mb-2 hidden group-hover/flag:block bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md whitespace-nowrap z-50 animate-fadeIn">
+                                    {c}
+                                </span>
+                            </span>
+                        ))}
+                    </div>
+                )}
+
                 {row.assignedEmployee ? (
                     <button
                         onClick={(e) => {
@@ -372,11 +423,11 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
                             e.stopPropagation();
                             setShowOtherAssignees(!showOtherAssignees);
                         }}
-                        className={`flex items-center gap-2 bg-slate-50 hover:bg-indigo-50 border border-slate-200/50 pl-1 pr-3 py-1 rounded-full shadow-sm max-w-[160px] transition-all duration-200 hover:border-indigo-300 ring-offset-2 focus:outline-none ${showOtherAssignees ? "ring-2 ring-indigo-400 bg-indigo-50/50 border-indigo-300" : ""}`}
+                        className={`flex items-center gap-2 bg-slate-50 hover:bg-indigo-50 border border-slate-200/50 pl-1.5 pr-3.5 py-1.5 rounded-full shadow-sm max-w-[180px] transition-all duration-200 hover:border-indigo-300 ring-offset-2 focus:outline-none ${showOtherAssignees ? "ring-2 ring-indigo-400 bg-indigo-50/50 border-indigo-300" : ""}`}
                         title="Click to view all department assignees"
                     >
-                        <Avatar user={row.assignedEmployee} size="xs" className="w-5.5 h-5.5 ring-2 ring-white" />
-                        <span className="text-[10px] text-slate-655 font-bold truncate">
+                        <Avatar user={row.assignedEmployee} size="xs" className="w-6.5 h-6.5 ring-2 ring-white" />
+                        <span className="text-xs text-slate-655 font-bold truncate">
                             {row.assignedEmployee.name.split(" ")[0]}
                         </span>
                     </button>
@@ -387,7 +438,7 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
                             e.stopPropagation();
                             setShowOtherAssignees(!showOtherAssignees);
                         }}
-                        className={`text-[10px] text-slate-400 font-bold bg-slate-50 border border-slate-200/40 px-2.5 py-1 rounded-full shadow-sm hover:bg-indigo-50 hover:border-indigo-350 transition-all focus:outline-none ${showOtherAssignees ? "ring-2 ring-indigo-400 bg-indigo-50 border-indigo-300" : ""}`}
+                        className={`text-xs text-slate-400 font-bold bg-slate-50 border border-slate-200/40 px-3 py-1.5 rounded-full shadow-sm hover:bg-indigo-50 hover:border-indigo-350 transition-all focus:outline-none ${showOtherAssignees ? "ring-2 ring-indigo-400 bg-indigo-50 border-indigo-300" : ""}`}
                         title="Click to view all department assignees"
                     >
                         Unassigned

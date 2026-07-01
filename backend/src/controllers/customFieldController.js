@@ -98,7 +98,28 @@ const saveLeadCustomFields = async (req, res, next) => {
         }
 
         const defs = await prisma.customFieldDef.findMany({ where: { isSystem: false }, select: { fieldKey: true } });
-        const validKeys = new Set(defs.map(d => d.fieldKey));
+        const validKeys = new Set([
+            ...defs.map(d => d.fieldKey),
+            // Student Profile Wizard Keys
+            "firstName", "middleName", "lastName", "email", "mobileCountryCode", "mobileNumber", "dob", "gender", "maritalStatus",
+            "mailingAddress1", "mailingAddress2", "mailingCountry", "mailingState", "mailingCity", "mailingPincode",
+            "permAddressSame", "permAddress1", "permAddress2", "permCountry", "permState", "permCity", "permPincode",
+            "passportNumber", "passportIssueDate", "passportExpiryDate", "passportIssueCountry", "passportCityOfBirth", "passportCountryOfBirth",
+            "nationality", "citizenship", "dualCitizenship", "dualCitizenshipCountries", "otherCountryStudy", "otherCountryStudyName",
+            "appliedImmigration", "appliedImmigrationCountry", "medicalCondition", "medicalConditionDetails", "visaRefusal", "visaRefusalCountry", "visaRefusalType",
+            "criminalConviction", "criminalConvictionDetails", "emergencyName", "emergencyPhoneCountryCode", "emergencyPhone", "emergencyEmail", "emergencyRelation",
+            "countryOfEducation", "highestLevelOfEducation",
+            "pgCountry", "pgState", "pgLevel", "pgUniversity", "pgDegree", "pgCity", "pgGrading", "pgPercentage", "pgLanguage", "pgStartDate", "pgEndDate", "pgScore",
+            "ugCountry", "ugState", "ugLevel", "ugUniversity", "ugDegree", "ugCity", "ugGrading", "ugScore", "ugLanguage", "ugBacklogs", "ugStartDate", "ugEndDate",
+            "x12Country", "x12State", "x12Level", "x12Board", "x12Degree", "x12Institution", "x12City", "x12Grading", "x12Score", "x12Language", "x12StartDate", "x12EndDate", "x12University",
+            "x10Country", "x10State", "x10Level", "x10Board", "x10Degree", "x10Institution", "x10City", "x10Grading", "x10Score", "x10Language", "x10StartDate", "x10EndDate", "x10University",
+            "hasWorkExperience", "workOrgAddress", "workPosition", "workJobProfile", "workSalaryMode", "workFrom", "workUpto", "workCurrent", "workExperiences",
+            "testScores", "documents",
+            // Deposit / payment stage keys
+            "deposit_amount", "payment_mode", "payment_date", "deposit_history",
+            // Visa approval keys
+            "visa_approved_date"
+        ]);
         const invalidKeys = Object.keys(fields).filter(k => !validKeys.has(k));
         if (invalidKeys.length > 0) {
             return res.status(400).json({ message: `Unknown field key(s): ${invalidKeys.join(", ")}` });
@@ -114,6 +135,27 @@ const saveLeadCustomFields = async (req, res, next) => {
             where: { id: leadId },
             data: { customFields: { ...(lead.customFields || {}), ...fields } },
         });
+
+        const visaKeys = ["financial_proof_docs", "cas_form_number", "visa_appointment_date", "visa_manager_approved"];
+        const visaChanged = Object.keys(fields).some(k => visaKeys.includes(k));
+        if (visaChanged) {
+            const logActivity = require("../utils/activityLogger");
+            const changedFields = {};
+            visaKeys.forEach(k => {
+                if (fields[k] !== undefined) {
+                    changedFields[k] = fields[k];
+                }
+            });
+            await logActivity({
+                leadId,
+                userId,
+                action: "LEAD_UPDATED",
+                metadata: {
+                    message: "Updated Visa Documentation Details",
+                    changes: changedFields
+                }
+            });
+        }
 
         // NOTE: SALES stage progression is intentionally manual. Saving custom fields
         // (e.g. university_response, embassy_result) no longer auto-advances the stage —

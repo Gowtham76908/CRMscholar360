@@ -253,7 +253,7 @@ const SalestrailCalls = () => {
             <div className="flex items-center justify-center h-64 text-center">
                 <div>
                     <p className="text-red-600 font-semibold">Failed to load call logs.</p>
-                    <p className="text-[#71717A] text-sm mt-1">{callsError.response?.data?.message || callsError.message}</p>
+                    <p className="text-[#71717A] text-sm mt-1">{callsError.response?.data?.error?.message || callsError.response?.data?.message || callsError.message}</p>
                 </div>
             </div>
         );

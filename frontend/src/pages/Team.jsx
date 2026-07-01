@@ -35,19 +35,19 @@ const Team = () => {
     const toggleAccessMutation = useMutation({
         mutationFn: (userId) => api.patch(`/team/${userId}/toggle`),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ["team"] }),
-        onError: (err) => toast.error(err.response?.data?.message || "Failed to toggle access"),
+        onError: (err) => toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to toggle access"),
     });
 
     const roleMutation = useMutation({
         mutationFn: ({ userId, role }) => api.patch(`/team/${userId}`, { role }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ["team"] }),
-        onError: (err) => toast.error(err.response?.data?.message || "Failed to update role"),
+        onError: (err) => toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to update role"),
     });
 
     const deleteMutation = useMutation({
         mutationFn: (userId) => api.delete(`/team/${userId}`),
         onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["team"] }); setConfirmDeleteId(null); },
-        onError: (err) => toast.error(err.response?.data?.message || "Failed to delete user"),
+        onError: (err) => toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to delete user"),
     });
 
     const filteredTeam = useMemo(() => {
@@ -71,7 +71,7 @@ const Team = () => {
     );
 
     if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-indigo-500" /></div>;
-    if (teamError) return <div className="text-center py-20 text-red-500">{teamError.response?.data?.message || "Failed to load team."}</div>;
+    if (teamError) return <div className="text-center py-20 text-red-500">{teamError.response?.data?.error?.message || teamError.response?.data?.message || "Failed to load team."}</div>;
 
     const active = team?.filter(m => m.isActive).length ?? 0;
     const admins = team?.filter(m => ["ADMIN","SUPER_ADMIN"].includes(m.role)).length ?? 0;

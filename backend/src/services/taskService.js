@@ -32,6 +32,12 @@ const getTasks = async ({ userId, role, page, limit, filter, leadId }) => {
                 ? { assignedTo: { managerId: userId } }
                 : {};
 
+    // Lazily move overdue, still-pending tasks to an UNSUCCESSFUL outcome.
+    await prisma.task.updateMany({
+        where: { ...rbacWhere, status: "PENDING", outcome: "PENDING", dueDate: { lt: new Date() } },
+        data: { outcome: "UNSUCCESSFUL" },
+    });
+
     // Filter on top of RBAC
     const filterWhere = { ...rbacWhere };
     if (filter === "PENDING") {

@@ -6,8 +6,9 @@ import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import {
     Users, Calendar, ChevronLeft, ChevronRight, ChevronDown, Loader2, Search,
-    CheckCircle, Home, UserX, Plane, Clock, AlertCircle, ArrowLeft,
+    CheckCircle, Home, UserX, Plane, Clock, AlertCircle, ArrowLeft, CalendarOff, Plus, X, Trash2,
 } from "lucide-react";
+import { DEPARTMENT_ORDER, DEPARTMENT_LABELS } from "../lib/departments";
 
 const isManager = (role) => role === "SUPER_ADMIN" || role === "ADMIN";
 
@@ -21,6 +22,7 @@ const STATUS_META = {
     LEAVE:      { label: "Leave",    pill: "bg-blue-100 text-blue-700",     dot: "bg-blue-500" },
     HALF_DAY:   { label: "Half Day", pill: "bg-amber-100 text-amber-700",   dot: "bg-amber-500" },
     COMP_OFF:   { label: "Comp Off", pill: "bg-indigo-100 text-indigo-700", dot: "bg-indigo-500" },
+    HOLIDAY:    { label: "Holiday",  pill: "bg-teal-100 text-teal-700",     dot: "bg-teal-500" },
     NOT_MARKED: { label: "Not marked", pill: "bg-gray-100 text-gray-500",   dot: "bg-gray-300" },
 };
 
@@ -86,9 +88,52 @@ export default function TeamAttendance() {
             queryClient.invalidateQueries({ queryKey: ["attendance-all", date] });
             toast.success("Attendance updated");
         },
-        onError: (e) => toast.error(e.response?.data?.message || "Failed to update attendance"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to update attendance"),
         onSettled: () => setSavingUserId(null),
     });
+
+    // ── Holidays ──────────────────────────────────────────────────────────────
+    const isSuperAdmin = user?.role === "SUPER_ADMIN";
+    const [holidayModal, setHolidayModal] = useState(false);
+    const [holidayForm, setHolidayForm] = useState({ date: toDateStr(new Date()), name: "", department: "" });
+
+    const { data: holidays = [] } = useQuery({
+        queryKey: ["holidays"],
+        queryFn: () => api.get("/attendance/holidays").then(r => r.data || []),
+        enabled: isManager(user?.role),
+    });
+
+    const createHoliday = useMutation({
+        mutationFn: (payload) => api.post("/attendance/holidays", payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["holidays"] });
+            queryClient.invalidateQueries({ queryKey: ["attendance-all", date] });
+            toast.success("Holiday declared");
+            setHolidayModal(false);
+            setHolidayForm({ date: toDateStr(new Date()), name: "", department: "" });
+        },
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to declare holiday"),
+    });
+
+    const deleteHoliday = useMutation({
+        mutationFn: (id) => api.delete(`/attendance/holidays/${id}`),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["holidays"] });
+            queryClient.invalidateQueries({ queryKey: ["attendance-all", date] });
+            toast.success("Holiday removed");
+        },
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to remove holiday"),
+    });
+
+    const submitHoliday = (e) => {
+        e.preventDefault();
+        if (!holidayForm.name.trim()) return toast.error("Enter a holiday name");
+        createHoliday.mutate({
+            date: holidayForm.date,
+            name: holidayForm.name.trim(),
+            department: holidayForm.department || null,
+        });
+    };
 
     // Merge the roster with the day's records so people who never checked in still appear.
     const rows = useMemo(() => {
@@ -217,8 +262,46 @@ export default function TeamAttendance() {
                             Today
                         </button>
                     )}
+                    <button
+                        onClick={() => { setHolidayForm({ date, name: "", department: "" }); setHolidayModal(true); }}
+                        className="h-9 px-3 flex items-center gap-1.5 text-sm font-semibold rounded-xl bg-teal-600 text-white hover:bg-teal-700 transition-colors shadow-sm"
+                    >
+                        <CalendarOff className="h-4 w-4" /> Declare Holiday
+                    </button>
                 </div>
             </header>
+
+            {/* Upcoming / recent holidays */}
+            {holidays.length > 0 && (
+                <div className="rounded-2xl border border-gray-200/70 bg-white p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                        <CalendarOff className="h-4 w-4 text-teal-600" />
+                        <h2 className="text-sm font-bold text-gray-800">Declared Holidays</h2>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {holidays.map(h => (
+                            <div key={h.id} className="flex items-center gap-2 rounded-xl border border-gray-200/70 bg-gray-50 px-3 py-1.5">
+                                <div className="leading-tight">
+                                    <p className="text-xs font-bold text-gray-800">{h.name}</p>
+                                    <p className="text-[10px] font-semibold text-gray-500">
+                                        {new Date(h.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                        {" · "}
+                                        {h.department ? (DEPARTMENT_LABELS[h.department] || h.department) : "Company-wide"}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => { if (window.confirm(`Remove holiday "${h.name}"?`)) deleteHoliday.mutate(h.id); }}
+                                    disabled={deleteHoliday.isPending}
+                                    className="text-gray-400 hover:text-rose-600 transition-colors"
+                                    title="Remove holiday"
+                                >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Summary cards */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -354,6 +437,64 @@ export default function TeamAttendance() {
                     </Link>
                 </div>
             </div>
+
+            {/* Declare Holiday modal */}
+            {holidayModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => !createHoliday.isPending && setHolidayModal(false)}>
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+                        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <CalendarOff className="h-4 w-4 text-teal-600" />
+                                <h3 className="text-sm font-bold text-slate-800">Declare Holiday</h3>
+                            </div>
+                            <button onClick={() => setHolidayModal(false)} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+                        </div>
+                        <form onSubmit={submitHoliday} className="p-5 space-y-4">
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Date</label>
+                                <input
+                                    type="date"
+                                    value={holidayForm.date}
+                                    onChange={e => setHolidayForm(f => ({ ...f, date: e.target.value }))}
+                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-100 focus:border-teal-500"
+                                />
+                                <p className="text-[10px] text-slate-400">Past, today or a future date — attendance for that day is marked Holiday automatically.</p>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Holiday Name</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Independence Day"
+                                    value={holidayForm.name}
+                                    onChange={e => setHolidayForm(f => ({ ...f, name: e.target.value }))}
+                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-100 focus:border-teal-500"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Applies to</label>
+                                <select
+                                    value={holidayForm.department}
+                                    onChange={e => setHolidayForm(f => ({ ...f, department: e.target.value }))}
+                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-100 focus:border-teal-500 bg-white"
+                                >
+                                    {isSuperAdmin && <option value="">Company-wide (all departments)</option>}
+                                    {!isSuperAdmin && <option value="">— Select department —</option>}
+                                    {DEPARTMENT_ORDER.map(d => (
+                                        <option key={d} value={d}>{DEPARTMENT_LABELS[d] || d}</option>
+                                    ))}
+                                </select>
+                                {!isSuperAdmin && <p className="text-[10px] text-slate-400">You can declare holidays only for your own department.</p>}
+                            </div>
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                                <button type="button" onClick={() => setHolidayModal(false)} disabled={createHoliday.isPending} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 rounded-lg">Cancel</button>
+                                <button type="submit" disabled={createHoliday.isPending} className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 flex items-center gap-1.5">
+                                    {createHoliday.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Declare
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

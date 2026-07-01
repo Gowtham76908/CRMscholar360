@@ -228,7 +228,7 @@ const ApplyLeaveModal = ({ onClose, onSuccess, leaveType = "LEAVE" }) => {
             onSuccess();
         },
         onError: (error) => {
-            toast.error(error.response?.data?.message || `Failed to apply for ${isWFH ? "WFH" : "leave"}`);
+            toast.error(error.response?.data?.error?.message || error.response?.data?.message || `Failed to apply for ${isWFH ? "WFH" : "leave"}`);
         }
     });
 

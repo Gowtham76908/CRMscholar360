@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDepartmentSelection, useDepartmentDashboard, useDepartmentMembers, useWorkflows } from "../hooks/useDepartments";
@@ -441,7 +441,12 @@ function FinanceDashboardPanel() {
 const Dashboard = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
     const queryClient = useQueryClient();
+
+    useEffect(() => {
+        localStorage.setItem("last-leads-path", location.pathname + location.search);
+    }, [location]);
 
     // Tab state: overview, finance, performance
     const [activeTab, setActiveTab] = useState("overview");
@@ -774,7 +779,7 @@ const Dashboard = () => {
             refetchMyAttendance();
         },
         onError: (error) => {
-            toast.error(error.response?.data?.message || "Failed to check in");
+            toast.error(error.response?.data?.error?.message || error.response?.data?.message || "Failed to check in");
         },
     });
 
@@ -786,7 +791,7 @@ const Dashboard = () => {
             refetchMyAttendance();
         },
         onError: (error) => {
-            toast.error(error.response?.data?.message || "Failed to check out");
+            toast.error(error.response?.data?.error?.message || error.response?.data?.message || "Failed to check out");
         },
     });
 

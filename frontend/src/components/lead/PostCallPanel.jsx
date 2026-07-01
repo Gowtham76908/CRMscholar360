@@ -106,8 +106,8 @@ export default function PostCallPanel({ open, leadId, lead, onClose }) {
             queryClient.invalidateQueries({ queryKey: ["lead-reminders", leadId] });
             toast.success("Call logged successfully");
             onClose();
-        } catch {
-            toast.error("Failed to save some items — please check notes and reminders");
+        } catch (err) {
+            toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to save some items — please check notes and reminders");
         }
     };
 

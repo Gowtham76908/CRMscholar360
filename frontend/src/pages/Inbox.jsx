@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
 import api from "../api/axios";
 import { cn } from "../lib/utils";
 import {
@@ -212,6 +213,12 @@ function SLAItem({ lead, breachDays }) {
 // ─── Inbox page ───────────────────────────────────────────────────────────────
 
 export default function InboxPage() {
+    const location = useLocation();
+
+    useEffect(() => {
+        localStorage.setItem("last-leads-path", location.pathname + location.search);
+    }, [location]);
+
     const { data: followUpLeads = [], isLoading: leadsLoading } = useQuery({
         queryKey: ["inbox-followup"],
         queryFn: () => api.get("/leads", {

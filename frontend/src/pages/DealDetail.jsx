@@ -80,7 +80,7 @@ function CreateInvoiceModal({ deal, onClose, onCreated }) {
             toast.success(`Invoice ${data.invoiceNumber} created`);
             onCreated(data);
         } catch (err) {
-            toast.error(err.response?.data?.message || "Failed to create invoice");
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to create invoice");
         } finally {
             setSaving(false);
         }
@@ -243,7 +243,7 @@ function MarkPaidModal({ invoice, onClose, onPaid }) {
             toast.success("Payment recorded");
             onPaid();
         } catch (err) {
-            toast.error(err.response?.data?.message || "Failed to record payment");
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to record payment");
         } finally {
             setSaving(false);
         }
@@ -291,7 +291,7 @@ function SendEmailModal({ invoice, onClose }) {
             toast.success(`Invoice sent to ${email}`);
             onClose();
         } catch (err) {
-            toast.error(err.response?.data?.message || "Failed to send email");
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to send email");
         } finally {
             setSaving(false);
         }
@@ -438,7 +438,7 @@ export default function DealDetail() {
             queryClient.setQueryData(["deal", id], updated);
             toast.success(`Stage changed to ${updated.stage}`);
         },
-        onError: (err) => toast.error(err.response?.data?.message || "Failed to update stage"),
+        onError: (err) => toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to update stage"),
     });
 
     const { data: invoices = [], isLoading: invoicesLoading } = useQuery({

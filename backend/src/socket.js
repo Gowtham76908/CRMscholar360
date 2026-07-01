@@ -90,6 +90,10 @@ function initSocket(server) {
     }
 
     io.on("connection", (socket) => {
+        const { userId } = socket.data;
+        if (userId) {
+            socket.join(userId);
+        }
         registerChatHandlers(socket, io);
 
         socket.on("join-lead", ({ leadId, avatarColor }) => {

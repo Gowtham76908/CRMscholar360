@@ -25,8 +25,8 @@ const SessionManager = () => {
             queryClient.invalidateQueries({ queryKey: ["sessions"] });
             toast.success("User logged out from all devices.");
         },
-        onError: () => {
-            toast.error("Failed to force logout.");
+        onError: (err) => {
+            toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to force logout.");
         }
     });
 

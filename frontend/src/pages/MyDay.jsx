@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import api from "../api/axios";
@@ -9,7 +9,7 @@ import {
     CheckCircle, Circle, Bell, Phone, MessageSquare, X,
     ClipboardList, Calendar, Search, ChevronDown, Check, Users, Loader2,
     Building2, GraduationCap, FileCheck, Landmark, Home, Banknote, Briefcase,
-    UserCircle2, History, ArrowRight, Trash2, SlidersHorizontal,
+    UserCircle2, History, ArrowRight, SlidersHorizontal, Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../lib/utils";
@@ -195,29 +195,27 @@ function ActionItem({ lead, snoozed, onSnooze, preferDept }) {
 
 function TaskItem({ task, onComplete, preferDept }) {
     const navigate = useNavigate();
-    const due = dueSoonLabel(task.dueDate);
     return (
         <div className="p-3 rounded-xl bg-white ring-1 ring-slate-200/70 border-l-[3px] border-l-amber-500 shadow-[0_1px_2px_rgb(0,0,0,0.04)] hover:shadow-[0_4px_16px_-6px_rgb(0,0,0,0.15)] hover:ring-amber-200 transition-all duration-200 group cursor-pointer"
             onClick={() => navigate(`/tasks/${task.id}`)}>
             <div className="flex items-start gap-3">
-                <button onClick={(e) => { e.stopPropagation(); onComplete(task.id); }}
-                    className="mt-0.5 shrink-0 text-gray-300 hover:text-emerald-500 transition-colors" title="Mark complete">
-                    <Circle className="h-4 w-4" />
-                </button>
                 <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate group-hover:text-indigo-700 transition-colors">{task.title}</p>
                 </div>
-                <div className="shrink-0 flex items-center gap-2">
-                    {due && <Badge variant={due.variant} size="sm">{due.label}</Badge>}
-                    {task.dueDate && !due && (
+                <div className="shrink-0 flex items-center gap-2.5">
+                    {task.dueDate && (
                         <span className="text-[11px] text-gray-400">
                             {new Date(task.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
                         </span>
                     )}
+                    <button onClick={(e) => { e.stopPropagation(); onComplete(task.id); }}
+                        className="p-1 rounded-md text-gray-400 hover:text-emerald-600 hover:bg-emerald-55 transition-colors" title="Mark complete">
+                        <Check className="h-4 w-4" />
+                    </button>
                 </div>
             </div>
             {task.lead && (
-                <div className="mt-2 pl-7">
+                <div className="mt-2 pl-0">
                     <LeadIdentity lead={task.lead} preferDept={preferDept} />
                 </div>
             )}
@@ -243,10 +241,10 @@ function ReminderItem({ reminder, preferDept, onClear, clearing }) {
                 <button
                     onClick={e => { e.stopPropagation(); onClear(reminder.id); }}
                     disabled={clearing}
-                    title="Clear reminder"
-                    className="shrink-0 -mt-0.5 -mr-0.5 p-1 rounded-md text-violet-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                    title="Mark successful"
+                    className="shrink-0 -mt-0.5 -mr-0.5 p-1 rounded-md text-violet-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-50"
                 >
-                    <X className="h-3.5 w-3.5" />
+                    <Check className="h-3.5 w-3.5" />
                 </button>
             </div>
             {reminder.lead && (
@@ -485,6 +483,7 @@ const TRAY_THEME = {
     indigo: { accent: "bg-indigo-500", icon: "bg-indigo-50 text-indigo-600 ring-indigo-100" },
     amber:  { accent: "bg-amber-500",  icon: "bg-amber-50 text-amber-600 ring-amber-100" },
     violet: { accent: "bg-violet-500", icon: "bg-violet-50 text-violet-600 ring-violet-100" },
+    rose:   { accent: "bg-rose-500",   icon: "bg-rose-50 text-rose-600 ring-rose-100" },
 };
 
 function TrayColumn({ theme = "indigo", icon: Icon, title, subtitle, action, children }) {
@@ -534,7 +533,12 @@ function EmptyState({ icon: Icon, text, tint = "bg-gray-50 text-gray-300" }) {
 const MyDay = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
     const queryClient = useQueryClient();
+
+    useEffect(() => {
+        localStorage.setItem("last-leads-path", location.pathname + location.search);
+    }, [location]);
 
     // Snooze state
     const [snoozed, setSnoozed] = useState({});
@@ -550,6 +554,11 @@ const MyDay = () => {
     const [range, setRange] = useState({ mode: "all" });
     const hasFilters = consultant || department || range.mode !== "all";
     const clearFilters = () => { setConsultant(null); setDepartment(null); setRange({ mode: "all" }); };
+
+    // Personal Reminder Form State
+    const [showAddReminder, setShowAddReminder] = useState(false);
+    const [reminderMessage, setReminderMessage] = useState("");
+    const [reminderDateTime, setReminderDateTime] = useState("");
 
     const { data: consultants = [] } = useQuery({
         queryKey: ["team", "consultants"],
@@ -596,11 +605,45 @@ const MyDay = () => {
             queryClient.invalidateQueries({ queryKey: ["tasks"] }); 
             toast.success("Task marked complete"); 
         },
-        onError: () => toast.error("Failed to update task"),
+        onError: (err) => toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to update task"),
     });
 
-    // Reminders are cleared manually only — dismiss (not auto-expiry) removes them.
+    // A reminder is cleared by marking it successful (resolves & hides it).
     const dismissReminder = useMutation({
+        mutationFn: (id) => api.patch(`/reminders/${id}`, { outcome: "SUCCESSFUL" }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["reminders"] });
+            toast.success("Reminder marked successful");
+        },
+        onError: (err) => toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to update reminder"),
+    });
+    const clearAllReminders = (ids) => {
+        if (!ids.length) return;
+        Promise.all(ids.map(id => api.patch(`/reminders/${id}`, { outcome: "SUCCESSFUL" })))
+            .then(() => {
+                queryClient.invalidateQueries({ queryKey: ["reminders"] });
+                toast.success("All reminders marked successful");
+            })
+            .catch((err) => toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to update reminders"));
+    };
+
+    // Personal reminders: create mutation
+    const createReminder = useMutation({
+        mutationFn: (data) => api.post("/reminders", data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["reminders"] });
+            toast.success("Reminder added");
+            setShowAddReminder(false);
+            setReminderMessage("");
+            setReminderDateTime("");
+        },
+        onError: (err) => {
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to add reminder");
+        }
+    });
+
+    // Personal reminders: dismiss mutation (no success/unsuccessful outcome)
+    const dismissPersonalReminder = useMutation({
         mutationFn: (id) => api.patch(`/reminders/${id}`, { dismissed: true }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["reminders"] });
@@ -608,15 +651,6 @@ const MyDay = () => {
         },
         onError: () => toast.error("Failed to clear reminder"),
     });
-    const clearAllReminders = (ids) => {
-        if (!ids.length) return;
-        Promise.all(ids.map(id => api.patch(`/reminders/${id}`, { dismissed: true })))
-            .then(() => {
-                queryClient.invalidateQueries({ queryKey: ["reminders"] });
-                toast.success("All reminders cleared");
-            })
-            .catch(() => toast.error("Failed to clear reminders"));
-    };
 
     // Only gate the page on the filter-independent queries; the Action Queue card
     // shows its own loading state when the consultant filter re-fetches leads.
@@ -626,30 +660,57 @@ const MyDay = () => {
     const leadInDept = (lead) =>
         !department || (lead?.leadDepartments || []).some(d => d.department === department);
 
-    const pendingTasks = (tasks || [])
+    // Base scope (consultant + department). Open = not yet completed/resolved.
+    const tasksScoped = (tasks || [])
         .filter(t => t.status === "PENDING")
         .filter(t => !consultant || t.assignedTo?.id === consultant.id)
-        .filter(t => leadInDept(t.lead))
-        .filter(t => inRange(t.dueDate, range));
-    // Manual-clear only: keep reminders until the user dismisses them (don't hide
-    // once they've fired / isSent).
-    const upcomingReminders = (reminders || [])
-        .filter(r => !r.dismissed)
+        .filter(t => leadInDept(t.lead));
+    const remindersScoped = (reminders || [])
+        .filter(r => !r.dismissed && r.outcome !== "SUCCESSFUL")
         .filter(r => !consultant || r.userId === consultant.id)
-        .filter(r => leadInDept(r.lead))
-        .filter(r => inRange(r.remindAt, range))
-        .slice(0, 5);
-    const actionQueue = (leadsData || [])
-        .filter(l => leadInDept(l))
-        .filter(l => inRange(l.nextFollowUpAt ?? l.updatedAt, range))
-        .slice(0, 8);
+        .filter(r => leadInDept(r.lead));
+
+    const now = Date.now();
+    const isPast = (d) => d && new Date(d).getTime() < now;
+    const byDate = (a, b) => {
+        const ta = a.date ? new Date(a.date).getTime() : Infinity;
+        const tb = b.date ? new Date(b.date).getTime() : Infinity;
+        return ta - tb;
+    };
+
+    // Upcoming: not completed and due/remind time has NOT passed yet, and within range (excludes personal reminders).
+    const upcomingItems = [
+        ...tasksScoped
+            .filter(t => !isPast(t.dueDate))
+            .map(t => ({ kind: "task", item: t, date: t.dueDate })),
+        ...remindersScoped
+            .filter(r => r.leadId && !isPast(r.remindAt))
+            .map(r => ({ kind: "reminder", item: r, date: r.remindAt })),
+    ]
+    .filter(item => inRange(item.date, range))
+    .sort(byDate);
+
+    // Overdue: not completed and due/remind time has passed (excludes personal reminders).
+    const overdueItems = [
+        ...tasksScoped
+            .filter(t => isPast(t.dueDate))
+            .map(t => ({ kind: "task", item: t, date: t.dueDate })),
+        ...remindersScoped
+            .filter(r => r.leadId && isPast(r.remindAt))
+            .map(r => ({ kind: "reminder", item: r, date: r.remindAt })),
+    ].sort(byDate);
+
+    // Personal Reminders: no associated lead
+    const personalReminders = (remindersScoped || [])
+        .filter(r => !r.leadId)
+        .sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt));
 
     const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
 
     return (
         <div className="space-y-5">
             {/* Header */}
-            <header className="relative flex items-center justify-between gap-5">
+            <header className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                 <div className="flex items-center gap-4">
                     <div className="h-12 w-12 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-sm">
                         <Calendar className="h-6 w-6 text-white" />
@@ -659,34 +720,35 @@ const MyDay = () => {
                         <p className="text-sm text-slate-500 mt-0.5">{today} · your tasks &amp; follow-ups</p>
                     </div>
                 </div>
-                <Link
-                    to="/dashboard"
-                    className="hidden sm:inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl px-3.5 py-2 ring-1 ring-slate-200/80 bg-white hover:ring-indigo-200 transition-colors shadow-[0_1px_2px_rgb(0,0,0,0.04)]"
-                >
-                    Dashboard <ArrowRight className="h-4 w-4" />
-                </Link>
-            </header>
-
-            {/* Stats — aligned above their matching tray */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                {[
-                    { label: "Follow-ups", hint: "Leads in queue", value: actionQueue.length, icon: ClipboardList, ic: "bg-indigo-50 text-indigo-600 ring-indigo-100", bar: "bg-indigo-500" },
-                    { label: "Pending Tasks", hint: "Due to you", value: pendingTasks.length, icon: CheckCircle, ic: "bg-amber-50 text-amber-600 ring-amber-100", bar: "bg-amber-500" },
-                    { label: "Reminders", hint: "Awaiting action", value: upcomingReminders.length, icon: Bell, ic: "bg-violet-50 text-violet-600 ring-violet-100", bar: "bg-violet-500" },
-                ].map(({ label, hint, value, icon: Icon, ic, bar }) => (
-                    <div key={label} className="relative flex items-center gap-4 rounded-2xl bg-white pl-5 pr-4 py-4 ring-1 ring-slate-200/80 shadow-[0_1px_3px_rgb(0,0,0,0.04)] overflow-hidden">
-                        <span className={cn("absolute left-0 inset-y-0 w-1", bar)} />
-                        <div className={cn("h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ring-1", ic)}>
-                            <Icon className="h-5 w-5" />
-                        </div>
-                        <div className="min-w-0">
-                            <CountUp value={value} className="text-2xl font-black text-slate-900 leading-none tabular-nums" />
-                            <p className="text-xs font-bold text-slate-600 mt-1.5 truncate">{label}</p>
-                            <p className="text-[10px] text-slate-400 leading-tight truncate">{hint}</p>
-                        </div>
+                
+                {/* Stats & Actions in Top Right */}
+                <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                        {[
+                            { label: "Upcoming", value: upcomingItems.length, icon: CheckCircle, ic: "bg-amber-50 text-amber-600 ring-amber-100/80" },
+                            { label: "Overdue", value: overdueItems.length, icon: Bell, ic: "bg-rose-50 text-rose-600 ring-rose-100/80" },
+                        ].map(({ label, value, icon: Icon, ic }) => (
+                            <div key={label} className="flex items-center gap-2.5 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-200/80 shadow-[0_1px_2px_rgb(0,0,0,0.04)]">
+                                <span className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ring-1", ic)}>
+                                    <Icon className="h-4 w-4" />
+                                </span>
+                                <div className="text-left">
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none">{label}</p>
+                                    <div className="flex items-baseline gap-1 mt-1">
+                                        <CountUp value={value} className="text-sm font-black text-slate-900 leading-none tabular-nums" />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
-                ))}
-            </div>
+                    <Link
+                        to="/dashboard"
+                        className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl px-3.5 py-2 ring-1 ring-slate-200/80 bg-white hover:ring-indigo-200 transition-colors shadow-[0_1px_2px_rgb(0,0,0,0.04)] h-[42px]"
+                    >
+                        Dashboard <ArrowRight className="h-4 w-4" />
+                    </Link>
+                </div>
+            </header>
 
             {/* Filter toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 ring-1 ring-slate-200/80 shadow-[0_1px_3px_rgb(0,0,0,0.04)]">
@@ -710,87 +772,153 @@ const MyDay = () => {
             {/* Trays */}
             <div className="relative">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                    {/* Action Queue */}
-                    <TrayColumn
-                        theme="indigo"
-                        icon={ClipboardList}
-                        title="Action Queue"
-                        subtitle="Leads needing your attention"
-                        action={<Badge variant="warning" size="sm">{actionQueue.length}</Badge>}
-                    >
-                        {leadsLoading
-                            ? (
-                                <div className="flex items-center justify-center h-full py-12">
-                                    <Loader2 className="h-5 w-5 animate-spin text-indigo-400" />
-                                </div>
-                            )
-                            : actionQueue.length > 0
-                            ? actionQueue.map(lead => (
-                                <ActionItem key={lead.id} lead={lead} snoozed={isSnoozed(lead.id)} onSnooze={handleSnooze} preferDept={department} />
-                            ))
-                            : (
-                                <EmptyState
-                                    icon={ClipboardList}
-                                    tint="bg-indigo-50 text-indigo-300"
-                                    text={consultant ? `No action items for ${consultant.name}` : "No leads need action right now"}
-                                />
-                            )
-                        }
-                    </TrayColumn>
-
-                    {/* My Tasks */}
+                    {/* Upcoming — tasks & reminders not yet due */}
                     <TrayColumn
                         theme="amber"
                         icon={CheckCircle}
-                        title="My Tasks"
-                        subtitle="Open to-dos due to you"
+                        title="Upcoming"
+                        subtitle="Not completed · due date not passed"
                         action={
-                            <Badge variant={pendingTasks.length > 0 ? "error" : "success"} size="sm">
-                                {pendingTasks.length} pending
+                            <Badge variant={upcomingItems.length > 0 ? "error" : "success"} size="sm">
+                                {upcomingItems.length}
                             </Badge>
                         }
                     >
-                        {pendingTasks.length > 0
-                            ? pendingTasks.slice(0, 8).map(task => (
-                                <TaskItem key={task.id} task={task} onComplete={(id) => completeTask.mutate(id)} preferDept={department} />
+                        {upcomingItems.length > 0
+                            ? upcomingItems.map(entry => (
+                                entry.kind === "task"
+                                    ? <TaskItem key={`task-${entry.item.id}`} task={entry.item} onComplete={(id) => completeTask.mutate(id)} preferDept={department} />
+                                    : <ReminderItem
+                                        key={`rem-${entry.item.id}`}
+                                        reminder={entry.item}
+                                        preferDept={department}
+                                        onClear={(id) => dismissReminder.mutate(id)}
+                                        clearing={dismissReminder.isPending}
+                                    />
                             ))
-                            : <EmptyState icon={CheckCircle} tint="bg-emerald-50 text-emerald-400" text="All tasks done! 🎉" />
+                            : <EmptyState icon={CheckCircle} tint="bg-emerald-50 text-emerald-400" text="Nothing upcoming 🎉" />
                         }
                     </TrayColumn>
 
-                    {/* Reminders */}
+                    {/* Overdue — passed their time, never marked successful */}
+                    <TrayColumn
+                        theme="rose"
+                        icon={Bell}
+                        title="Overdue"
+                        subtitle="Unsuccessful — past due"
+                        action={<Badge variant="error" size="sm">{overdueItems.length}</Badge>}
+                    >
+                        {overdueItems.length > 0
+                            ? overdueItems.map(entry => (
+                                entry.kind === "task"
+                                    ? <TaskItem key={`task-${entry.item.id}`} task={entry.item} onComplete={(id) => completeTask.mutate(id)} preferDept={department} />
+                                    : <ReminderItem
+                                        key={`rem-${entry.item.id}`}
+                                        reminder={entry.item}
+                                        preferDept={department}
+                                        onClear={(id) => dismissReminder.mutate(id)}
+                                        clearing={dismissReminder.isPending}
+                                    />
+                            ))
+                            : <EmptyState icon={Bell} tint="bg-rose-50 text-rose-300" text="No overdue items" />
+                        }
+                    </TrayColumn>
+
+                    {/* My Reminders — personal reminders */}
                     <TrayColumn
                         theme="violet"
                         icon={Bell}
-                        title="Reminders"
-                        subtitle="Cleared manually when done"
+                        title="My Reminders"
+                        subtitle="Personal reminders"
                         action={
-                            <>
-                                {upcomingReminders.length > 0 && (
-                                    <button
-                                        onClick={() => clearAllReminders(upcomingReminders.map(r => r.id))}
-                                        disabled={dismissReminder.isPending}
-                                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500 hover:text-red-600 disabled:opacity-50 transition-colors"
-                                        title="Clear all reminders"
-                                    >
-                                        <Trash2 className="h-3.5 w-3.5" /> Clear all
-                                    </button>
-                                )}
-                                <Badge variant="ai" size="sm">{upcomingReminders.length}</Badge>
-                            </>
+                            <button 
+                                onClick={() => setShowAddReminder(!showAddReminder)} 
+                                className="p-1 rounded-lg bg-violet-50 text-violet-650 hover:bg-violet-105 transition-colors focus:outline-none cursor-pointer"
+                                title="Add personal reminder"
+                            >
+                                <Plus className="h-4 w-4" />
+                            </button>
                         }
                     >
-                        {upcomingReminders.length > 0
-                            ? upcomingReminders.map(r => (
-                                <ReminderItem
-                                    key={r.id}
-                                    reminder={r}
-                                    preferDept={department}
-                                    onClear={(id) => dismissReminder.mutate(id)}
-                                    clearing={dismissReminder.isPending}
-                                />
-                            ))
-                            : <EmptyState icon={Bell} tint="bg-violet-50 text-violet-300" text="No reminders to show" />
+                        {showAddReminder && (
+                            <form 
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    if (!reminderMessage.trim() || !reminderDateTime) {
+                                        toast.warning("Message and date/time are required");
+                                        return;
+                                    }
+                                    createReminder.mutate({
+                                        message: reminderMessage,
+                                        remindAt: new Date(reminderDateTime).toISOString(),
+                                    });
+                                }}
+                                className="p-3 bg-violet-50/40 border border-violet-100/80 rounded-xl space-y-2.5"
+                            >
+                                <div>
+                                    <label className="block text-[9px] font-bold text-violet-700 uppercase mb-1">Message</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="What to remind..." 
+                                        value={reminderMessage}
+                                        onChange={e => setReminderMessage(e.target.value)}
+                                        className="w-full px-2.5 py-1.5 text-xs border border-violet-200 rounded-lg outline-none bg-white focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[9px] font-bold text-violet-700 uppercase mb-1">Date & Time</label>
+                                    <input 
+                                        type="datetime-local" 
+                                        value={reminderDateTime}
+                                        onChange={e => setReminderDateTime(e.target.value)}
+                                        className="w-full px-2.5 py-1.5 text-xs border border-violet-200 rounded-lg outline-none bg-white focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-1.5 pt-1">
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setShowAddReminder(false)}
+                                        className="px-2.5 py-1 text-[10px] font-semibold text-violet-600 hover:bg-violet-100/50 rounded-md"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        type="submit"
+                                        disabled={createReminder.isPending}
+                                        className="px-2.5 py-1 text-[10px] font-semibold bg-violet-600 text-white hover:bg-violet-700 rounded-md shadow-xs disabled:opacity-50"
+                                    >
+                                        {createReminder.isPending ? "Adding..." : "Add"}
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+
+                        {personalReminders.length > 0
+                            ? personalReminders.map(reminder => {
+                                const d = new Date(reminder.remindAt);
+                                const isToday = d.toDateString() === new Date().toDateString();
+                                return (
+                                    <div key={reminder.id} className="p-3 rounded-xl bg-white ring-1 ring-slate-200/70 border-l-[3px] border-l-violet-500 shadow-[0_1px_2px_rgb(0,0,0,0.04)] flex items-center justify-between gap-3 group">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm text-gray-800 font-medium break-words leading-snug">{reminder.message}</p>
+                                            <span className="text-[10px] font-semibold text-violet-600 mt-1.5 block">
+                                                {isToday
+                                                    ? `Today at ${d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`
+                                                    : d.toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => dismissPersonalReminder.mutate(reminder.id)}
+                                            disabled={dismissPersonalReminder.isPending}
+                                            title="Clear reminder"
+                                            className="shrink-0 p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                );
+                            })
+                            : !showAddReminder && <EmptyState icon={Bell} tint="bg-violet-50 text-violet-300" text="No personal reminders" />
                         }
                     </TrayColumn>
                 </div>

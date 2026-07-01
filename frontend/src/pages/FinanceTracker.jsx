@@ -66,7 +66,7 @@ export default function FinanceTracker() {
             setDescription("");
         },
         onError: (err) => {
-            toast.error(err.response?.data?.message || "Failed to add expense");
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to add expense");
         }
     });
 
@@ -77,7 +77,7 @@ export default function FinanceTracker() {
             toast.success("Expense deleted successfully");
         },
         onError: (err) => {
-            toast.error(err.response?.data?.message || "Failed to delete expense");
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to delete expense");
         }
     });
 

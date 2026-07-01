@@ -1,4 +1,4 @@
-﻿const prisma = require("../utils/prisma");
+const prisma = require("../utils/prisma");
 const logger = require("../utils/logger");
 const { toIST, istDateKey } = require("../utils/istTime");
 
@@ -6,9 +6,21 @@ const { toIST, istDateKey } = require("../utils/istTime");
  * Creates a single in-app notification for a user.
  */
 const createNotification = async ({ userId, title, message, type, link = null }) => {
-    return prisma.notification.create({
+    const notification = await prisma.notification.create({
         data: { userId, title, message, type, link }
     });
+
+    try {
+        const { getIO } = require("../socket");
+        const io = getIO();
+        if (io) {
+            io.to(userId).emit("notification:new", notification);
+        }
+    } catch (err) {
+        logger.error({ err: err.message }, "Failed to emit socket notification");
+    }
+
+    return notification;
 };
 
 /**

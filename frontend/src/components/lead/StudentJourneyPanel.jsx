@@ -1,13 +1,224 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
     Calendar, PhoneCall, CheckSquare, GraduationCap,
     FileText, Award, UploadCloud, ShieldCheck,
-    CheckCircle2, AlertCircle, RefreshCw, Send, Loader2, ArrowRight, X, List, Save
+    CheckCircle2, AlertCircle, RefreshCw, Send, Loader2, ArrowRight, X, List, Save, Plus, Trash2, Search, Check, ChevronDown, User, MapPin, Globe, ShieldAlert, Phone, Briefcase, BookOpen
 } from "lucide-react";
 import api from "../../api/axios";
+import { cn } from "../../lib/utils";
+import { z } from "zod";
+
+const studentProfileSchema = z.object({
+    // Step 1
+    firstName: z.string().min(1, "First Name is required"),
+    lastName: z.string().min(1, "Last Name is required"),
+    email: z.string().email("Invalid email address"),
+    mobileNumber: z.string().min(1, "Mobile Number is required"),
+    dob: z.string().min(1, "Date of Birth is required"),
+    gender: z.string().min(1, "Gender is required"),
+    maritalStatus: z.string().min(1, "Marital Status is required"),
+    mailingAddress1: z.string().min(1, "Mailing Address 1 is required"),
+    mailingCountry: z.string().min(1, "Mailing Country is required"),
+    mailingState: z.string().min(1, "Mailing State is required"),
+    mailingCity: z.string().min(1, "Mailing City is required"),
+    mailingPincode: z.string().min(1, "Mailing Pincode is required"),
+    permAddressSame: z.boolean().optional(),
+    permAddress1: z.string().optional(),
+    permCountry: z.string().optional(),
+    permState: z.string().optional(),
+    permCity: z.string().optional(),
+    permPincode: z.string().optional(),
+    passportNumber: z.string().min(1, "Passport Number is required"),
+    passportIssueDate: z.string().min(1, "Passport Issue Date is required"),
+    passportExpiryDate: z.string().min(1, "Passport Expiry Date is required"),
+    passportIssueCountry: z.string().min(1, "Passport Issue Country is required"),
+    passportCityOfBirth: z.string().min(1, "City of Birth is required"),
+    passportCountryOfBirth: z.string().min(1, "Country of Birth is required"),
+    nationality: z.string().min(1, "Nationality is required"),
+    citizenship: z.string().min(1, "Citizenship is required"),
+    emergencyName: z.string().min(1, "Emergency Name is required"),
+    emergencyPhone: z.string().min(1, "Emergency Phone is required"),
+    emergencyEmail: z.string().email("Invalid Emergency Email"),
+    emergencyRelation: z.string().min(1, "Emergency Relation is required"),
+
+    // Step 2
+    countryOfEducation: z.string().min(1, "Country of Education is required"),
+    highestLevelOfEducation: z.string().min(1, "Highest Level of Education is required"),
+
+    // Step 3
+    hasWorkExperience: z.boolean().optional(),
+    workExperiences: z.array(z.object({
+        workOrgAddress: z.string().min(1, "Organisation Name & Address is required"),
+        workPosition: z.string().min(1, "Position is required"),
+        workSalaryMode: z.string().optional(),
+        workJobProfile: z.string().optional(),
+        workFrom: z.string().min(1, "Working From date is required"),
+        workCurrent: z.boolean().optional(),
+        workUpto: z.string().optional(),
+    }).superRefine((data, ctx) => {
+        if (!data.workCurrent && (!data.workUpto || !data.workUpto.trim())) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Working Upto date is required", path: ["workUpto"] });
+        }
+    })).optional(),
+
+    // Step 4
+    testScores: z.object({
+        GRE: z.object({ overall: z.string().min(1, "Overall Score is required"), date: z.string().optional(), quant: z.string().optional(), verbal: z.string().optional(), aw: z.string().optional() }).optional(),
+        GMAT: z.object({ overall: z.string().min(1, "Overall Score is required"), date: z.string().optional(), quant: z.string().optional(), verbal: z.string().optional(), aw: z.string().optional() }).optional(),
+        IELTS: z.object({ overall: z.string().min(1, "Overall Score is required"), date: z.string().optional(), quant: z.string().optional(), verbal: z.string().optional(), aw: z.string().optional() }).optional(),
+        TOEFL: z.object({ overall: z.string().min(1, "Overall Score is required"), date: z.string().optional(), quant: z.string().optional(), verbal: z.string().optional(), aw: z.string().optional() }).optional(),
+        PTE: z.object({ overall: z.string().min(1, "Overall Score is required"), date: z.string().optional(), quant: z.string().optional(), verbal: z.string().optional(), aw: z.string().optional() }).optional(),
+        DET: z.object({ overall: z.string().min(1, "Overall Score is required"), date: z.string().optional(), quant: z.string().optional(), verbal: z.string().optional(), aw: z.string().optional() }).optional(),
+        SAT: z.object({ overall: z.string().min(1, "Overall Score is required"), date: z.string().optional(), quant: z.string().optional(), verbal: z.string().optional(), aw: z.string().optional() }).optional(),
+        ACT: z.object({ overall: z.string().min(1, "Overall Score is required"), date: z.string().optional(), quant: z.string().optional(), verbal: z.string().optional(), aw: z.string().optional() }).optional(),
+    }).optional(),
+}).superRefine((data, ctx) => {
+    if (!data.permAddressSame) {
+        if (!data.permAddress1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Permanent Address 1 is required", path: ["permAddress1"] });
+        if (!data.permCountry) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Permanent Country is required", path: ["permCountry"] });
+        if (!data.permState) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Permanent State is required", path: ["permState"] });
+        if (!data.permCity) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Permanent City is required", path: ["permCity"] });
+        if (!data.permPincode) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Permanent Pincode is required", path: ["permPincode"] });
+    }
+});
+
+const ALL_COUNTRIES = [
+    "Afghanistan", "Albania", "Algeria", "American Samoa", "Andorra", "Angola", "Anguilla", "Antarctica", "Antigua and Barbuda", "Argentina", "Armenia", "Aruba", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bermuda", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Bouvet Island", "Brazil", "British Indian Ocean Territory", "Brunei Darussalam", "Bulgaria", "Burkina Faso", "Burundi", "Cambodia", "Cameroon", "Canada", "Cape Verde", "Cayman Islands", "Central African Republic", "Chad", "Chile", "China", "Christmas Island", "Cocos (Keeling) Islands", "Colombia", "Comoros", "Congo", "Congo, the Democratic Republic of the", "Cook Islands", "Costa Rica", "Cote D'Ivoire", "Croatia", "Cuba", "Cyprus", "Czech Republic", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Falkland Islands (Malvinas)", "Faroe Islands", "Fiji", "Finland", "France", "French Guiana", "French Polynesia", "French Southern Territories", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Gibraltar", "Greece", "Greenland", "Grenada", "Guadeloupe", "Guam", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Heard Island and Mcdonald Islands", "Holy See (Vatican City State)", "Honduras", "Hong Kong", "Hungary", "Iceland", "India", "Indonesia", "Iran, Islamic Republic of", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Korea, Democratic People's Republic of", "Korea, Republic of", "Kosovo", "Kuwait", "Kyrgyzstan", "Lao People's Democratic Republic", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libyan Arab Jamahiriya", "Liechtenstein", "Lithuania", "Luxembourg", "Macao", "Macedonia, the Former Yugoslav Republic of", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Martinique", "Mauritania", "Mauritius", "Mayotte", "Mexico", "Micronesia, Federated States of", "Moldova, Republic of", "Monaco", "Mongolia", "Montserrat", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "Netherlands Antilles", "New Caledonia", "New Zealand", "Nicaragua", "Niger", "Nigeria", "Niue", "Norfolk Island", "Northern Mariana Islands", "Norway", "Oman", "Pakistan", "Palau", "Palestinian Territory, Occupied", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Pitcairn", "Poland", "Portugal", "Puerto Rico", "Qatar", "Reunion", "Romania", "Russian Federation", "Rwanda", "Saint Helena", "Saint Kitts and Nevis", "Saint Lucia", "Saint Pierre and Miquelon", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia and Montenegro", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Georgia and the South Sandwich Islands", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Svalbard and Jan Mayen", "Sweden", "Switzerland", "Syrian Arab Republic", "Taiwan, Province of China", "Tajikistan", "Tanzania, United Republic of", "Thailand", "Timor-Leste", "Togo", "Tokelau", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Turks and Caicos Islands", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "United States Minor Outlying Islands", "Uruguay", "Uzbekistan", "Vanuatu", "Venezuela", "Vietnam", "Virgin Islands, British", "Virgin Islands, U.S.", "Wallis and Futuna", "Western Sahara", "Yemen", "Zambia", "Zimbabwe"
+];
+
+function AcademicBlock({ prefix, label, setFormValues, formValues, isUG = false, isSchool = false, validationErrors = {} }) {
+    const levelLabel = prefix === "pg" ? "Postgraduate" : prefix === "ug" ? "Undergraduate" : prefix === "x12" ? "Grade 12th or equivalent" : "Grade 10th or equivalent";
+    const iconColor = prefix === "pg" ? "text-violet-600" : prefix === "ug" ? "text-blue-600" : prefix === "x12" ? "text-amber-600" : "text-emerald-600";
+    const borderColor = prefix === "pg" ? "border-violet-100" : prefix === "ug" ? "border-blue-100" : prefix === "x12" ? "border-amber-100" : "border-emerald-100";
+    const bgColor = prefix === "pg" ? "bg-violet-50/20" : prefix === "ug" ? "bg-blue-50/20" : prefix === "x12" ? "bg-amber-50/20" : "bg-emerald-50/20";
+    const badgeBg = prefix === "pg" ? "bg-violet-50 text-violet-700 border-violet-200" : prefix === "ug" ? "bg-blue-50 text-blue-700 border-blue-200" : prefix === "x12" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200";
+
+    const inputCls = "w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none font-semibold transition-all focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white";
+    const selectCls = "w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none font-semibold transition-all focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white";
+    const labelCls = "text-[10px] font-extrabold text-slate-500 uppercase tracking-wide flex items-center gap-1";
+
+    return (
+        <div className={cn("p-4 border rounded-2xl space-y-4 shadow-2xs", borderColor, bgColor)}>
+            {/* Section Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                    <GraduationCap className={cn("h-4 w-4", iconColor)} />
+                    <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">{label}</h4>
+                </div>
+                <span className={cn("text-[9px] font-extrabold px-2.5 py-0.5 rounded-full border", badgeBg)}>
+                    {levelLabel}
+                </span>
+            </div>
+
+            {/* Row 1: Country, State, Level */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                    <label className={labelCls}>Country of Study <span className="text-rose-500">*</span></label>
+                    <select value={formValues[`${prefix}Country`] || ""} onChange={e => setFormValues(prev => ({...prev, [`${prefix}Country`]: e.target.value}))} className={selectCls}>
+                        <option value="">Select Country</option>
+                        {ALL_COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                </div>
+                <div className="space-y-1">
+                    <label className={labelCls}>State of Study <span className="text-rose-500">*</span></label>
+                    <input type="text" placeholder="Enter state" value={formValues[`${prefix}State`] || ""} onChange={e => setFormValues(prev => ({...prev, [`${prefix}State`]: e.target.value}))} className={inputCls} />
+                </div>
+                <div className="space-y-1">
+                    <label className={labelCls}>Level of Study</label>
+                    <input type="text" value={formValues[`${prefix}Level`] || levelLabel} disabled className={cn(inputCls, "bg-slate-50 text-slate-500 cursor-not-allowed opacity-70")} />
+                </div>
+            </div>
+
+            {/* Row 2: University/Board + Degree */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                    <label className={labelCls}>{isSchool ? "Name of Board" : "Name of University"} <span className="text-rose-500">*</span></label>
+                    <input type="text" placeholder={isSchool ? "e.g. CBSE, ICSE, State Board" : "Enter university name"} value={formValues[`${prefix}University`] || ""} onChange={e => setFormValues(prev => ({...prev, [`${prefix}University`]: e.target.value}))} className={inputCls} />
+                </div>
+                <div className="space-y-1">
+                    <label className={labelCls}>Qualification / Degree Awarded</label>
+                    <input type="text" placeholder="e.g. B.Tech, MBA, HSC" value={formValues[`${prefix}Degree`] || ""} onChange={e => setFormValues(prev => ({...prev, [`${prefix}Degree`]: e.target.value}))} className={inputCls} />
+                </div>
+            </div>
+
+            {/* Institution (School only) */}
+            {isSchool && (
+                <div className="space-y-1">
+                    <label className={labelCls}>Name of the Institution <span className="text-rose-500">*</span></label>
+                    <input type="text" placeholder="Enter school / institution name" value={formValues[`${prefix}Institution`] || ""} onChange={e => setFormValues(prev => ({...prev, [`${prefix}Institution`]: e.target.value}))} className={inputCls} />
+                </div>
+            )}
+
+            {/* Row 3: City, Grading, Score */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                    <label className={labelCls}>City of Study <span className="text-rose-500">*</span></label>
+                    <input type="text" placeholder="Enter city" value={formValues[`${prefix}City`] || ""} onChange={e => setFormValues(prev => ({...prev, [`${prefix}City`]: e.target.value}))} className={inputCls} />
+                </div>
+                <div className="space-y-1">
+                    <label className={labelCls}>Grading System <span className="text-rose-500">*</span></label>
+                    <select value={formValues[`${prefix}Grading`] || ""} onChange={e => setFormValues(prev => ({...prev, [`${prefix}Grading`]: e.target.value}))} className={selectCls}>
+                        <option value="">Select Grading</option>
+                        <option value="CGPA / 10">CGPA / 10</option>
+                        <option value="GPA / 4">GPA / 4</option>
+                        <option value="Percentage">Percentage</option>
+                        <option value="Grade (A-F)">Grade (A-F)</option>
+                    </select>
+                </div>
+                <div className="space-y-1">
+                    <label className={labelCls}>
+                        {prefix === "pg" ? "Percentage" : `Score (${label.split(" ")[0]})`} <span className="text-rose-500">*</span>
+                    </label>
+                    <input type="text" placeholder="Enter score" value={formValues[`${prefix}Score`] || formValues[`${prefix}Percentage`] || ""} onChange={e => {
+                        const val = e.target.value;
+                        if (prefix === "pg") {
+                            setFormValues(prev => ({...prev, pgPercentage: val, pgScore: val}));
+                        } else {
+                            setFormValues(prev => ({...prev, [`${prefix}Score`]: val}));
+                        }
+                    }} className={inputCls} />
+                </div>
+            </div>
+
+            {/* Row 4: Language, Backlogs (UG only), Dates */}
+            <div className={cn("grid gap-3", isUG ? "grid-cols-1 md:grid-cols-4" : "grid-cols-1 md:grid-cols-3")}>
+                <div className="space-y-1">
+                    <label className={labelCls}>Language of Instruction <span className="text-rose-500">*</span></label>
+                    <input type="text" placeholder="e.g. English" value={formValues[`${prefix}Language`] || ""} onChange={e => setFormValues(prev => ({...prev, [`${prefix}Language`]: e.target.value}))} className={inputCls} />
+                </div>
+                {isUG && (
+                    <div className="space-y-1">
+                        <label className={labelCls}>Backlogs</label>
+                        <input type="number" min="0" placeholder="0" value={formValues.ugBacklogs !== undefined ? formValues.ugBacklogs : (formValues.backlogs || 0)} onChange={e => setFormValues(prev => ({...prev, ugBacklogs: e.target.value, backlogs: e.target.value}))} className={inputCls} />
+                    </div>
+                )}
+                <div className="space-y-1">
+                    <label className={labelCls}>Start Date <span className="text-rose-500">*</span></label>
+                    <input type="date" value={formValues[`${prefix}StartDate`] || ""} onChange={e => setFormValues(prev => ({...prev, [`${prefix}StartDate`]: e.target.value}))} className={inputCls} />
+                </div>
+                <div className="space-y-1">
+                    <label className={labelCls}>End Date <span className="text-rose-500">*</span></label>
+                    <input
+                        type="date"
+                        min={formValues[`${prefix}StartDate`] || undefined}
+                        value={formValues[`${prefix}EndDate`] || ""}
+                        onChange={e => setFormValues(prev => ({...prev, [`${prefix}EndDate`]: e.target.value}))}
+                        className={cn(inputCls, validationErrors[`${prefix}EndDate`] && "border-rose-400 focus:ring-rose-100 focus:border-rose-400 bg-rose-50/10")}
+                    />
+                    {validationErrors[`${prefix}EndDate`] && (
+                        <p className="text-[10px] text-rose-550 font-bold mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3 shrink-0" />
+                            {validationErrors[`${prefix}EndDate`]}
+                        </p>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
 
 const EXCLUDED_KEYS = new Set([
     "shortlisted_universities",
@@ -25,6 +236,9 @@ const EXCLUDED_KEYS = new Set([
     "offer_letter_uploaded",
     "deposit_amount_due",
     "deposit_receipt_uploaded",
+    "deposit_amount",
+    "payment_mode",
+    "payment_date",
     "financial_proof_docs",
     "cas_form_number",
     "visa_manager_approved",
@@ -51,11 +265,238 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
     const [actionModal, setActionModal] = useState(null); // 'enquiry', 'follow_up', 'prospect', etc.
     const [loading, setLoading] = useState(false);
     const [formValues, setFormValues] = useState({});
+    const [prospectStep, setProspectStep] = useState(1);
+    const [activeTests, setActiveTests] = useState([]);
+    const [uploadingProof, setUploadingProof] = useState(false);
+    const [validationErrors, setValidationErrors] = useState({});
+    const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
+    const renderTestField = (testName, fieldKey, label, type = "text", required = false) => {
+        const name = `testScores.${testName}.${fieldKey}`;
+        const hasError = !!validationErrors[name];
+        const value = formValues.testScores?.[testName]?.[fieldKey] ?? "";
+        
+        const onChange = (e) => {
+            const val = e.target.value;
+            setFormValues(prev => {
+                const updatedScores = { ...prev.testScores };
+                updatedScores[testName] = { ...updatedScores[testName], [fieldKey]: val };
+                return { ...prev, testScores: updatedScores };
+            });
+        };
+
+        return (
+            <div className="space-y-1">
+                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide flex items-center gap-1">
+                    {label} {required && <span className="text-rose-500 font-bold">*</span>}
+                </label>
+                <input
+                    type={type}
+                    value={value}
+                    onChange={onChange}
+                    className={cn(
+                        "w-full px-3 py-2 text-xs border rounded-xl outline-none font-semibold transition-all focus:ring-2 focus:ring-indigo-100 bg-white",
+                        hasError ? "border-rose-400 focus:ring-rose-100 focus:border-rose-400 bg-rose-50/10" : "border-slate-200 focus:border-indigo-500"
+                    )}
+                />
+                {hasError && (
+                    <p className="text-[10px] text-rose-550 font-bold mt-1 animate-fadeIn flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3 text-rose-555 shrink-0" />
+                        {validationErrors[name]}
+                    </p>
+                )}
+            </div>
+        );
+    };
+
+    const renderField = (name, label, type = "text", required = false, options = []) => {
+        const hasError = !!validationErrors[name];
+        
+        let value = "";
+        if (name.includes(".")) {
+            const parts = name.split(".");
+            value = formValues[parts[0]]?.[parseInt(parts[1], 10)]?.[parts[2]] ?? "";
+        } else {
+            value = formValues[name] ?? "";
+        }
+
+        const onChange = (e) => {
+            const val = e.target.value;
+            setFormValues(prev => {
+                if (name.includes(".")) {
+                    const parts = name.split(".");
+                    const arrayName = parts[0];
+                    const idx = parseInt(parts[1], 10);
+                    const fieldName = parts[2];
+                    
+                    const newArray = [...(prev[arrayName] || [])];
+                    newArray[idx] = { ...newArray[idx], [fieldName]: val };
+                    return { ...prev, [arrayName]: newArray };
+                }
+                return { ...prev, [name]: val };
+            });
+        };
+
+        return (
+            <div className="space-y-1">
+                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide flex items-center gap-1">
+                    {label} {required && <span className="text-rose-500 font-bold">*</span>}
+                </label>
+                {type === "select" ? (
+                    <select
+                        value={value}
+                        onChange={onChange}
+                        className={cn(
+                            "w-full px-3 py-2 text-xs border rounded-xl outline-none bg-white font-semibold transition-all focus:ring-2 focus:ring-indigo-100",
+                            hasError ? "border-rose-400 focus:ring-rose-100 focus:border-rose-400 bg-rose-50/10" : "border-slate-200 focus:border-indigo-500"
+                        )}
+                    >
+                        <option value="">Select {label}</option>
+                        {options.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                ) : (
+                    <input
+                        type={type}
+                        value={value}
+                        onChange={onChange}
+                        className={cn(
+                            "w-full px-3 py-2 text-xs border rounded-xl outline-none font-semibold transition-all focus:ring-2 focus:ring-indigo-100 bg-white",
+                            hasError ? "border-rose-400 focus:ring-rose-100 focus:border-rose-400 bg-rose-50/10" : "border-slate-200 focus:border-indigo-500"
+                        )}
+                    />
+                )}
+                {hasError && (
+                    <p className="text-[10px] text-rose-550 font-bold mt-1 animate-fadeIn flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3 text-rose-555 shrink-0" />
+                        {validationErrors[name]}
+                    </p>
+                )}
+            </div>
+        );
+    };
+
+    const validateAllWithZod = () => {
+        // ── Custom business-rule checks (dates, passport validity, score ranges) ──
+        const customErrors = {};
+
+        // Passport must remain valid for at least the next 6 months.
+        if (formValues.passportExpiryDate) {
+            const expiry = new Date(formValues.passportExpiryDate);
+            const sixMonthsOut = new Date();
+            sixMonthsOut.setMonth(sixMonthsOut.getMonth() + 6);
+            if (!isNaN(expiry.getTime()) && expiry < sixMonthsOut) {
+                customErrors.passportExpiryDate = "Passport must be valid for at least the next 6 months";
+            }
+        }
+
+        // Academic end date cannot be earlier than its start date.
+        ["pg", "ug", "x12", "x10"].forEach(p => {
+            const start = formValues[`${p}StartDate`];
+            const end = formValues[`${p}EndDate`];
+            if (start && end && new Date(end) < new Date(start)) {
+                customErrors[`${p}EndDate`] = "End date cannot be earlier than the start date";
+            }
+        });
+
+        // Analytical Writing (GRE/GMAT) is scored out of 6.
+        ["GRE", "GMAT"].forEach(t => {
+            const aw = formValues.testScores?.[t]?.aw;
+            if (aw !== undefined && String(aw).trim() !== "") {
+                const n = Number(aw);
+                if (isNaN(n) || n < 0 || n > 6) {
+                    customErrors[`testScores.${t}.aw`] = "Analytical Writing score must be between 0 and 6";
+                }
+            }
+        });
+
+        if (Object.keys(customErrors).length > 0) {
+            setValidationErrors(customErrors);
+            const keys = Object.keys(customErrors);
+            const firstMsg = customErrors[keys[0]];
+            if (keys.includes("passportExpiryDate")) setProspectStep(1);
+            else if (keys.some(k => k.startsWith("testScores"))) setProspectStep(4);
+            else setProspectStep(2);
+            toast.error(firstMsg);
+            return false;
+        }
+
+        // Clean up testScores: only validate tests that are currently active/expanded
+        const cleanedScores = {};
+        activeTests.forEach(testName => {
+            if (formValues.testScores?.[testName]) {
+                cleanedScores[testName] = formValues.testScores[testName];
+            } else {
+                cleanedScores[testName] = { overall: "", quant: "", verbal: "", aw: "" };
+            }
+        });
+        
+        const valuesToValidate = {
+            ...formValues,
+            testScores: Object.keys(cleanedScores).length > 0 ? cleanedScores : undefined
+        };
+
+        const result = studentProfileSchema.safeParse(valuesToValidate);
+        if (!result.success) {
+            const errors = {};
+            result.error.issues.forEach(issue => {
+                const path = issue.path.join(".");
+                errors[path] = issue.message;
+            });
+            setValidationErrors(errors);
+
+            const step1Fields = [
+                "firstName", "lastName", "email", "mobileNumber", "dob", "gender", "maritalStatus",
+                "mailingAddress1", "mailingCountry", "mailingState", "mailingCity", "mailingPincode",
+                "permAddress1", "permCountry", "permState", "permCity", "permPincode",
+                "passportNumber", "passportIssueDate", "passportExpiryDate", "passportIssueCountry", "passportCityOfBirth", "passportCountryOfBirth",
+                "nationality", "citizenship", "emergencyName", "emergencyPhone", "emergencyEmail", "emergencyRelation"
+            ];
+            const step2Fields = [
+                "countryOfEducation", "highestLevelOfEducation"
+            ];
+
+            let hasStep1Error = false;
+            let hasStep2Error = false;
+            let hasStep3Error = false;
+            let hasStep4Error = false;
+
+            Object.keys(errors).forEach(key => {
+                if (step1Fields.includes(key)) hasStep1Error = true;
+                else if (step2Fields.includes(key)) hasStep2Error = true;
+                else if (key.startsWith("workExperiences")) hasStep3Error = true;
+                else if (key.startsWith("testScores")) hasStep4Error = true;
+            });
+
+            const errorMsgs = Object.values(errors).slice(0, 2).join(", ");
+
+            if (hasStep1Error) {
+                toast.error(`Please fix Step 1 (Personal Details): ${errorMsgs}`);
+                setProspectStep(1);
+            } else if (hasStep2Error) {
+                toast.error(`Please fix Step 2 (Academic Details): ${errorMsgs}`);
+                setProspectStep(2);
+            } else if (hasStep3Error) {
+                toast.error(`Please fix Step 3 (Work Experience): ${errorMsgs}`);
+                setProspectStep(3);
+            } else if (hasStep4Error) {
+                toast.error(`Please fix Step 4 (Test Scores): ${errorMsgs}`);
+                setProspectStep(4);
+            } else {
+                toast.error(`Validation errors: ${errorMsgs}`);
+            }
+
+            return false;
+        }
+        setValidationErrors({});
+        return true;
+    };
 
     const [newCountryIndex, setNewCountryIndex] = useState(null);
     const [newCountryVal, setNewCountryVal] = useState("");
     const [newUnivIndex, setNewUnivIndex] = useState(null);
     const [newUnivVal, setNewUnivVal] = useState("");
+    const [newPortalIndex, setNewPortalIndex] = useState(null);
+    const [newPortalVal, setNewPortalVal] = useState("");
 
     const salesDept = lead.leadDepartments?.find(ld => ld.department === "SALES");
     if (!salesDept) return null;
@@ -67,6 +508,12 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
         queryKey: ["countries-list"],
         queryFn: () => api.get("/countries").then(r => r.data),
         enabled: currentStage === "UNIVERSITY_SHORTLISTING" || currentStage === "APPLICATION",
+    });
+
+    const { data: portals = [], refetch: refetchPortals } = useQuery({
+        queryKey: ["third-party-portals-list"],
+        queryFn: () => api.get("/third-party-portals").then(r => r.data),
+        enabled: currentStage === "APPLICATION",
     });
 
     const { data: allDefs = [] } = useQuery({
@@ -95,7 +542,7 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             toast.success("Country added successfully");
         },
         onError: (e) => {
-            toast.error(e.response?.data?.message || "Failed to add country");
+            toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to add country");
         }
     });
 
@@ -111,7 +558,23 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             toast.success("University added successfully");
         },
         onError: (e) => {
-            toast.error(e.response?.data?.message || "Failed to add university");
+            toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to add university");
+        }
+    });
+
+    const addPortalMut = useMutation({
+        mutationFn: (name) => api.post("/third-party-portals", { name }).then(r => r.data),
+        onSuccess: (newPortal) => {
+            refetchPortals();
+            if (newPortalIndex !== null) {
+                updateUniversityField(newPortalIndex, "univ_portal", newPortal.name);
+            }
+            setNewPortalIndex(null);
+            setNewPortalVal("");
+            toast.success("Third party option added successfully");
+        },
+        onError: (e) => {
+            toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to add third party option");
         }
     });
 
@@ -185,16 +648,16 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             color: "text-orange-600 bg-orange-50 border-orange-200",
             icon: Award,
             buttonText: "Update Embassy Result",
-            requiredFields: ["Visa Appointment Date", "Mock Interview Scorecard"],
+            requiredFields: ["Visa Appointment Date", "Mock Interview Scorecard", "Copy of Approved Visa Passport Page", "Flight Departure Date"],
             instruction: "Set embassy response: Approved (advances to Visa Approval) or Refused (archives)."
         },
         VISA_APPROVAL: {
             title: "Visa Approval",
             color: "text-emerald-600 bg-emerald-50 border-emerald-200",
             icon: CheckCircle2,
-            buttonText: "Activate Post-Visa Teams",
-            requiredFields: ["Copy of Approved Visa Passport Page", "Flight Departure Date"],
-            instruction: "System action: Instantly push data to Loans, Accommodations, and Forex departments."
+            buttonText: "View / Raise Invoice",
+            requiredFields: [],
+            instruction: "Awaiting commission invoice payment — lead auto-advances to Commission Invoicing once fully paid."
         },
         COMMISSION_INVOICING: {
             title: "Commission Invoicing",
@@ -224,6 +687,24 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
 
     const config = STAGE_CONFIGS[currentStage];
     if (!config) return null;
+
+    // Profile-editor mode: lets the Student Profile be viewed/edited from any stage,
+    // not just PROSPECT.
+    const isProfileMode = actionModal === "profile";
+    const hasProfile = !!customFields.firstName || !!customFields.lastName;
+
+    // Closing the multi-step profile form loses unsaved input, so confirm first.
+    const attemptCloseModal = () => {
+        if (isProfileMode || currentStage === "PROSPECT") {
+            setShowCloseConfirm(true);
+        } else {
+            setActionModal(null);
+        }
+    };
+    const confirmCloseModal = () => {
+        setShowCloseConfirm(false);
+        setActionModal(null);
+    };
 
     const Icon = config.icon;
 
@@ -305,6 +786,28 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
     };
 
     // Save without validation for AWAITING_STATUS stage
+    // Uploads the visa-approval proof; it then appears in the lead's Documents list.
+    const handleVisaProofUpload = async (file) => {
+        if (!file) return;
+        if (file.size > 10 * 1024 * 1024) {
+            toast.error("File size exceeds 10MB limit");
+            return;
+        }
+        const fd = new FormData();
+        fd.append("document", file);
+        fd.append("documentName", "Proof of Visa Approved");
+        setUploadingProof(true);
+        try {
+            await api.post(`/upload/document/${lead.id}`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+            toast.success("Proof of Visa Approved uploaded");
+            onChanged();
+        } catch (err) {
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to upload proof");
+        } finally {
+            setUploadingProof(false);
+        }
+    };
+
     const handleAwaitingStatusSave = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -336,40 +839,35 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             else if (currentStage === "FOLLOW_UP") {
                 await moveStageMut.mutateAsync("PROSPECT");
             }
-            else if (currentStage === "PROSPECT") {
-                const score = formValues.ielts_toefl_score;
-                const gpa = formValues.academic_gpa;
-                const backlogs = formValues.backlogs;
-                if (!score || !String(score).trim() || !gpa || !String(gpa).trim() || backlogs === undefined || backlogs === null || String(backlogs).trim() === "") {
-                    toast.error("Please fill in all education details (IELTS/TOEFL Score, Academic GPA, Backlogs).");
+            else if (currentStage === "PROSPECT" || isProfileMode) {
+                if (!validateAllWithZod()) {
                     setLoading(false);
                     return;
                 }
-                await saveCustomFieldsMut.mutateAsync({
-                    ielts_toefl_score: formValues.ielts_toefl_score || "",
-                    academic_gpa: formValues.academic_gpa || "",
-                    backlogs: parseInt(formValues.backlogs, 10) || 0
+                
+                const payload = { ...formValues };
+                // Clean up testScores: only save tests that are currently active/expanded
+                const cleanedScores = {};
+                activeTests.forEach(testName => {
+                    if (payload.testScores?.[testName]) {
+                        cleanedScores[testName] = payload.testScores[testName];
+                    }
                 });
-                // Stage progression is manual — save the education details but do NOT
-                // auto-advance to University Shortlisting. The user moves it forward
-                // explicitly via the "Move to next stage" control.
-                toast.success("Education details saved");
+                payload.testScores = cleanedScores;
+
+                // Synchronize legacy keys for compatibility
+                payload.ielts_toefl_score = formValues.testOverall || formValues.ugScore || "";
+                payload.academic_gpa = formValues.ugScore || "";
+                payload.backlogs = parseInt(formValues.ugBacklogs || formValues.backlogs, 10) || 0;
+
+                await saveCustomFieldsMut.mutateAsync(payload);
+                toast.success("Student profile saved successfully");
                 onChanged();
                 setActionModal(null);
             }
             else if (currentStage === "UNIVERSITY_SHORTLISTING") {
                 const rawList = formValues.universities || [];
-                
-                // Validate general academic fields explicitly
-                const score = formValues.ielts_toefl_score;
-                const gpa = formValues.academic_gpa;
-                const backlogs = formValues.backlogs;
-                if (!score || !String(score).trim() || !gpa || !String(gpa).trim() || backlogs === undefined || backlogs === null || String(backlogs).trim() === "") {
-                    toast.error("Please fill in all education details (IELTS/TOEFL Score, Academic GPA, Backlogs).");
-                    setLoading(false);
-                    return;
-                }
-                
+
                 // Validate universities shortlist
                 if (rawList.length === 0) {
                     toast.error("Please add at least one shortlisted university.");
@@ -425,13 +923,6 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             else if (currentStage === "APPLICATION") {
                 const rawList = formValues.universities || [];
                 
-                // Validate document checklist
-                if (!formValues.sop_status || !formValues.lor_status || !formValues.transcripts_status) {
-                    toast.error("Please ensure SOP, LOR, and Academic Transcripts are all marked as Uploaded.");
-                    setLoading(false);
-                    return;
-                }
-                
                 // Validate shortlisted universities completed status
                 if (rawList.length === 0) {
                     toast.error("At least one target university must be shortlisted.");
@@ -460,9 +951,6 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                 const primary = list[0] || {};
                 
                 await saveCustomFieldsMut.mutateAsync({
-                    sop_status: "Uploaded",
-                    lor_status: "Uploaded",
-                    transcripts_status: "Uploaded",
                     univ_country: primary.univ_country || "",
                     univ_name: primary.univ_name || "",
                     univ_course: primary.univ_course || "",
@@ -481,10 +969,25 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                 setActionModal(null);
             }
             else if (currentStage === "DEPOSIT_STATUS") {
+                const prevHistory = Array.isArray(customFields.deposit_history) ? customFields.deposit_history : [];
+                const historyEntry = {
+                    deposit_amount: formValues.deposit_amount || "",
+                    payment_mode: formValues.payment_mode || "",
+                    payment_date: formValues.payment_date || "",
+                    recordedAt: new Date().toISOString(),
+                };
                 await saveCustomFieldsMut.mutateAsync({
-                    offer_letter_uploaded: formValues.offer_letter_uploaded ? "Uploaded" : "Pending",
-                    deposit_amount_due: formValues.deposit_amount_due || "",
-                    deposit_receipt_uploaded: formValues.deposit_receipt_uploaded ? "Uploaded" : "Pending"
+                    deposit_amount: formValues.deposit_amount || "",
+                    payment_mode: formValues.payment_mode || "",
+                    payment_date: formValues.payment_date || "",
+                    deposit_history: [historyEntry, ...prevHistory]
+                });
+                // Surface the payment details on the lead's activity timeline.
+                const paidOn = formValues.payment_date
+                    ? new Date(formValues.payment_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                    : "—";
+                await api.post(`/leads/${lead.id}/notes`, {
+                    content: `💰 Deposit recorded — Amount: ${formValues.deposit_amount || "—"} · Mode: ${formValues.payment_mode || "—"} · Date: ${paidOn}`
                 });
                 // Stage progression is manual — save the deposit details but do NOT
                 // auto-advance to Visa Documentation. The user moves it forward
@@ -497,7 +1000,8 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                 await saveCustomFieldsMut.mutateAsync({
                     financial_proof_docs: formValues.financial_proof_docs || "",
                     cas_form_number: formValues.cas_form_number || "",
-                    visa_manager_approved: !!formValues.visa_manager_approved
+                    visa_manager_approved: !!formValues.visa_manager_approved,
+                    visa_appointment_date: formValues.visa_appointment_date || null
                 });
                 toast.success("Visa documentation details saved");
                 onChanged();
@@ -507,23 +1011,14 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                 await saveCustomFieldsMut.mutateAsync({
                     visa_appointment_date: formValues.visa_appointment_date || null,
                     mock_interview_scorecard: formValues.mock_interview_scorecard || "",
-                    embassy_result: formValues.embassy_result
+                    embassy_result: formValues.embassy_result,
+                    visa_approved_date: formValues.visa_approved_date || null,
+                    approved_visa_passport: formValues.approved_visa_passport || "",
+                    flight_departure_date: formValues.flight_departure_date || null
                 });
                 toast.success(`Embassy result updated to ${formValues.embassy_result}`);
                 onChanged();
                 setActionModal(null);
-            }
-            else if (currentStage === "VISA_APPROVAL") {
-                await saveCustomFieldsMut.mutateAsync({
-                    approved_visa_passport: formValues.approved_visa_passport || "",
-                    flight_departure_date: formValues.flight_departure_date || null
-                });
-                // Don't move the stage here — the lead advances to Commission Invoicing
-                // automatically once a commission invoice for this lead is fully paid.
-                // Send the consultant to invoicing to raise that invoice now.
-                setActionModal(null);
-                toast.success("Visa details saved. Raise the commission invoice — the lead moves to Commission Invoicing once it's fully paid.");
-                navigate(`/invoices?leadId=${lead.id}&newInvoice=1`);
             }
             else if (currentStage === "COMMISSION_INVOICING") {
                 await saveCustomFieldsMut.mutateAsync({
@@ -545,18 +1040,157 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
 
     const initModal = (modalName) => {
         setActionModal(modalName);
-        if (currentStage === "ENQUIRY") {
+        if (currentStage === "ENQUIRY" && modalName !== "profile") {
             setFormValues({ noteContent: "" });
         }
-        else if (currentStage === "FOLLOW_UP") {
+        else if (currentStage === "FOLLOW_UP" && modalName !== "profile") {
             setFormValues({ nextFollowUpAt: lead.nextFollowUpAt ? new Date(lead.nextFollowUpAt).toISOString().slice(0, 16) : "" });
         }
-        else if (currentStage === "PROSPECT") {
+        else if (currentStage === "PROSPECT" || modalName === "profile") {
+            // Prefill basic info captured at lead creation (name / email / phone)
+            // when the profile fields haven't been filled yet.
+            const nameParts = (lead.name || "").trim().split(/\s+/).filter(Boolean);
+            const leadFirstName = nameParts[0] || "";
+            const leadLastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+            // Split a stored phone like "+91 98765..." into code + number where possible.
+            const rawPhone = (lead.phone || "").trim();
+            const phoneMatch = rawPhone.match(/^(\+\d{1,3})[\s-]?(.*)$/);
+            const leadPhoneCode = phoneMatch ? phoneMatch[1] : "";
+            const leadPhoneNumber = phoneMatch ? phoneMatch[2].replace(/\s+/g, "") : rawPhone;
+
             setFormValues({
-                ielts_toefl_score: customFields.ielts_toefl_score || "",
-                academic_gpa: customFields.academic_gpa || "",
-                backlogs: customFields.backlogs || 0
+                // Step 1: Personal Details
+                firstName: customFields.firstName || leadFirstName,
+                middleName: customFields.middleName || "",
+                lastName: customFields.lastName || leadLastName,
+                email: customFields.email || lead.email || "",
+                mobileCountryCode: customFields.mobileCountryCode || leadPhoneCode || "+91",
+                mobileNumber: customFields.mobileNumber || leadPhoneNumber || "",
+                dob: customFields.dob || "",
+                gender: customFields.gender || "",
+                maritalStatus: customFields.maritalStatus || "",
+                // Mailing Address
+                mailingAddress1: customFields.mailingAddress1 || "",
+                mailingAddress2: customFields.mailingAddress2 || "",
+                mailingCountry: customFields.mailingCountry || "",
+                mailingState: customFields.mailingState || "",
+                mailingCity: customFields.mailingCity || "",
+                mailingPincode: customFields.mailingPincode || "",
+                // Permanent Address
+                permAddressSame: customFields.permAddressSame !== undefined ? customFields.permAddressSame : false,
+                permAddress1: customFields.permAddress1 || "",
+                permAddress2: customFields.permAddress2 || "",
+                permCountry: customFields.permCountry || "",
+                permState: customFields.permState || "",
+                permCity: customFields.permCity || "",
+                permPincode: customFields.permPincode || "",
+                // Passport Information
+                passportNumber: customFields.passportNumber || "",
+                passportIssueDate: customFields.passportIssueDate || "",
+                passportExpiryDate: customFields.passportExpiryDate || "",
+                passportIssueCountry: customFields.passportIssueCountry || "",
+                passportCityOfBirth: customFields.passportCityOfBirth || "",
+                passportCountryOfBirth: customFields.passportCountryOfBirth || "",
+                // Nationality
+                nationality: customFields.nationality || "",
+                citizenship: customFields.citizenship || "",
+                dualCitizenship: customFields.dualCitizenship !== undefined ? customFields.dualCitizenship : "No",
+                dualCitizenshipCountries: customFields.dualCitizenshipCountries || "",
+                otherCountryStudy: customFields.otherCountryStudy !== undefined ? customFields.otherCountryStudy : "No",
+                otherCountryStudyName: customFields.otherCountryStudyName || "",
+                // Background Info
+                appliedImmigration: customFields.appliedImmigration !== undefined ? customFields.appliedImmigration : "No",
+                appliedImmigrationCountry: customFields.appliedImmigrationCountry || "",
+                medicalCondition: customFields.medicalCondition !== undefined ? customFields.medicalCondition : "No",
+                medicalConditionDetails: customFields.medicalConditionDetails || "",
+                visaRefusal: customFields.visaRefusal !== undefined ? customFields.visaRefusal : "No",
+                visaRefusalCountry: customFields.visaRefusalCountry || "",
+                visaRefusalType: customFields.visaRefusalType || "",
+                criminalConviction: customFields.criminalConviction !== undefined ? customFields.criminalConviction : "No",
+                criminalConvictionDetails: customFields.criminalConvictionDetails || "",
+                // Emergency Contact
+                emergencyName: customFields.emergencyName || "",
+                emergencyPhoneCountryCode: customFields.emergencyPhoneCountryCode || "+91",
+                emergencyPhone: customFields.emergencyPhone || "",
+                emergencyEmail: customFields.emergencyEmail || "",
+                emergencyRelation: customFields.emergencyRelation || "",
+
+                // Step 2: Academic Details
+                countryOfEducation: customFields.countryOfEducation || "",
+                highestLevelOfEducation: customFields.highestLevelOfEducation || "",
+                // PG
+                pgCountry: customFields.pgCountry || "",
+                pgState: customFields.pgState || "",
+                pgLevel: customFields.pgLevel || "Postgraduate",
+                pgUniversity: customFields.pgUniversity || "",
+                pgDegree: customFields.pgDegree || "",
+                pgCity: customFields.pgCity || "",
+                pgGrading: customFields.pgGrading || "",
+                pgPercentage: customFields.pgPercentage || "",
+                pgLanguage: customFields.pgLanguage || "",
+                pgStartDate: customFields.pgStartDate || "",
+                pgEndDate: customFields.pgEndDate || "",
+                // UG
+                ugCountry: customFields.ugCountry || "",
+                ugState: customFields.ugState || "",
+                ugLevel: customFields.ugLevel || "Undergraduate",
+                ugUniversity: customFields.ugUniversity || "",
+                ugDegree: customFields.ugDegree || "",
+                ugCity: customFields.ugCity || "",
+                ugGrading: customFields.ugGrading || "",
+                ugScore: customFields.ugScore || "",
+                ugLanguage: customFields.ugLanguage || "",
+                ugBacklogs: customFields.ugBacklogs || "",
+                ugStartDate: customFields.ugStartDate || "",
+                ugEndDate: customFields.ugEndDate || "",
+                // 12th
+                x12Country: customFields.x12Country || "",
+                x12State: customFields.x12State || "",
+                x12Level: customFields.x12Level || "Grade 12th or equivalent",
+                x12Board: customFields.x12Board || "",
+                x12Degree: customFields.x12Degree || "",
+                x12Institution: customFields.x12Institution || "",
+                x12City: customFields.x12City || "",
+                x12Grading: customFields.x12Grading || "",
+                x12Score: customFields.x12Score || "",
+                x12Language: customFields.x12Language || "",
+                x12StartDate: customFields.x12StartDate || "",
+                x12EndDate: customFields.x12EndDate || "",
+                // 10th
+                x10Country: customFields.x10Country || "",
+                x10State: customFields.x10State || "",
+                x10Level: customFields.x10Level || "Grade 10th or equivalent",
+                x10Board: customFields.x10Board || "",
+                x10Degree: customFields.x10Degree || "",
+                x10Institution: customFields.x10Institution || "",
+                x10City: customFields.x10City || "",
+                x10Grading: customFields.x10Grading || "",
+                x10Score: customFields.x10Score || "",
+                x10Language: customFields.x10Language || "",
+                x10StartDate: customFields.x10StartDate || "",
+                x10EndDate: customFields.x10EndDate || "",
+
+                // Step 3: Work Experience
+                hasWorkExperience: customFields.hasWorkExperience !== undefined ? customFields.hasWorkExperience : false,
+                workExperiences: Array.isArray(customFields.workExperiences) 
+                    ? customFields.workExperiences 
+                    : (customFields.workOrgAddress 
+                        ? [{ 
+                            workOrgAddress: customFields.workOrgAddress, 
+                            workPosition: customFields.workPosition, 
+                            workJobProfile: customFields.workJobProfile, 
+                            workSalaryMode: customFields.workSalaryMode, 
+                            workFrom: customFields.workFrom, 
+                            workUpto: customFields.workUpto, 
+                            workCurrent: customFields.workCurrent !== undefined ? customFields.workCurrent : false
+                          }] 
+                        : []),
+
+                // Step 4: Tests
+                testScores: customFields.testScores || {},
             });
+            setActiveTests(Object.keys(customFields.testScores || {}));
+            setProspectStep(1);
         }
         else if (currentStage === "UNIVERSITY_SHORTLISTING") {
             const existingShortlist = Array.isArray(customFields.shortlisted_universities)
@@ -602,9 +1236,6 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                 });
             }
             setFormValues({
-                sop_status: customFields.sop_status === "Uploaded",
-                lor_status: customFields.lor_status === "Uploaded",
-                transcripts_status: customFields.transcripts_status === "Uploaded",
                 universities: existingShortlist
             });
         }
@@ -614,7 +1245,8 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                     ...univ,
                     application_ref_id: univ.application_ref_id || "",
                     submission_date: univ.submission_date ? new Date(univ.submission_date).toISOString().split("T")[0] : "",
-                    university_response: univ.university_response || "Conditional Offer"
+                    university_response: univ.university_response || "Conditional Offer",
+                    confirmed: !!univ.confirmed
                 }))
                 : [];
             setFormValues({
@@ -623,27 +1255,25 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
         }
         else if (currentStage === "DEPOSIT_STATUS") {
             setFormValues({
-                offer_letter_uploaded: customFields.offer_letter_uploaded === "Uploaded",
-                deposit_amount_due: customFields.deposit_amount_due || "",
-                deposit_receipt_uploaded: customFields.deposit_receipt_uploaded === "Uploaded"
+                deposit_amount: customFields.deposit_amount || "",
+                payment_mode: customFields.payment_mode || "",
+                payment_date: customFields.payment_date || ""
             });
         }
         else if (currentStage === "VISA_DOCUMENTATION") {
             setFormValues({
                 financial_proof_docs: customFields.financial_proof_docs || "",
                 cas_form_number: customFields.cas_form_number || "",
-                visa_manager_approved: customFields.visa_manager_approved === true || customFields.visa_manager_approved === "true"
+                visa_manager_approved: customFields.visa_manager_approved === true || customFields.visa_manager_approved === "true",
+                visa_appointment_date: customFields.visa_appointment_date ? new Date(customFields.visa_appointment_date).toISOString().split("T")[0] : ""
             });
         }
         else if (currentStage === "VISA_STATUS") {
             setFormValues({
                 visa_appointment_date: customFields.visa_appointment_date ? new Date(customFields.visa_appointment_date).toISOString().split("T")[0] : "",
                 mock_interview_scorecard: customFields.mock_interview_scorecard || "",
-                embassy_result: customFields.embassy_result || "Approved"
-            });
-        }
-        else if (currentStage === "VISA_APPROVAL") {
-            setFormValues({
+                embassy_result: customFields.embassy_result || "Approved",
+                visa_approved_date: customFields.visa_approved_date ? new Date(customFields.visa_approved_date).toISOString().split("T")[0] : "",
                 approved_visa_passport: customFields.approved_visa_passport || "",
                 flight_departure_date: customFields.flight_departure_date ? new Date(customFields.flight_departure_date).toISOString().split("T")[0] : ""
             });
@@ -694,41 +1324,119 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                     </p>
                 </div>
 
-                <button
-                    onClick={() => initModal("standard")}
-                    className="w-full inline-flex items-center justify-center gap-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl py-2.5 transition-all shadow-sm shadow-indigo-100 hover:scale-[1.01]"
-                >
-                    {config.buttonText}
-                    <ArrowRight className="h-3.5 w-3.5" />
-                </button>
+                {hasProfile && (
+                    <div className="bg-slate-50 border border-slate-150 rounded-2xl p-4 space-y-3 shadow-2xs relative">
+                        <div className="flex items-center justify-between border-b border-slate-150 pb-2">
+                            <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-indigo-650" />
+                                <h4 className="text-xs font-extrabold text-slate-750 uppercase tracking-wider">Student Profile</h4>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => initModal("profile")}
+                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl transition-all shadow-3xs flex items-center gap-1 cursor-pointer"
+                            >
+                                Edit Profile
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-medium text-slate-650">
+                            <div>
+                                <span className="text-[9px] font-extrabold text-slate-400 uppercase block tracking-wider">Full Name</span>
+                                <span className="font-bold text-slate-800">{customFields.firstName} {customFields.middleName ? customFields.middleName + " " : ""}{customFields.lastName}</span>
+                            </div>
+                            <div>
+                                <span className="text-[9px] font-extrabold text-slate-400 uppercase block tracking-wider">Email Address</span>
+                                <span className="font-bold text-slate-800 truncate block">{customFields.email || "N/A"}</span>
+                            </div>
+                            <div>
+                                <span className="text-[9px] font-extrabold text-slate-400 uppercase block tracking-wider">Highest Education</span>
+                                <span className="font-bold text-slate-800">{customFields.highestLevelOfEducation || "N/A"}</span>
+                            </div>
+                            <div>
+                                <span className="text-[9px] font-extrabold text-slate-400 uppercase block tracking-wider">Work Experience</span>
+                                <span className="font-bold text-slate-800">
+                                    {customFields.hasWorkExperience 
+                                        ? `${Array.isArray(customFields.workExperiences) ? customFields.workExperiences.length : 1} Job(s)` 
+                                        : "No Experience"}
+                                </span>
+                            </div>
+                        </div>
+
+                        {customFields.testScores && Object.keys(customFields.testScores).length > 0 && (
+                            <div className="pt-2 border-t border-slate-100">
+                                <span className="text-[9px] font-extrabold text-slate-400 uppercase block tracking-wider mb-1.5">Test Scores</span>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {Object.entries(customFields.testScores).map(([testName, scores]) => (
+                                        <span key={testName} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white text-indigo-700 border border-indigo-150 shadow-3xs">
+                                            <Award className="h-3 w-3 text-indigo-500" /> {testName}: {scores.overall}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Primary stage action button (profile card carries its own Edit) */}
+                {currentStage === "PROSPECT"
+                    ? (!hasProfile && (
+                        <button
+                            onClick={() => initModal("profile")}
+                            className="w-full inline-flex items-center justify-center gap-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl py-2.5 transition-all shadow-sm shadow-indigo-100 hover:scale-[1.01] cursor-pointer"
+                        >
+                            Create Student Profile
+                            <ArrowRight className="h-3.5 w-3.5" />
+                        </button>
+                    ))
+                    : currentStage === "VISA_APPROVAL" ? (
+                        <button
+                            onClick={() => navigate(`/invoices?leadId=${lead.id}`)}
+                            className="w-full inline-flex items-center justify-center gap-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl py-2.5 transition-all shadow-sm shadow-indigo-100 hover:scale-[1.01] cursor-pointer"
+                        >
+                            {config.buttonText}
+                            <ArrowRight className="h-3.5 w-3.5" />
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => initModal("standard")}
+                            className="w-full inline-flex items-center justify-center gap-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl py-2.5 transition-all shadow-sm shadow-indigo-100 hover:scale-[1.01] cursor-pointer"
+                        >
+                            {config.buttonText}
+                            <ArrowRight className="h-3.5 w-3.5" />
+                        </button>
+                    )
+                }
             </div>
 
             {/* Stage Actions Modal */}
             {actionModal && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
-                    onClick={() => setActionModal(null)}
+                    onClick={attemptCloseModal}
                 >
                     <div
-                        className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col p-6 animate-in fade-in zoom-in duration-200"
+                        className={`relative bg-white rounded-2xl shadow-2xl w-full flex flex-col p-6 animate-in fade-in zoom-in duration-200 ${(currentStage === "PROSPECT" || isProfileMode) ? "max-w-4xl" : "max-w-md"}`}
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
                             <h3 className="text-base font-bold text-slate-800">
-                                {currentStage === "FOLLOW_UP" && actionModal === "interested" ? "Mark Lead as Interested" : config.buttonText}
+                                {isProfileMode ? (hasProfile ? "Edit Student Profile" : "Create Student Profile")
+                                    : currentStage === "FOLLOW_UP" && actionModal === "interested" ? "Mark Lead as Interested"
+                                    : config.buttonText}
                             </h3>
                             <button
-                                onClick={() => setActionModal(null)}
+                                onClick={attemptCloseModal}
                                 className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors"
                             >
                                 <X className="h-4 w-4" />
                             </button>
                         </div>
 
-                        <form onSubmit={handleActionSubmit} className="flex flex-col flex-1 min-h-0">
+                        <form onSubmit={handleActionSubmit} noValidate className="flex flex-col flex-1 min-h-0">
                             <div className="flex-1 overflow-y-auto max-h-[60vh] pr-1.5 space-y-4">
                             {/* ENQUIRY Note */}
-                            {currentStage === "ENQUIRY" && (
+                            {currentStage === "ENQUIRY" && !isProfileMode && (
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold text-slate-500 uppercase">Enquiry Note Message</label>
                                     <textarea
@@ -742,112 +1450,594 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                             )}
 
                             {/* FOLLOW_UP Confirmation */}
-                            {currentStage === "FOLLOW_UP" && (
+                            {currentStage === "FOLLOW_UP" && !isProfileMode && (
                                 <p className="text-sm text-slate-500 font-medium leading-relaxed">
                                     Are you sure you want to move this lead to the <span className="font-semibold text-blue-600">Prospect</span> stage? This confirms that you have received the student's resume.
                                 </p>
                             )}
 
-                            {/* PROSPECT Academics */}
-                            {currentStage === "PROSPECT" && (
-                                <div className="space-y-4">
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">IELTS / TOEFL Score</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            placeholder="e.g. IELTS 7.5 / TOEFL 100"
-                                            value={formValues.ielts_toefl_score || ""}
-                                            onChange={e => setFormValues({ ...formValues, ielts_toefl_score: e.target.value })}
-                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                                        />
+                            {/* PROSPECT 4-Step Form */}
+                            {(currentStage === "PROSPECT" || isProfileMode) && (
+                                <div className="space-y-5">
+                                    {/* Step Indicators */}
+                                    <div className="flex items-center justify-between border-b border-slate-150 pb-4">
+                                        {[
+                                            { step: 1, label: "Personal" },
+                                            { step: 2, label: "Academic" },
+                                            { step: 3, label: "Experience" },
+                                            { step: 4, label: "Tests" }
+                                        ].map(({ step, label }) => (
+                                            <button 
+                                                type="button" 
+                                                key={step} 
+                                                onClick={() => setProspectStep(step)}
+                                                className="flex items-center gap-2 cursor-pointer focus:outline-none group"
+                                            >
+                                                <span className={cn(
+                                                    "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all group-hover:scale-105",
+                                                    prospectStep === step
+                                                        ? "bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-100"
+                                                        : prospectStep > step
+                                                        ? "bg-emerald-500 text-white"
+                                                        : "bg-slate-100 text-slate-400"
+                                                )}>
+                                                    {step}
+                                                </span>
+                                                <span className={cn(
+                                                    "text-xs font-bold hidden sm:inline transition-colors",
+                                                    prospectStep === step
+                                                        ? "text-indigo-950"
+                                                        : prospectStep > step
+                                                        ? "text-emerald-650"
+                                                        : "text-slate-400 group-hover:text-slate-650"
+                                                )}>
+                                                    {label}
+                                                </span>
+                                            </button>
+                                        ))}
                                     </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Academic GPA / Percentage</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            placeholder="e.g. 8.5 CGPA / 82%"
-                                            value={formValues.academic_gpa || ""}
-                                            onChange={e => setFormValues({ ...formValues, academic_gpa: e.target.value })}
-                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Number of Backlogs</label>
-                                        <input
-                                            type="number"
-                                            required
-                                            min="0"
-                                            value={formValues.backlogs || 0}
-                                            onChange={e => setFormValues({ ...formValues, backlogs: e.target.value })}
-                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                                        />
-                                    </div>
+
+                                    {/* Step 1: Personal Details */}
+                                    {prospectStep === 1 && (
+                                        <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-2">
+                                            {/* Personal Information */}
+                                            <div className="p-4 border border-slate-100 bg-slate-50/50 rounded-2xl space-y-4 shadow-2xs">
+                                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                                                    <User className="h-4 w-4 text-indigo-600" />
+                                                    <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Personal Information</h4>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                    {renderField("firstName", "First Name", "text", true)}
+                                                    {renderField("middleName", "Middle Name", "text", false)}
+                                                    {renderField("lastName", "Last Name", "text", true)}
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    {renderField("email", "Email Address", "email", true)}
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Mobile Number*</label>
+                                                        <div className="flex gap-1.5">
+                                                            <select value={formValues.mobileCountryCode || "+91"} onChange={e => setFormValues(prev => ({...prev, mobileCountryCode: e.target.value}))} className="px-2.5 py-2 text-xs border border-slate-200 rounded-xl bg-white outline-none font-semibold focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500">
+                                                                <option value="+91">+91</option>
+                                                                <option value="+1">+1</option>
+                                                                <option value="+44">+44</option>
+                                                                <option value="+61">+61</option>
+                                                                <option value="+65">+65</option>
+                                                                <option value="+971">+971</option>
+                                                            </select>
+                                                            <input type="text" value={formValues.mobileNumber || ""} onChange={e => setFormValues(prev => ({...prev, mobileNumber: e.target.value}))} className={cn("flex-1 px-3 py-2 text-xs border rounded-xl outline-none font-semibold focus:ring-2 focus:ring-indigo-100 bg-white", !!validationErrors.mobileNumber ? "border-rose-400 focus:ring-rose-100 focus:border-rose-400 bg-rose-50/10" : "border-slate-200 focus:border-indigo-500")} required />
+                                                        </div>
+                                                        {validationErrors.mobileNumber && <p className="text-[10px] text-rose-550 font-bold mt-1 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> {validationErrors.mobileNumber}</p>}
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                    {renderField("dob", "Date of Birth", "date", true)}
+                                                    {renderField("gender", "Gender", "select", true, ["Male", "Female", "Other"])}
+                                                    {renderField("maritalStatus", "Marital Status", "select", true, ["Single", "Married", "Divorced", "Widowed"])}
+                                                </div>
+                                            </div>
+
+                                            {/* Mailing Address */}
+                                            <div className="p-4 border border-slate-100 bg-slate-50/50 rounded-2xl space-y-4 shadow-2xs">
+                                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                                                    <MapPin className="h-4 w-4 text-indigo-600" />
+                                                    <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Mailing Address</h4>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    {renderField("mailingAddress1", "Address 1", "text", true)}
+                                                    {renderField("mailingAddress2", "Address 2", "text", false)}
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                                    <div className="col-span-2">
+                                                        {renderField("mailingCountry", "Country", "select", true, ALL_COUNTRIES)}
+                                                    </div>
+                                                    {renderField("mailingState", "State", "text", true)}
+                                                    {renderField("mailingCity", "City", "text", true)}
+                                                </div>
+                                                <div className="w-1/3">
+                                                    {renderField("mailingPincode", "Pincode", "text", true)}
+                                                </div>
+                                            </div>
+
+                                            {/* Permanent Address */}
+                                            <div className="p-4 border border-slate-100 bg-slate-50/50 rounded-2xl space-y-4 shadow-2xs">
+                                                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <MapPin className="h-4 w-4 text-indigo-600" />
+                                                        <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Permanent Address</h4>
+                                                    </div>
+                                                    <label className="flex items-center gap-1.5 text-xs text-slate-600 font-extrabold cursor-pointer select-none">
+                                                        <input type="checkbox" checked={!!formValues.permAddressSame} onChange={e => {
+                                                            const checked = e.target.checked;
+                                                            setFormValues(prev => ({
+                                                                ...prev,
+                                                                permAddressSame: checked,
+                                                                ...(checked ? {
+                                                                    permAddress1: prev.mailingAddress1,
+                                                                    permAddress2: prev.mailingAddress2,
+                                                                    permCountry: prev.mailingCountry,
+                                                                    permState: prev.mailingState,
+                                                                    permCity: prev.mailingCity,
+                                                                    permPincode: prev.mailingPincode,
+                                                                } : {
+                                                                    permAddress1: "",
+                                                                    permAddress2: "",
+                                                                    permCountry: "",
+                                                                    permState: "",
+                                                                    permCity: "",
+                                                                    permPincode: "",
+                                                                })
+                                                            }));
+                                                        }} className="rounded border-slate-350 text-indigo-600 h-4 w-4" />
+                                                        Same as mailing address
+                                                    </label>
+                                                </div>
+                                                {!formValues.permAddressSame && (
+                                                    <div className="space-y-4 animate-in fade-in duration-200">
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                            {renderField("permAddress1", "Address 1", "text", true)}
+                                                            {renderField("permAddress2", "Address 2", "text", false)}
+                                                        </div>
+                                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                                            <div className="col-span-2">
+                                                                {renderField("permCountry", "Country", "select", true, ALL_COUNTRIES)}
+                                                            </div>
+                                                            {renderField("permState", "State", "text", true)}
+                                                            {renderField("permCity", "City", "text", true)}
+                                                        </div>
+                                                        <div className="w-1/3">
+                                                            {renderField("permPincode", "Pincode", "text", true)}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Passport Information */}
+                                            <div className="p-4 border border-slate-100 bg-slate-50/50 rounded-2xl space-y-4 shadow-2xs">
+                                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                                                    <FileText className="h-4 w-4 text-indigo-600" />
+                                                    <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Passport Information</h4>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                    {renderField("passportNumber", "Passport Number", "text", true)}
+                                                    {renderField("passportIssueDate", "Issue Date", "date", true)}
+                                                    {renderField("passportExpiryDate", "Expiry Date", "date", true)}
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                    {renderField("passportIssueCountry", "Issue Country", "select", true, ALL_COUNTRIES)}
+                                                    {renderField("passportCityOfBirth", "City of Birth", "text", true)}
+                                                    {renderField("passportCountryOfBirth", "Country of Birth", "select", true, ALL_COUNTRIES)}
+                                                </div>
+                                            </div>
+
+                                            {/* Nationality & Citizenship */}
+                                            <div className="p-4 border border-slate-100 bg-slate-50/50 rounded-2xl space-y-4 shadow-2xs">
+                                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                                                    <Globe className="h-4 w-4 text-indigo-600" />
+                                                    <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Nationality & Citizenship</h4>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    {renderField("nationality", "Nationality", "select", true, ALL_COUNTRIES)}
+                                                    {renderField("citizenship", "Citizenship", "select", true, ALL_COUNTRIES)}
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Citizen of more than one country?*</label>
+                                                        <div className="flex gap-4 pt-1">
+                                                            {["No", "Yes"].map(opt => (
+                                                                <label key={opt} className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer font-bold">
+                                                                    <input type="radio" checked={formValues.dualCitizenship === opt} onChange={() => setFormValues(prev => ({...prev, dualCitizenship: opt}))} className="text-indigo-600 h-4 w-4" />
+                                                                    {opt}
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                        {formValues.dualCitizenship === "Yes" && (
+                                                            <div className="pt-1">
+                                                                {renderField("dualCitizenshipCountries", "Other Countries", "text", true)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Living/studying in other country?*</label>
+                                                        <div className="flex gap-4 pt-1">
+                                                            {["No", "Yes"].map(opt => (
+                                                                <label key={opt} className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer font-bold">
+                                                                    <input type="radio" checked={formValues.otherCountryStudy === opt} onChange={() => setFormValues(prev => ({...prev, otherCountryStudy: opt}))} className="text-indigo-600 h-4 w-4" />
+                                                                    {opt}
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                        {formValues.otherCountryStudy === "Yes" && (
+                                                            <div className="pt-1">
+                                                                {renderField("otherCountryStudyName", "Select Living Country", "select", true, ALL_COUNTRIES)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Background Info */}
+                                            <div className="p-4 border border-slate-100 bg-slate-50/50 rounded-2xl space-y-4 shadow-2xs">
+                                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                                                    <ShieldAlert className="h-4 w-4 text-indigo-600" />
+                                                    <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Background Info</h4>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Applied for immigration in any country?</label>
+                                                        <div className="flex gap-4 pt-1">
+                                                            {["No", "Yes"].map(opt => (
+                                                                <label key={opt} className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer font-bold">
+                                                                    <input type="radio" checked={formValues.appliedImmigration === opt} onChange={() => setFormValues(prev => ({...prev, appliedImmigration: opt}))} className="text-indigo-600 h-4 w-4" />
+                                                                    {opt}
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                        {formValues.appliedImmigration === "Yes" && (
+                                                            <div className="pt-1">
+                                                                {renderField("appliedImmigrationCountry", "Immigration Country", "select", true, ALL_COUNTRIES)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Suffer from serious medical condition?</label>
+                                                        <div className="flex gap-4 pt-1">
+                                                            {["No", "Yes"].map(opt => (
+                                                                <label key={opt} className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer font-bold">
+                                                                    <input type="radio" checked={formValues.medicalCondition === opt} onChange={() => setFormValues(prev => ({...prev, medicalCondition: opt}))} className="text-indigo-600 h-4 w-4" />
+                                                                    {opt}
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                        {formValues.medicalCondition === "Yes" && (
+                                                            <div className="pt-1">
+                                                                {renderField("medicalConditionDetails", "Medical Details", "text", true)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Visa refusal for any country?</label>
+                                                        <div className="flex gap-4 pt-1">
+                                                            {["No", "Yes"].map(opt => (
+                                                                <label key={opt} className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer font-bold">
+                                                                    <input type="radio" checked={formValues.visaRefusal === opt} onChange={() => setFormValues(prev => ({...prev, visaRefusal: opt}))} className="text-indigo-600 h-4 w-4" />
+                                                                    {opt}
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                        {formValues.visaRefusal === "Yes" && (
+                                                            <div className="grid grid-cols-2 gap-2 pt-1">
+                                                                {renderField("visaRefusalCountry", "Refusal Country", "select", true, ALL_COUNTRIES)}
+                                                                {renderField("visaRefusalType", "Type of Visa", "text", true)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Convicted of criminal offence?</label>
+                                                        <div className="flex gap-4 pt-1">
+                                                            {["No", "Yes"].map(opt => (
+                                                                <label key={opt} className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer font-bold">
+                                                                    <input type="radio" checked={formValues.criminalConviction === opt} onChange={() => setFormValues(prev => ({...prev, criminalConviction: opt}))} className="text-indigo-600 h-4 w-4" />
+                                                                    {opt}
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                        {formValues.criminalConviction === "Yes" && (
+                                                            <div className="pt-1">
+                                                                {renderField("criminalConvictionDetails", "Conviction Details", "text", true)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Emergency Contacts */}
+                                            <div className="p-4 border border-slate-100 bg-slate-50/50 rounded-2xl space-y-4 shadow-2xs">
+                                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                                                    <Phone className="h-4 w-4 text-indigo-600" />
+                                                    <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Emergency Contacts</h4>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    {renderField("emergencyName", "Name", "text", true)}
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Mobile Number*</label>
+                                                        <div className="flex gap-1.5">
+                                                            <select value={formValues.emergencyPhoneCountryCode || "+91"} onChange={e => setFormValues(prev => ({...prev, emergencyPhoneCountryCode: e.target.value}))} className="px-2.5 py-2 text-xs border border-slate-200 rounded-xl bg-white outline-none font-semibold focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500">
+                                                                <option value="+91">+91</option>
+                                                                <option value="+1">+1</option>
+                                                                <option value="+44">+44</option>
+                                                            </select>
+                                                            <input type="text" value={formValues.emergencyPhone || ""} onChange={e => setFormValues(prev => ({...prev, emergencyPhone: e.target.value}))} className={cn("flex-1 px-3 py-2 text-xs border rounded-xl outline-none font-semibold focus:ring-2 focus:ring-indigo-100 bg-white", !!validationErrors.emergencyPhone ? "border-rose-400 focus:ring-rose-100 focus:border-rose-400 bg-rose-50/10" : "border-slate-200 focus:border-indigo-500")} />
+                                                        </div>
+                                                        {validationErrors.emergencyPhone && <p className="text-[10px] text-rose-550 font-bold mt-1 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> {validationErrors.emergencyPhone}</p>}
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    {renderField("emergencyEmail", "Email", "email", true)}
+                                                    {renderField("emergencyRelation", "Relation with Applicant", "text", true)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Step 2: Academic Details */}
+                                    {prospectStep === 2 && (
+                                        <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: '#c7d2fe transparent' }}>
+                                            {/* Education Summary Card */}
+                                            <div className="p-4 border border-indigo-100 bg-indigo-50/20 rounded-2xl space-y-4 shadow-2xs">
+                                                <div className="flex items-center justify-between border-b border-indigo-100 pb-2.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <BookOpen className="h-4 w-4 text-indigo-600" />
+                                                        <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Education Summary</h4>
+                                                    </div>
+                                                    <span className="text-[9px] font-extrabold px-2.5 py-0.5 rounded-full border bg-indigo-50 text-indigo-700 border-indigo-200">
+                                                        Step 2 of 4
+                                                    </span>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide flex items-center gap-1">Country of Education <span className="text-rose-500">*</span></label>
+                                                        <select value={formValues.countryOfEducation || ""} onChange={e => setFormValues(prev => ({...prev, countryOfEducation: e.target.value}))} className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white outline-none font-semibold transition-all focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500">
+                                                            <option value="">Select Country</option>
+                                                            {ALL_COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide flex items-center gap-1">Highest Level of Education <span className="text-rose-500">*</span></label>
+                                                        <select value={formValues.highestLevelOfEducation || ""} onChange={e => setFormValues(prev => ({...prev, highestLevelOfEducation: e.target.value}))} className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white outline-none font-semibold transition-all focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500">
+                                                            <option value="">Select Highest Level</option>
+                                                            <option value="Postgraduate">Postgraduate</option>
+                                                            <option value="Undergraduate">Undergraduate</option>
+                                                            <option value="Grade 12th or equivalent">Grade 12th or equivalent</option>
+                                                            <option value="Grade 10th or equivalent">Grade 10th or equivalent</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                {formValues.highestLevelOfEducation && (
+                                                    <p className="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 px-3 py-2 rounded-xl font-semibold leading-relaxed">
+                                                        📚 Fill in details for each education level below. Sections are shown based on your highest level of education.
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            {/* PG Block */}
+                                            {formValues.highestLevelOfEducation === "Postgraduate" && (
+                                                <AcademicBlock prefix="pg" label="Post Graduate" setFormValues={setFormValues} formValues={formValues} validationErrors={validationErrors} />
+                                            )}
+
+                                            {/* UG Block */}
+                                            {["Postgraduate", "Undergraduate"].includes(formValues.highestLevelOfEducation) && (
+                                                <AcademicBlock prefix="ug" label="Undergraduate" setFormValues={setFormValues} formValues={formValues} isUG validationErrors={validationErrors} />
+                                            )}
+
+                                            {/* 12th Block */}
+                                            {["Postgraduate", "Undergraduate", "Grade 12th or equivalent"].includes(formValues.highestLevelOfEducation) && (
+                                                <AcademicBlock prefix="x12" label="Grade 12th or equivalent" setFormValues={setFormValues} formValues={formValues} isSchool validationErrors={validationErrors} />
+                                            )}
+
+                                            {/* 10th Block */}
+                                            {formValues.highestLevelOfEducation && (
+                                                <AcademicBlock prefix="x10" label="Grade 10th or equivalent" setFormValues={setFormValues} formValues={formValues} isSchool validationErrors={validationErrors} />
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Step 3: Work Experience */}
+                                    {prospectStep === 3 && (
+                                        <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-2">
+                                            {!formValues.hasWorkExperience ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormValues(prev => ({ 
+                                                        ...prev, 
+                                                        hasWorkExperience: true,
+                                                        workExperiences: prev.workExperiences?.length ? prev.workExperiences : [{ workOrgAddress: "", workPosition: "", workSalaryMode: "", workJobProfile: "", workFrom: "", workUpto: "", workCurrent: false }]
+                                                    }))}
+                                                    className="w-full py-8 border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-2xl flex flex-col items-center justify-center gap-2 bg-slate-50/30 hover:bg-indigo-50/10 transition-all group cursor-pointer"
+                                                >
+                                                    <div className="p-3 bg-white rounded-full shadow-xs border border-slate-100 group-hover:scale-110 transition-transform">
+                                                        <Briefcase className="h-5 w-5 text-indigo-500" />
+                                                    </div>
+                                                    <span className="text-xs font-bold text-slate-600 group-hover:text-indigo-600">Add Work Experience</span>
+                                                    <p className="text-[10px] text-slate-455">Include any professional history, internships, or jobs</p>
+                                                </button>
+                                            ) : (
+                                                <div className="space-y-4">
+                                                    {formValues.workExperiences?.map((exp, index) => (
+                                                        <div key={index} className="p-4 border border-slate-100 bg-slate-50/50 rounded-2xl space-y-4 shadow-2xs relative">
+                                                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <Briefcase className="h-4 w-4 text-indigo-650" />
+                                                                    <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Work Experience #{index + 1}</h4>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setFormValues(prev => {
+                                                                            const updated = prev.workExperiences.filter((_, i) => i !== index);
+                                                                            return {
+                                                                                ...prev,
+                                                                                workExperiences: updated,
+                                                                                hasWorkExperience: updated.length > 0
+                                                                            };
+                                                                        });
+                                                                    }}
+                                                                    className="text-[10px] font-bold text-rose-500 hover:text-rose-700 flex items-center gap-1 bg-rose-50 hover:bg-rose-100/80 px-2.5 py-1 rounded-lg transition-colors"
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" /> Remove
+                                                                </button>
+                                                            </div>
+
+                                                            <div className="space-y-4 mt-2">
+                                                                {renderField(`workExperiences.${index}.workOrgAddress`, "Name of the Organisation & Address", "text", true)}
+                                                                
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                    {renderField(`workExperiences.${index}.workPosition`, "Position", "text", true)}
+                                                                    {renderField(`workExperiences.${index}.workSalaryMode`, "Mode of Salary", "select", false, ["Bank Transfer", "Cheque", "Cash"])}
+                                                                </div>
+
+                                                                <div className="space-y-1">
+                                                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Job Profile</label>
+                                                                    <textarea 
+                                                                        rows={2.5} 
+                                                                        value={exp?.workJobProfile || ""} 
+                                                                        onChange={e => setFormValues(prev => {
+                                                                            const updated = [...prev.workExperiences];
+                                                                            updated[index] = { ...updated[index], workJobProfile: e.target.value };
+                                                                            return { ...prev, workExperiences: updated };
+                                                                        })} 
+                                                                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none resize-none bg-white font-semibold focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all" 
+                                                                        placeholder="Describe your responsibilities and achievements..."
+                                                                    />
+                                                                </div>
+
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                    {renderField(`workExperiences.${index}.workFrom`, "Working From", "date", true)}
+                                                                    {renderField(`workExperiences.${index}.workUpto`, "Working Upto", "date", !exp?.workCurrent)}
+                                                                </div>
+
+                                                                <label className="flex items-center gap-1.5 text-xs text-slate-600 font-extrabold cursor-pointer select-none pt-1">
+                                                                    <input 
+                                                                        type="checkbox" 
+                                                                        checked={!!exp?.workCurrent} 
+                                                                        onChange={e => setFormValues(prev => {
+                                                                            const updated = [...prev.workExperiences];
+                                                                            updated[index] = { ...updated[index], workCurrent: e.target.checked };
+                                                                            return { ...prev, workExperiences: updated };
+                                                                        })} 
+                                                                        className="rounded border-slate-355 text-indigo-600 h-4 w-4" 
+                                                                    />
+                                                                    I am currently working here
+                                                                </label>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormValues(prev => ({
+                                                            ...prev,
+                                                            workExperiences: [...(prev.workExperiences || []), { workOrgAddress: "", workPosition: "", workSalaryMode: "", workJobProfile: "", workFrom: "", workUpto: "", workCurrent: false }]
+                                                        }))}
+                                                        className="w-full py-3.5 border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-2xl flex items-center justify-center gap-2 bg-white hover:bg-indigo-50/5 text-xs font-bold text-slate-600 hover:text-indigo-600 transition-all cursor-pointer shadow-xs"
+                                                    >
+                                                        <Plus className="h-4 w-4" /> Add More Work Experience
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Step 4: Tests */}
+                                    {prospectStep === 4 && (
+                                        <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-2">
+                                            <div className="p-4 border border-slate-100 bg-slate-50/50 rounded-2xl space-y-4 shadow-2xs">
+                                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                                                    <Award className="h-4 w-4 text-indigo-600" />
+                                                    <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Test Scores (Optional)</h4>
+                                                </div>
+
+                                                <p className="text-[10px] text-slate-450 -mt-2">Click "+ Add Test" to enter scores for a specific test</p>
+
+                                                <div className="space-y-3">
+                                                    {["GRE", "GMAT", "IELTS", "TOEFL", "PTE", "DET", "SAT", "ACT"].map(testName => {
+                                                        const isAdded = activeTests.includes(testName);
+                                                        
+                                                        return (
+                                                            <div key={testName} className="border border-slate-100 rounded-xl bg-white overflow-hidden shadow-3xs transition-all">
+                                                                <div className="w-full py-3 px-4 flex items-center justify-between font-bold text-xs bg-slate-50/55 border-b border-slate-100">
+                                                                    <span className="flex items-center gap-2 text-slate-700">
+                                                                        <Award className={cn("h-4 w-4", isAdded ? "text-indigo-600" : "text-slate-400")} />
+                                                                        {testName}
+                                                                        {isAdded && (
+                                                                            <span className="text-[9px] bg-indigo-50 text-indigo-750 px-2 py-0.5 rounded-full font-extrabold animate-pulse">Active</span>
+                                                                        )}
+                                                                    </span>
+                                                                    
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            if (isAdded) {
+                                                                                setFormValues(prev => {
+                                                                                    const updatedScores = { ...prev.testScores };
+                                                                                    delete updatedScores[testName];
+                                                                                    return { ...prev, testScores: updatedScores };
+                                                                                });
+                                                                                setActiveTests(prev => prev.filter(t => t !== testName));
+                                                                            } else {
+                                                                                setActiveTests(prev => [...prev, testName]);
+                                                                            }
+                                                                        }}
+                                                                        className={cn(
+                                                                            "text-[10px] font-extrabold flex items-center gap-1 px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-3xs",
+                                                                            isAdded 
+                                                                                ? "bg-rose-50 text-rose-600 hover:bg-rose-100/80" 
+                                                                                : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100/80"
+                                                                        )}
+                                                                    >
+                                                                        {isAdded ? (
+                                                                            <>
+                                                                                <Trash2 className="h-3.5 w-3.5" /> Remove
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <Plus className="h-3.5 w-3.5" /> Add Test
+                                                                            </>
+                                                                        )}
+                                                                    </button>
+                                                                </div>
+                                                                
+                                                                {isAdded && (
+                                                                    <div className="p-4 space-y-4 bg-white animate-in slide-in-from-top-2 duration-200">
+                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                            {renderTestField(testName, "overall", "Overall Score", "text", true)}
+                                                                            {renderTestField(testName, "date", "Date of Examination", "date", false)}
+                                                                        </div>
+                                                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                                            {renderTestField(testName, "quant", "Quantitative", "text", false)}
+                                                                            {renderTestField(testName, "verbal", "Verbal", "text", false)}
+                                                                            {renderTestField(testName, "aw", "Analytical Writing", "text", false)}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {currentStage === "PROSPECT" && (
+                                        <p className="text-[11px] text-blue-600 bg-blue-50 border border-blue-100 p-2.5 rounded-lg leading-relaxed font-semibold mt-4">
+                                            ℹ️ System Action: Loan department will be activated instantly on submit.
+                                        </p>
+                                    )}
                                 </div>
                             )}
 
                             {/* UNIVERSITY_SHORTLISTING Form */}
-                            {currentStage === "UNIVERSITY_SHORTLISTING" && (
+                            {currentStage === "UNIVERSITY_SHORTLISTING" && !isProfileMode && (
                                 <div className="space-y-6">
-                                    {/* Education/Academic Details */}
-                                    <div className="space-y-4 p-4 border border-slate-100 bg-slate-50 rounded-2xl">
-                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Education / Academic Details</label>
-                                        {allDefs
-                                            .filter(def => !EXCLUDED_KEYS.has(def.fieldKey) && !def.isSystem && !SYSTEM_KEYS.has(def.fieldKey))
-                                            .map(def => {
-                                                const isRequired = def.fieldKey === "ielts_toefl_score" || def.fieldKey === "academic_gpa" || def.fieldKey === "backlogs" || def.required;
-                                                return (
-                                                    <div key={def.id} className="space-y-1.5">
-                                                        <label className="text-xs font-semibold text-slate-500 uppercase">
-                                                            {def.name} {isRequired && <span className="text-rose-500">*</span>}
-                                                        </label>
-                                                        {def.type === "SELECT" ? (
-                                                            <select
-                                                                required={isRequired}
-                                                                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white"
-                                                                value={formValues[def.fieldKey] ?? ""}
-                                                                onChange={e => setFormValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
-                                                            >
-                                                                <option value="">— Select —</option>
-                                                                {(def.options || []).map(o => <option key={o} value={o}>{o}</option>)}
-                                                            </select>
-                                                        ) : def.type === "TEXTAREA" ? (
-                                                            <textarea
-                                                                required={isRequired}
-                                                                rows={3}
-                                                                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 resize-none bg-white font-medium"
-                                                                value={formValues[def.fieldKey] ?? ""}
-                                                                onChange={e => setFormValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
-                                                            />
-                                                        ) : def.type === "CHECKBOX" ? (
-                                                            <div className="flex items-center gap-2">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    id={`cf-${def.fieldKey}`}
-                                                                    checked={!!formValues[def.fieldKey]}
-                                                                    onChange={e => setFormValues(v => ({ ...v, [def.fieldKey]: e.target.checked }))}
-                                                                    className="rounded border-slate-300 text-indigo-655 focus:ring-indigo-200 h-4 w-4"
-                                                                />
-                                                                <label htmlFor={`cf-${def.fieldKey}`} className="text-sm text-slate-700 cursor-pointer select-none">
-                                                                    Confirm {def.name}
-                                                                </label>
-                                                            </div>
-                                                        ) : (
-                                                            <input
-                                                                required={isRequired}
-                                                                type={def.type === "NUMBER" ? "number" : def.type === "DATE" ? "date" : "text"}
-                                                                min={def.type === "NUMBER" ? "0" : undefined}
-                                                                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white font-medium"
-                                                                value={formValues[def.fieldKey] ?? ""}
-                                                                onChange={e => setFormValues(v => ({ ...v, [def.fieldKey]: e.target.value }))}
-                                                            />
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                    </div>
-
                                     <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Shortlisted Target Universities</label>
                                     {(formValues.universities || []).map((univ, index) => (
                                         <div key={index} className="space-y-4 p-4 border border-slate-100 bg-slate-50/50 rounded-2xl relative">
@@ -1062,39 +2252,8 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                             )}
 
                             {/* APPLICATION Process Docs & Universities */}
-                            {currentStage === "APPLICATION" && (
+                            {currentStage === "APPLICATION" && !isProfileMode && (
                                 <div className="space-y-6">
-                                    <div className="space-y-2.5 pt-2 bg-slate-50 p-4 border border-slate-100 rounded-2xl">
-                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Document Checklists</label>
-                                        <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
-                                            <input
-                                                type="checkbox"
-                                                checked={!!formValues.sop_status}
-                                                onChange={e => setFormValues({ ...formValues, sop_status: e.target.checked })}
-                                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-200"
-                                            />
-                                            SOP (Statement of Purpose) Uploaded
-                                        </label>
-                                        <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
-                                            <input
-                                                type="checkbox"
-                                                checked={!!formValues.lor_status}
-                                                onChange={e => setFormValues({ ...formValues, lor_status: e.target.checked })}
-                                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-200"
-                                            />
-                                            LOR (Letter of Recommendation) Uploaded
-                                        </label>
-                                        <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
-                                            <input
-                                                type="checkbox"
-                                                checked={!!formValues.transcripts_status}
-                                                onChange={e => setFormValues({ ...formValues, transcripts_status: e.target.checked })}
-                                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-200"
-                                            />
-                                            Academic Transcripts Uploaded
-                                        </label>
-                                    </div>
-
                                     <div className="space-y-4">
                                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Shortlisted Universities Status</label>
                                         {(formValues.universities || []).map((univ, index) => (
@@ -1301,6 +2460,72 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                                         className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
                                                     />
                                                 </div>
+
+                                                <div className="space-y-1.5 text-left">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-xs font-semibold text-slate-500 uppercase">Third Party Name</label>
+                                                        {newPortalIndex !== index && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setNewPortalIndex(index);
+                                                                    setNewPortalVal("");
+                                                                }}
+                                                                className="text-[10px] font-bold text-indigo-650 hover:text-indigo-850 transition-colors cursor-pointer"
+                                                            >
+                                                                + Add Third Party Option
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    {newPortalIndex === index ? (
+                                                        <div className="flex gap-2">
+                                                            <input
+                                                                type="text"
+                                                                placeholder="Enter new third party name"
+                                                                value={newPortalVal}
+                                                                onChange={e => setNewPortalVal(e.target.value)}
+                                                                className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white font-medium"
+                                                                onKeyDown={e => {
+                                                                    if (e.key === "Enter") {
+                                                                        e.preventDefault();
+                                                                        if (newPortalVal.trim()) addPortalMut.mutate(newPortalVal.trim());
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (newPortalVal.trim()) addPortalMut.mutate(newPortalVal.trim());
+                                                                }}
+                                                                disabled={addPortalMut.isPending || !newPortalVal.trim()}
+                                                                className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 disabled:opacity-50"
+                                                            >
+                                                                Save
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setNewPortalIndex(null);
+                                                                    setNewPortalVal("");
+                                                                }}
+                                                                className="px-3.5 py-2 border border-slate-250 text-slate-650 rounded-xl text-xs font-bold hover:bg-slate-50"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <select
+                                                            value={univ.univ_portal || ""}
+                                                            onChange={e => updateUniversityField(index, "univ_portal", e.target.value)}
+                                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white"
+                                                        >
+                                                            <option value="">Select Third Party (Optional)</option>
+                                                            {portals.map(p => (
+                                                                <option key={p.id} value={p.name}>{p.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                </div>
                                             </div>
                                         ))}
 
@@ -1311,7 +2536,7 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                                     ...prev,
                                                     universities: [
                                                         ...(prev.universities || []),
-                                                        { univ_country: "", univ_name: "", univ_course: "", univ_link: "", completed: false }
+                                                        { univ_country: "", univ_name: "", univ_course: "", univ_link: "", completed: false, univ_portal: "" }
                                                     ]
                                                 }));
                                             }}
@@ -1324,7 +2549,7 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                             )}
 
                             {/* AWAITING_STATUS Response */}
-                            {currentStage === "AWAITING_STATUS" && (
+                            {currentStage === "AWAITING_STATUS" && !isProfileMode && (
                                 <div className="space-y-4">
                                     <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">University Application Responses</label>
                                     {(formValues.universities || []).map((univ, index) => (
@@ -1340,6 +2565,11 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                                     </div>
                                                     {univ.univ_course && (
                                                         <div className="text-[10px] text-slate-500">{univ.univ_course}</div>
+                                                    )}
+                                                    {univ.univ_portal && (
+                                                        <div className="text-[10px] text-indigo-650 font-bold bg-indigo-50/50 w-fit px-1.5 py-0.5 rounded mt-1">
+                                                            Portal: {univ.univ_portal}
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
@@ -1391,50 +2621,80 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                                     <option value="Reject">Reject (Close/Archive)</option>
                                                 </select>
                                             </div>
+
+                                            <div className="space-y-1.5 pt-1 text-left">
+                                                <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!!univ.confirmed}
+                                                        onChange={e => {
+                                                            const updated = [...(formValues.universities || [])];
+                                                            updated[index] = { ...updated[index], confirmed: e.target.checked };
+                                                            setFormValues({ ...formValues, universities: updated });
+                                                        }}
+                                                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-200 h-4 w-4"
+                                                    />
+                                                    Confirmed for Admission
+                                                </label>
+                                            </div>
                                         </div>
                                     ))}
+                                    <p className="text-[11px] text-blue-600 bg-blue-50 border border-blue-100 p-2.5 rounded-lg leading-relaxed font-semibold mt-3">
+                                        ℹ️ System Action: Forex department will be activated instantly on submit.
+                                    </p>
                                 </div>
                             )}
 
                             {/* DEPOSIT_STATUS Payment */}
-                            {currentStage === "DEPOSIT_STATUS" && (
+                            {currentStage === "DEPOSIT_STATUS" && !isProfileMode && (
                                 <div className="space-y-4">
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Deposit Amount Due</label>
+                                        <label className="text-xs font-semibold text-slate-500 uppercase">Deposit Amount</label>
                                         <input
                                             type="text"
                                             required
                                             placeholder="e.g. $5,000 CAD / £3,000"
-                                            value={formValues.deposit_amount_due || ""}
-                                            onChange={e => setFormValues({ ...formValues, deposit_amount_due: e.target.value })}
+                                            value={formValues.deposit_amount || ""}
+                                            onChange={e => setFormValues({ ...formValues, deposit_amount: e.target.value })}
                                             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
                                         />
                                     </div>
-                                    <div className="space-y-2.5 pt-2">
-                                        <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
-                                            <input
-                                                type="checkbox"
-                                                checked={!!formValues.offer_letter_uploaded}
-                                                onChange={e => setFormValues({ ...formValues, offer_letter_uploaded: e.target.checked })}
-                                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-200"
-                                            />
-                                            Offer Letter Uploaded
-                                        </label>
-                                        <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
-                                            <input
-                                                type="checkbox"
-                                                checked={!!formValues.deposit_receipt_uploaded}
-                                                onChange={e => setFormValues({ ...formValues, deposit_receipt_uploaded: e.target.checked })}
-                                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-200"
-                                            />
-                                            Deposit Payment Receipt Uploaded
-                                        </label>
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-semibold text-slate-500 uppercase">Mode of Payment</label>
+                                        <select
+                                            required
+                                            value={formValues.payment_mode || ""}
+                                            onChange={e => setFormValues({ ...formValues, payment_mode: e.target.value })}
+                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white"
+                                        >
+                                            <option value="">— Select —</option>
+                                            <option value="Bank Transfer">Bank Transfer</option>
+                                            <option value="Credit Card">Credit Card</option>
+                                            <option value="Debit Card">Debit Card</option>
+                                            <option value="UPI">UPI</option>
+                                            <option value="Cash">Cash</option>
+                                            <option value="Cheque">Cheque</option>
+                                            <option value="Other">Other</option>
+                                        </select>
                                     </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-semibold text-slate-500 uppercase">Date of Payment</label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={formValues.payment_date || ""}
+                                            onChange={e => setFormValues({ ...formValues, payment_date: e.target.value })}
+                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
+                                        />
+                                    </div>
+                                    <p className="text-[11px] text-blue-600 bg-blue-50 border border-blue-100 p-2.5 rounded-lg leading-relaxed font-semibold mt-3">
+                                        ℹ️ System Action: Accommodation department will be activated instantly on submit.
+                                    </p>
                                 </div>
                             )}
 
                             {/* VISA_DOCUMENTATION Verification */}
-                            {currentStage === "VISA_DOCUMENTATION" && (
+                            {currentStage === "VISA_DOCUMENTATION" && !isProfileMode && (
                                 <div className="space-y-4">
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 uppercase">Financial Proof Documents Details</label>
@@ -1458,6 +2718,16 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
                                         />
                                     </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-semibold text-slate-500 uppercase">Visa Appointment Date</label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={formValues.visa_appointment_date || ""}
+                                            onChange={e => setFormValues({ ...formValues, visa_appointment_date: e.target.value })}
+                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white text-left"
+                                        />
+                                    </div>
                                     <div className="pt-2">
                                         <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none font-bold">
                                             <input
@@ -1473,7 +2743,7 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                             )}
 
                             {/* VISA_STATUS embassy response */}
-                            {currentStage === "VISA_STATUS" && (
+                            {currentStage === "VISA_STATUS" && !isProfileMode && (
                                 <div className="space-y-4">
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 uppercase">Visa Appointment Date</label>
@@ -1507,41 +2777,65 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                             <option value="Refused">Refused (Close/Archive)</option>
                                         </select>
                                     </div>
-                                </div>
-                            )}
 
-                            {/* VISA_APPROVAL details */}
-                            {currentStage === "VISA_APPROVAL" && (
-                                <div className="space-y-4">
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Approved Visa Passport Page Details</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            placeholder="e.g. Passport details / Stamp verified"
-                                            value={formValues.approved_visa_passport || ""}
-                                            onChange={e => setFormValues({ ...formValues, approved_visa_passport: e.target.value })}
-                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Flight Departure Date</label>
-                                        <input
-                                            type="date"
-                                            required
-                                            value={formValues.flight_departure_date || ""}
-                                            onChange={e => setFormValues({ ...formValues, flight_departure_date: e.target.value })}
-                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                                        />
-                                    </div>
-                                    <p className="text-[11px] text-blue-600 bg-blue-50 border border-blue-100 p-2.5 rounded-lg leading-relaxed font-semibold">
-                                        ℹ️ System Action: Post-Visa teams (Loans, Accommodations, Forex) will be activated instantly on submit.
-                                    </p>
+                                    {(formValues.embassy_result || "Approved") === "Approved" && (
+                                        <>
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-semibold text-slate-500 uppercase">Date of Visa Approved</label>
+                                                <input
+                                                    type="date"
+                                                    value={formValues.visa_approved_date || ""}
+                                                    onChange={e => setFormValues({ ...formValues, visa_approved_date: e.target.value })}
+                                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-semibold text-slate-500 uppercase">Approved Visa Passport Page Details</label>
+                                                <input
+                                                    type="text"
+                                                    required
+                                                    placeholder="e.g. Passport details / Stamp verified"
+                                                    value={formValues.approved_visa_passport || ""}
+                                                    onChange={e => setFormValues({ ...formValues, approved_visa_passport: e.target.value })}
+                                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-semibold text-slate-500 uppercase">Flight Departure Date</label>
+                                                <input
+                                                    type="date"
+                                                    required
+                                                    value={formValues.flight_departure_date || ""}
+                                                    onChange={e => setFormValues({ ...formValues, flight_departure_date: e.target.value })}
+                                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white"
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-semibold text-slate-500 uppercase">Proof of Visa Approved</label>
+                                                <label className={cn(
+                                                    "flex items-center justify-center gap-2 w-full px-3 py-2.5 text-xs font-bold border border-dashed rounded-xl cursor-pointer transition-colors",
+                                                    uploadingProof ? "border-slate-200 text-slate-400" : "border-indigo-300 text-indigo-650 hover:bg-indigo-50/50"
+                                                )}>
+                                                    {uploadingProof
+                                                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</>
+                                                        : <><UploadCloud className="h-4 w-4" /> Upload proof document</>}
+                                                    <input
+                                                        type="file"
+                                                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                                        className="hidden"
+                                                        disabled={uploadingProof}
+                                                        onChange={e => { handleVisaProofUpload(e.target.files?.[0]); e.target.value = ""; }}
+                                                    />
+                                                </label>
+                                                <p className="text-[10px] text-slate-400">Appears in the lead's Documents list once uploaded.</p>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             )}
 
                             {/* COMMISSION_INVOICING details */}
-                            {currentStage === "COMMISSION_INVOICING" && (
+                            {currentStage === "COMMISSION_INVOICING" && !isProfileMode && (
                                 <div className="space-y-4">
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 uppercase">1st Year Tuition Fee Value</label>
@@ -1574,66 +2868,145 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                             </div>
 
                             {/* Buttons */}
-                            <div className="flex items-center justify-end gap-2 border-t border-gray-100 pt-3.5 mt-4">
-                                <button
-                                    type="button"
-                                    onClick={() => setActionModal(null)}
-                                    className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                {currentStage === "APPLICATION" ? (
-                                    <>
-                                        <button
-                                            type="button"
-                                            onClick={handleApplicationSave}
-                                            disabled={loading}
-                                            className="px-4 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 rounded-xl transition-all border border-indigo-200 flex items-center gap-1.5"
-                                        >
-                                            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                                            Save
-                                        </button>
-                                        <button
-                                            type="submit"
-                                            disabled={loading}
-                                            className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition-all shadow-sm shadow-indigo-100 flex items-center gap-1.5"
-                                        >
-                                            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
-                                            Move to Awaiting Status
-                                        </button>
-                                    </>
-                                ) : currentStage === "AWAITING_STATUS" ? (
-                                    <>
-                                        <button
-                                            type="button"
-                                            onClick={handleAwaitingStatusSave}
-                                            disabled={loading}
-                                            className="px-4 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 rounded-xl transition-all border border-indigo-200 flex items-center gap-1.5"
-                                        >
-                                            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                                            Save
-                                        </button>
-                                        <button
-                                            type="submit"
-                                            disabled={loading}
-                                            className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition-all shadow-sm shadow-indigo-100 flex items-center gap-1.5"
-                                        >
-                                            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                                            Submit
-                                        </button>
-                                    </>
-                                ) : (
+                            <div className="flex items-center justify-between border-t border-gray-100 pt-3.5 mt-4 w-full">
+                                <div>
                                     <button
-                                        type="submit"
-                                        disabled={loading}
-                                        className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition-all shadow-sm shadow-indigo-100 flex items-center gap-1.5"
+                                        type="button"
+                                        onClick={attemptCloseModal}
+                                        className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 transition-colors"
                                     >
-                                        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                                        Submit
+                                        Cancel
                                     </button>
-                                )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {(currentStage === "PROSPECT" || isProfileMode) ? (
+                                        <>
+                                            {prospectStep > 1 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setProspectStep(s => s - 1)}
+                                                    className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all border border-slate-205"
+                                                >
+                                                    Back
+                                                </button>
+                                            )}
+                                            {prospectStep < 4 ? (
+                                                <button
+                                                    key="next-btn"
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        setProspectStep(s => s + 1);
+                                                    }}
+                                                    className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm flex items-center gap-1"
+                                                >
+                                                    Next <ArrowRight className="h-3.5 w-3.5" />
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    key="save-btn"
+                                                    type="submit"
+                                                    disabled={loading}
+                                                    className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                                                >
+                                                    {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                                    Save Profile
+                                                </button>
+                                            )}
+                                        </>
+                                    ) : (
+                                        null
+                                    )}
+                                    {currentStage !== "PROSPECT" && !isProfileMode && (
+                                        <>
+                                            {currentStage === "APPLICATION" ? (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleApplicationSave}
+                                                        disabled={loading}
+                                                        className="px-4 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 rounded-xl transition-all border border-indigo-200 flex items-center gap-1.5"
+                                                    >
+                                                        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                                                        Save
+                                                    </button>
+                                                    <button
+                                                        type="submit"
+                                                        disabled={loading}
+                                                        className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition-all shadow-sm shadow-indigo-100 flex items-center gap-1.5"
+                                                    >
+                                                        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
+                                                        Move to Awaiting Status
+                                                    </button>
+                                                </>
+                                            ) : currentStage === "AWAITING_STATUS" ? (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleAwaitingStatusSave}
+                                                        disabled={loading}
+                                                        className="px-4 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 rounded-xl transition-all border border-indigo-200 flex items-center gap-1.5"
+                                                    >
+                                                        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                                                        Save
+                                                    </button>
+                                                    <button
+                                                        type="submit"
+                                                        disabled={loading}
+                                                        className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition-all shadow-sm shadow-indigo-100 flex items-center gap-1.5"
+                                                    >
+                                                        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                                                        Submit
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <button
+                                                    type="submit"
+                                                    disabled={loading}
+                                                    className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition-all shadow-sm shadow-indigo-100 flex items-center gap-1.5"
+                                                >
+                                                    {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                                                    Submit
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         </form>
+
+                        {/* Discard-changes confirmation */}
+                        {showCloseConfirm && (
+                            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-sm rounded-2xl" onClick={e => e.stopPropagation()}>
+                                <div className="bg-white border border-slate-200 rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+                                    <div className="flex items-start gap-3">
+                                        <div className="h-9 w-9 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+                                            <AlertCircle className="h-5 w-5 text-amber-500" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-sm font-bold text-slate-800">Discard unsaved changes?</h4>
+                                            <p className="text-xs text-slate-500 mt-1">Any details you've entered will be lost if you close now.</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-end gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowCloseConfirm(false)}
+                                            className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                                        >
+                                            Keep editing
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={confirmCloseModal}
+                                            className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors"
+                                        >
+                                            Discard
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

@@ -51,7 +51,7 @@ const SprintFormModal = ({ sprint, onClose }) => {
     const mutation = useMutation({
         mutationFn: (d) => isEdit ? api.put(`/sprints/${sprint.id}`, d) : api.post("/sprints", d),
         onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["sprints"] }); onClose(); },
-        onError: (e) => setError(e.response?.data?.message || "Failed to save sprint"),
+        onError: (e) => setError(e.response?.data?.error?.message || e.response?.data?.message || "Failed to save sprint"),
     });
 
     const submit = (e) => {
@@ -121,7 +121,7 @@ const BacklogRow = ({ task, sprintId, onEdit, onDelete, sprints }) => {
             queryClient.invalidateQueries({ queryKey: ["sprints"] });
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
         },
-        onError: (e) => toast.error(e.response?.data?.message || "Failed to add task to sprint"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to add task to sprint"),
     });
 
     const removeFromSprintMutation = useMutation({
@@ -131,7 +131,7 @@ const BacklogRow = ({ task, sprintId, onEdit, onDelete, sprints }) => {
             queryClient.invalidateQueries({ queryKey: ["sprints"] });
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
         },
-        onError: (e) => toast.error(e.response?.data?.message || "Failed to remove task from sprint"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to remove task from sprint"),
     });
 
     const plannable = sprints.filter(s => s.status !== "COMPLETED");
@@ -338,7 +338,7 @@ const Sprints = () => {
     const startMutation = useMutation({
         mutationFn: (id) => api.post(`/sprints/${id}/start`),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sprints"] }),
-        onError: (e) => toast.error(e.response?.data?.message || "Failed to start sprint"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to start sprint"),
     });
 
     const completeMutation = useMutation({
@@ -348,7 +348,7 @@ const Sprints = () => {
             queryClient.invalidateQueries({ queryKey: ["activeSprint"] });
             queryClient.invalidateQueries({ queryKey: ["backlog"] });
         },
-        onError: (e) => toast.error(e.response?.data?.message || "Failed to complete sprint"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to complete sprint"),
     });
 
     const deleteMutation = useMutation({
@@ -357,7 +357,7 @@ const Sprints = () => {
             queryClient.invalidateQueries({ queryKey: ["sprints"] });
             queryClient.invalidateQueries({ queryKey: ["backlog"] });
         },
-        onError: (e) => toast.error(e.response?.data?.message || "Failed to delete sprint"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to delete sprint"),
     });
 
     const deleteTaskMutation = useMutation({
@@ -366,7 +366,7 @@ const Sprints = () => {
             queryClient.invalidateQueries({ queryKey: ["backlog"] });
             queryClient.invalidateQueries({ queryKey: ["sprints"] });
         },
-        onError: (e) => toast.error(e.response?.data?.message || "Failed to delete task"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to delete task"),
     });
 
     // ── Summary stats ─────────────────────────────────────────────────────────

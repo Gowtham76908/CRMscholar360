@@ -71,7 +71,7 @@ const CallDetailModal = ({ lead, callLogs: propCallLogs, onClose, onUpdate }) =>
             setFetchedCallLogs(res.data);
         } catch (error) {
             console.error("Error fetching call logs:", error);
-            setFetchError(error.response?.data?.message || "Failed to fetch call logs");
+            setFetchError(error.response?.data?.error?.message || error.response?.data?.message || "Failed to fetch call logs");
             setFetchedCallLogs(null);
         } finally {
             setIsLoadingLogs(false);
@@ -116,7 +116,7 @@ const CallDetailModal = ({ lead, callLogs: propCallLogs, onClose, onUpdate }) =>
             await fetchCallLogs();
             if (onUpdate) onUpdate();
         } catch (error) {
-            toast.error(error.response?.data?.message || "Transcription failed");
+            toast.error(error.response?.data?.error?.message || error.response?.data?.message || "Transcription failed");
         } finally {
             setTranscribingId(null);
         }
@@ -143,7 +143,7 @@ const CallDetailModal = ({ lead, callLogs: propCallLogs, onClose, onUpdate }) =>
             await fetchCallLogs();
             if (onUpdate) onUpdate();
         } catch (error) {
-            toast.error(error.response?.data?.message || "Failed to upload recording");
+            toast.error(error.response?.data?.error?.message || error.response?.data?.message || "Failed to upload recording");
         } finally {
             setIsUploading(false);
         }

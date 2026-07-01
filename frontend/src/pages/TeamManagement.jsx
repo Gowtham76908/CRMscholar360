@@ -63,7 +63,7 @@ const EmployeeDrawer = ({ employeeId, onClose, managers, currentUserId, currentU
             queryClient.invalidateQueries({ queryKey: ["org-team"] });
             queryClient.invalidateQueries({ queryKey: ["org-employee", employeeId] });
         },
-        onError: (err) => toast.error(err.response?.data?.message || "Failed to update manager"),
+        onError: (err) => toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to update manager"),
     });
 
     if (!employeeId) return null;
@@ -228,7 +228,7 @@ const TeamManagement = () => {
     const toggleMutation = useMutation({
         mutationFn: (id) => api.patch(`/team/${id}/toggle`),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ["org-team"] }),
-        onError: (err) => toast.error(err.response?.data?.message || "Failed"),
+        onError: (err) => toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed"),
     });
 
     if (!isAuthorized) {

@@ -64,7 +64,7 @@ const ResetPassword = () => {
             if (code === "RESET_TOKEN_INVALID") {
                 setTokenExpired(true);
             } else {
-                setError(err.response?.data?.message ?? "Failed to reset password. Please try again.");
+                setError(err.response?.data?.error?.message || err.response?.data?.message || "Failed to reset password. Please try again.");
             }
         } finally {
             setIsLoading(false);

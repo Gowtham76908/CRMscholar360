@@ -39,7 +39,6 @@ async function createLead(data, { createdByUserId, salesAssigneeId, forceAssignT
         assigneeId = createdByUserId;
     }
     const salesAssignee = assigneeId;
-
     return prisma.$transaction(async (tx) => {
         const rows = await tx.$queryRaw`
             INSERT INTO "InvoiceCounter" ("prefix", "currentValue")
@@ -49,7 +48,10 @@ async function createLead(data, { createdByUserId, salesAssigneeId, forceAssignT
             RETURNING "currentValue"
         `;
         const nextVal = rows[0].currentValue;
-        const leadId = `L-${String(nextVal).padStart(5, '0')}`;
+        const year = new Date().getFullYear().toString().slice(-2);
+        // Counter seeds at 10000, so the first lead maps to sequence 0001.
+        const seq = String(nextVal - 9999).padStart(4, '0');
+        const leadId = `sch-${year}-${seq}`;
 
         const lead = await tx.lead.create({
             data: {

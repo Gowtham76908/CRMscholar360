@@ -244,6 +244,7 @@ const updateTaskStatus = async (req, res, next) => {
         // Only force kanban to DONE when completing — don't reset position when un-completing
         const updateData = {
             status,
+            outcome: status === "COMPLETED" ? "SUCCESSFUL" : "PENDING",
             ...(status === "COMPLETED" && { kanbanStatus: "DONE" }),
             completedAt: status === "COMPLETED" ? new Date() : null
         };

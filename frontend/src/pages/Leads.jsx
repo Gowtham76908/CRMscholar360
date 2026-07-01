@@ -332,7 +332,7 @@ const Leads = () => {
                 customerNumber: lead.phone
             });
         } catch (error) {
-            toast.error(error.response?.data?.message || "Failed to initiate call");
+            toast.error(error.response?.data?.error?.message || error.response?.data?.message || "Failed to initiate call");
         } finally {
             setTimeout(() => setCallingLeadId(null), 5000);
         }

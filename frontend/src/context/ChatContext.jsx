@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "./AuthContext";
 import api from "../api/axios";
@@ -8,10 +9,48 @@ import { getSocket } from "../utils/socket";
 const ChatContext = createContext(null);
 export const useChat = () => useContext(ChatContext) ?? {};
 
+const playNotificationSound = () => {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        
+        // Note 1: D5 (587.33 Hz)
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.type = "sine";
+        osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
+        gain1.gain.setValueAtTime(0, ctx.currentTime);
+        gain1.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.04);
+        gain1.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+        
+        // Note 2: A5 (880.00 Hz) - harmonious major interval
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.type = "sine";
+        osc2.frequency.setValueAtTime(880, ctx.currentTime + 0.06);
+        gain2.gain.setValueAtTime(0, ctx.currentTime + 0.06);
+        gain2.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.1);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+        
+        osc1.start(ctx.currentTime);
+        osc1.stop(ctx.currentTime + 0.4);
+        osc2.start(ctx.currentTime + 0.06);
+        osc2.stop(ctx.currentTime + 0.5);
+    } catch (e) {
+        console.warn("Failed to play notification sound:", e);
+    }
+};
+
 export const ChatProvider = ({ children }) => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+    const queryClient = useQueryClient();
 
     const [connected, setConnected]     = useState(false);
     const [channels, setChannels]       = useState([]);
@@ -79,6 +118,7 @@ export const ChatProvider = ({ children }) => {
                 if (!pathRef.current.startsWith("/messages")) {
                     const sender = msg.author?.name?.split(" ")[0] || "Someone";
                     const body   = msg.text?.length > 80 ? msg.text.slice(0, 80) + "…" : msg.text;
+                    playNotificationSound();
                     toast.message(`💬 ${sender}`, {
                         description: body,
                         action: { label: "Open", onClick: () => navigate("/messages") },
@@ -87,13 +127,27 @@ export const ChatProvider = ({ children }) => {
             }
         };
 
+        const onNotification = (notif) => {
+            playNotificationSound();
+            toast.message(notif.title || "🔔 Notification", {
+                description: notif.message,
+                action: notif.link ? { label: "View", onClick: () => navigate(notif.link) } : undefined,
+            });
+            queryClient.invalidateQueries({ queryKey: ["notifications"] });
+            if (notif.type === "REMINDER") {
+                queryClient.invalidateQueries({ queryKey: ["reminders"] });
+            }
+        };
+
         s.on("chat:message", onMessage);
+        s.on("notification:new", onNotification);
 
         return () => {
             s.off("connect",       onConnect);
             s.off("disconnect",     onDisconnect);
             s.off("connect_error",  onConnectError);
             s.off("chat:message", onMessage);
+            s.off("notification:new", onNotification);
             s.disconnect();
         };
     }, [user?.id, navigate]);

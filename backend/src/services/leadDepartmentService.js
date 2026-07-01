@@ -631,16 +631,37 @@ async function updateStage({ leadDepartmentId, stage, actor }) {
 
     // System Actions for SALES department transitions
     if (leadDept.department === "SALES") {
-        if (stage === "VISA_APPROVAL") {
+        if (stage === "UNIVERSITY_SHORTLISTING") {
             try {
-                // Instantly pushes data to Loans, Accommodations, Forex by allocating these departments
                 await allocateDepartments({
                     leadId: leadDept.leadId,
-                    departments: ["LOAN", "ACCOMMODATION_TICKETS", "FOREX"],
-                    actor
+                    departments: ["LOAN"],
+                    actor: { role: "SUPER_ADMIN", userId: actor.userId }
                 });
             } catch (err) {
-                console.error("Failed to auto-allocate post-visa departments:", err);
+                console.error("Failed to auto-allocate LOAN department:", err);
+            }
+        }
+        if (stage === "DEPOSIT_STATUS") {
+            try {
+                await allocateDepartments({
+                    leadId: leadDept.leadId,
+                    departments: ["FOREX"],
+                    actor: { role: "SUPER_ADMIN", userId: actor.userId }
+                });
+            } catch (err) {
+                console.error("Failed to auto-allocate FOREX department:", err);
+            }
+        }
+        if (stage === "VISA_DOCUMENTATION") {
+            try {
+                await allocateDepartments({
+                    leadId: leadDept.leadId,
+                    departments: ["ACCOMMODATION_TICKETS"],
+                    actor: { role: "SUPER_ADMIN", userId: actor.userId }
+                });
+            } catch (err) {
+                console.error("Failed to auto-allocate ACCOMMODATION_TICKETS department:", err);
             }
         }
         if (stage === "COMMISSION_INVOICING") {
@@ -825,7 +846,7 @@ async function getDepartmentQueue({ department, actor, filters = {} }) {
 
 const LEAD_SELECT_FOR_BOARD = {
     id: true, leadId: true, name: true, email: true, phone: true, source: true,
-    enquiryType: true, score: true, category: true, updatedAt: true,
+    enquiryType: true, score: true, category: true, updatedAt: true, customFields: true,
     tasks: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -983,14 +1004,12 @@ async function validateSalesStageMove(leadDept, currentStage, targetStage, txOrP
     }
 
     if (currentStage === "PROSPECT") {
-        const testScore = cf.ielts_toefl_score;
-        const gpa = cf.academic_gpa;
-        const backlogs = cf.backlogs;
-        const hasScore = testScore !== undefined && testScore !== null && String(testScore).trim() !== "";
-        const hasGpa = gpa !== undefined && gpa !== null && String(gpa).trim() !== "";
-        const hasBacklogs = backlogs !== undefined && backlogs !== null && String(backlogs).trim() !== "";
-        if (!hasScore || !hasGpa || !hasBacklogs) {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Prospect stage: Academic fields (IELTS/TOEFL Score, Academic GPA, Backlogs) must be filled.");
+        const firstName = cf.firstName;
+        const lastName = cf.lastName;
+        const hasProfile = (firstName !== undefined && firstName !== null && String(firstName).trim() !== "") ||
+                            (lastName !== undefined && lastName !== null && String(lastName).trim() !== "");
+        if (!hasProfile) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Prospect stage: Student Profile must be created first.");
         }
     }
 
@@ -1004,33 +1023,31 @@ async function validateSalesStageMove(leadDept, currentStage, targetStage, txOrP
         const hasCourse = course !== undefined && course !== null && String(course).trim() !== "";
         const hasLink = link !== undefined && link !== null && String(link).trim() !== "";
 
-        const testScore = cf.ielts_toefl_score;
-        const gpa = cf.academic_gpa;
-        const backlogs = cf.backlogs;
-        const hasScore = testScore !== undefined && testScore !== null && String(testScore).trim() !== "";
-        const hasGpa = gpa !== undefined && gpa !== null && String(gpa).trim() !== "";
-        const hasBacklogs = backlogs !== undefined && backlogs !== null && String(backlogs).trim() !== "";
+        const firstName = cf.firstName;
+        const lastName = cf.lastName;
+        const hasProfile = (firstName !== undefined && firstName !== null && String(firstName).trim() !== "") ||
+                            (lastName !== undefined && lastName !== null && String(lastName).trim() !== "");
 
-        if (!hasCountry || !hasName || !hasCourse || !hasLink || !hasScore || !hasGpa || !hasBacklogs) {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of University Shortlisting stage: Both education details (IELTS/TOEFL, GPA, Backlogs) and university details (Country, Name, Course, Link) must be filled.");
+        if (!hasProfile) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of University Shortlisting stage: Student Profile must be created first.");
+        }
+
+        if (!hasCountry || !hasName || !hasCourse || !hasLink) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of University Shortlisting stage: Target university details (Country, Name, Course, Link) must be filled.");
         }
     }
 
     if (currentStage === "AWAITING_STATUS") {
         const list = cf.shortlisted_universities || [];
-        const hasOffer = Array.isArray(list) && list.some(u =>
-            u?.university_response === "Conditional Offer" || u?.university_response === "Unconditional Offer"
+        const hasConfirmed = Array.isArray(list) && list.some(u =>
+            u?.confirmed === true || u?.confirmed === "true"
         );
-        if (!hasOffer) {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Awaiting Status stage: at least one university must have a Conditional or Unconditional Offer before progressing.");
+        if (!hasConfirmed) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Awaiting Status stage: at least one university must be marked as Confirmed before progressing.");
         }
     }
 
     if (currentStage === "APPLICATION") {
-        if (cf.sop_status !== "Uploaded" || cf.lor_status !== "Uploaded" || cf.transcripts_status !== "Uploaded") {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Application Process stage: All mandatory docs (SOP, LOR, Transcripts) must be checked 'Uploaded'.");
-        }
-
         const list = cf.shortlisted_universities || [];
         if (list.length === 0) {
             throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Application Process stage: At least one target university must be shortlisted.");
@@ -1042,14 +1059,19 @@ async function validateSalesStageMove(leadDept, currentStage, targetStage, txOrP
     }
 
     if (currentStage === "DEPOSIT_STATUS") {
-        if (cf.deposit_receipt_uploaded !== "Uploaded") {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Deposit Payment stage: Deposit receipt status must be 'Uploaded'.");
+        const filled = (v) => v !== undefined && v !== null && String(v).trim() !== "";
+        if (!filled(cf.deposit_amount) || !filled(cf.payment_mode) || !filled(cf.payment_date)) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Deposit Payment stage: Deposit amount, mode of payment and date of payment are required.");
         }
     }
 
     if (currentStage === "VISA_DOCUMENTATION") {
+        const hasDate = cf.visa_appointment_date !== undefined && cf.visa_appointment_date !== null && String(cf.visa_appointment_date).trim() !== "";
         if (cf.visa_manager_approved !== true && cf.visa_manager_approved !== "true") {
             throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Visa Documentation stage: Manager approval checkbox must be ticked.");
+        }
+        if (!hasDate) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Visa Documentation stage: Visa Appointment Date must be filled.");
         }
     }
 
@@ -1057,8 +1079,17 @@ async function validateSalesStageMove(leadDept, currentStage, targetStage, txOrP
         const hasDate = cf.visa_appointment_date !== undefined && cf.visa_appointment_date !== null && String(cf.visa_appointment_date).trim() !== "";
         const hasScorecard = cf.mock_interview_scorecard !== undefined && cf.mock_interview_scorecard !== null && String(cf.mock_interview_scorecard).trim() !== "";
         const isApproved = cf.embassy_result === "Approved";
-        if (!hasDate || !hasScorecard || !isApproved) {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Visa Status stage: Visa Appointment Date, Mock Interview Scorecard, and Embassy Result (must be Approved) must be filled.");
+        if (!hasDate || !hasScorecard) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Visa Status stage: Visa Appointment Date and Mock Interview Scorecard must be filled.");
+        }
+        if (isApproved) {
+            const hasPassport = cf.approved_visa_passport !== undefined && cf.approved_visa_passport !== null && String(cf.approved_visa_passport).trim() !== "";
+            const hasFlightDate = cf.flight_departure_date !== undefined && cf.flight_departure_date !== null && String(cf.flight_departure_date).trim() !== "";
+            if (!hasPassport || !hasFlightDate) {
+                throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Visa Status stage: Approved Visa Passport Page and Flight Departure Date must be filled when Visa is Approved.");
+            }
+        } else if (cf.embassy_result !== "Refused") {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Visa Status stage: Embassy Result must be Approved or Refused.");
         }
     }
 

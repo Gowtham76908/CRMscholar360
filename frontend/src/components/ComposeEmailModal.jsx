@@ -39,7 +39,7 @@ export default function ComposeEmailModal({ leadId, lead, defaultTo = "", onClos
             onClose();
         },
         onError: (err) => {
-            toast.error(err.response?.data?.message || "Failed to send email");
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to send email");
         },
     });
 
@@ -53,7 +53,7 @@ export default function ComposeEmailModal({ leadId, lead, defaultTo = "", onClos
             toast.success("Saved as template");
             qc.invalidateQueries({ queryKey: ["email-templates"] });
         },
-        onError: () => toast.error("Failed to save template"),
+        onError: (err) => toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to save template"),
     });
 
     const applyTemplate = (tpl) => {

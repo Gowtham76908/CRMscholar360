@@ -66,7 +66,7 @@ async function attendanceAutomationTick() {
 const startScheduler = () => {
     logger.info("[Scheduler] Starting background jobs...");
 
-    cron.schedule("*/5 * * * *", () => withRetry("processReminders", processReminders));
+    cron.schedule("* * * * *", () => withRetry("processReminders", processReminders));
     cron.schedule("*/5 * * * *", () => withRetry("autoBreakOffline", autoBreakOffline));
     // NOTE: leads are no longer auto-marked LOST after 7 days. Going-cold leads are
     // surfaced as a pull-based follow-up suggestion (followUpSuggestionService →

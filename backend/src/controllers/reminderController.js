@@ -44,6 +44,13 @@ const getMyReminders = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { leadId } = req.query;
+
+        // Lazily move overdue, still-pending reminders to UNSUCCESSFUL.
+        await prisma.reminder.updateMany({
+            where: { userId, outcome: "PENDING", remindAt: { lt: new Date() } },
+            data: { outcome: "UNSUCCESSFUL" },
+        });
+
         const where = { userId };
         if (leadId) where.leadId = leadId;
         const reminders = await prisma.reminder.findMany({
@@ -85,15 +92,24 @@ const dismissReminder = async (req, res, next) => {
     try {
         const { userId } = req.user;
         const { id } = req.params;
+        const { dismissed, outcome } = req.body;
 
         const reminder = await prisma.reminder.findUnique({ where: { id } });
         if (!reminder) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Reminder not found");
         if (reminder.userId !== userId) throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Access denied");
 
-        const updated = await prisma.reminder.update({
-            where: { id },
-            data: { dismissed: true },
-        });
+        const data = {};
+        if (outcome !== undefined) {
+            if (!["PENDING", "SUCCESSFUL", "UNSUCCESSFUL"].includes(outcome)) {
+                throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Invalid outcome");
+            }
+            data.outcome = outcome;
+            // Marking an outcome resolves the reminder.
+            if (outcome !== "PENDING") data.dismissed = true;
+        }
+        if (dismissed !== undefined) data.dismissed = dismissed;
+
+        const updated = await prisma.reminder.update({ where: { id }, data });
         res.json(updated);
     } catch (error) {
         return next(error);

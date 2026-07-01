@@ -40,6 +40,7 @@ const StatusBadge = ({ status }) => {
         WFH:      { bg: "bg-purple-100 text-purple-700", label: "WFH"      },
         HALF_DAY: { bg: "bg-yellow-100 text-yellow-700", label: "Half Day" },
         COMP_OFF: { bg: "bg-indigo-100 text-indigo-700", label: "Comp Off" },
+        HOLIDAY:  { bg: "bg-teal-100 text-teal-700",     label: "Holiday"  },
     };
     const s = map[status] || { bg: "bg-gray-100 text-gray-500", label: status };
     return (
@@ -288,7 +289,7 @@ const CheckInPanel = () => {
             queryClient.invalidateQueries({ queryKey: ["attendance-stats"] });
             toast.success("Checked out successfully!");
         },
-        onError: (error) => toast.error(error.response?.data?.message || "Failed to check out")
+        onError: (error) => toast.error(error.response?.data?.error?.message || error.response?.data?.message || "Failed to check out")
     });
 
     const handleCheckIn = () => {
@@ -597,7 +598,7 @@ const AdminReportsPanel = () => {
             queryClient.invalidateQueries({ queryKey: ["admin-monthly-report"] });
             queryClient.invalidateQueries({ queryKey: ["employee-attendance"] });
         },
-        onError: (err) => toast.error(err.response?.data?.message || "Failed to update status")
+        onError: (err) => toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to update status")
     });
 
     const StatusCell = ({ userId, date, status, isPast }) => {

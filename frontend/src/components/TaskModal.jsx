@@ -52,7 +52,7 @@ const TaskModal = ({ task, defaultLeadId, onClose }) => {
             queryClient.invalidateQueries({ queryKey: ["tasks"] });
             onClose();
         },
-        onError: (e) => toast.error(e.response?.data?.message || "Failed to create task"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to create task"),
     });
 
     const editMutation = useMutation({
@@ -62,7 +62,7 @@ const TaskModal = ({ task, defaultLeadId, onClose }) => {
             queryClient.invalidateQueries({ queryKey: ["tasks", task.id] });
             onClose();
         },
-        onError: (e) => toast.error(e.response?.data?.message || "Failed to update task"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to update task"),
     });
 
     const isPending = createMutation.isPending || editMutation.isPending || isUploading;

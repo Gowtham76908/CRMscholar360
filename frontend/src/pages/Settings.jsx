@@ -95,7 +95,7 @@ function SmtpSettings() {
             smtpSecure: form.smtpSecure,
         }),
         onSuccess: () => toast.success("SMTP settings saved"),
-        onError: () => toast.error("Failed to save"),
+        onError: (err) => toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to save SMTP settings"),
     });
 
     const test = useMutation({
@@ -109,7 +109,7 @@ function SmtpSettings() {
             testTo: form.testTo || form.smtpUser,
         }),
         onSuccess: () => toast.success("Test email sent! Check your inbox."),
-        onError: (e) => toast.error(e.response?.data?.message || "SMTP test failed"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "SMTP test failed"),
     });
 
     if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-indigo-400" /></div>;
@@ -212,7 +212,7 @@ function FieldRow({ field, onUpdate, onDelete }) {
     const update = useMutation({
         mutationFn: (data) => api.patch(`/custom-fields/${field.id}`, data),
         onSuccess: () => qc.invalidateQueries({ queryKey: ["lead-fields"] }),
-        onError: (e) => toast.error(e.response?.data?.message || "Failed to update field"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to update field"),
     });
 
     const handleLabelSave = () => {
@@ -306,7 +306,7 @@ function SlaSettings() {
             slaBreachDays:  Number(form.slaBreachDays),
         }),
         onSuccess: () => toast.success("SLA thresholds saved"),
-        onError:   () => toast.error("Failed to save"),
+        onError:   (err) => toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to save SLA settings"),
     });
 
     if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-indigo-400" /></div>;
@@ -409,7 +409,7 @@ function AttendanceSettings() {
             queryClient.invalidateQueries({ queryKey: ["company-settings"] });
             toast.success("Attendance settings saved");
         },
-        onError: (e) => toast.error(e.response?.data?.message || "Failed to save"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to save"),
     });
 
     if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-indigo-400" /></div>;
@@ -522,7 +522,7 @@ function AssistantSettings() {
             toast.success("AI Assistant settings saved");
             qc.invalidateQueries({ queryKey: ["company-settings"] });
         },
-        onError: () => toast.error("Failed to save"),
+        onError: (err) => toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to save AI settings"),
     });
 
     if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-indigo-400" /></div>;
@@ -637,7 +637,7 @@ function LeadFieldsSettings() {
             setForm({ name: "", fieldKey: "", type: "TEXT", options: "", required: false });
             setShowAdd(false);
         },
-        onError: (e) => toast.error(e.response?.data?.message || "Failed to create field"),
+        onError: (e) => toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to create field"),
     });
 
     const del = useMutation({
@@ -916,7 +916,7 @@ const Settings = () => {
             setSelectedPhotoFile(null);
             if (fileInputRef.current) fileInputRef.current.value = "";
         } catch (err) {
-            setMessage({ type: "error", text: err.response?.data?.message || "Failed to update profile." });
+            setMessage({ type: "error", text: err.response?.data?.error?.message || err.response?.data?.message || "Failed to update profile." });
         } finally {
             setIsSaving(false);
         }
@@ -930,7 +930,7 @@ const Settings = () => {
             setMessage({ type: "success", text: "Password changed successfully." });
             resetPass();
         } catch (err) {
-            setMessage({ type: "error", text: err.response?.data?.message || "Failed to change password." });
+            setMessage({ type: "error", text: err.response?.data?.error?.message || err.response?.data?.message || "Failed to change password." });
         } finally {
             setIsSaving(false);
         }

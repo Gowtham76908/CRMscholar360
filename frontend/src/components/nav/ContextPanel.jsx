@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { cn } from "../../lib/utils";
 import api from "../../api/axios";
 import { useAuth } from "../../context/AuthContext";
+import Scholar360Logo from "../Scholar360Logo";
 import {
     LayoutDashboard, Inbox, Plus, Users, KanbanSquare, Star,
     MessageSquare, Send, Zap as ZapIcon, Bot, CheckSquare,
@@ -269,7 +270,7 @@ const PANEL_COMPONENTS = {
 
 // ─── ContextPanel (Zone 2) ────────────────────────────────────────────────────
 
-export default function ContextPanel({ activeMode, open, onClose }) {
+export default function ContextPanel({ activeMode, open, pinned = false, onClose }) {
     const { user } = useAuth();
     const ActivePanel = PANEL_COMPONENTS[activeMode] ?? WorkloadPanel;
     const title = activeMode === "admin" && user?.role === "EMPLOYEE" ? "Settings" : (PANEL_TITLES[activeMode] || "");
@@ -280,15 +281,19 @@ export default function ContextPanel({ activeMode, open, onClose }) {
             <aside
                 className={cn(
                     "fixed inset-y-0 left-16 z-20 w-64 bg-white border-r border-gray-200 hidden md:flex flex-col transition-transform duration-300",
+                    // Pinned open: navbar shifts aside, so the logo can sit at the very
+                    // top. Hover preview: navbar still overlaps, so offset below it.
+                    pinned ? "pt-0" : "pt-16",
                     open ? "translate-x-0" : "-translate-x-full"
                 )}
             >
-                <div className="flex items-center px-5 h-16 border-b border-gray-100">
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                <div className="flex flex-col items-start justify-center gap-0.5 px-4 py-3 border-b border-gray-100">
+                    <Scholar360Logo size="xl" showText={false} />
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                         {title}
                     </p>
                 </div>
-                <div className="flex-1 overflow-y-auto px-2 py-3">
+                <div className="flex-1 overflow-y-auto px-2 py-3 flex flex-col">
                     <ActivePanel />
                 </div>
             </aside>

@@ -260,6 +260,7 @@ model Task {
   createdById    String?
   dueDate        DateTime
   status         TaskStatus   @default(PENDING)
+  outcome        String       @default("PENDING") // PENDING | SUCCESSFUL | UNSUCCESSFUL
   kanbanStatus   KanbanStatus @default(TODO)
   priority       Priority     @default(MEDIUM)
   type           TaskType     @default(TASK)
@@ -366,6 +367,7 @@ model Reminder {
   message     String
   isSent      Boolean  @default(false)
   dismissed   Boolean  @default(false)
+  outcome     String   @default("PENDING") // PENDING | SUCCESSFUL | UNSUCCESSFUL
   gcalEventId String?  // Google Calendar event id, when this reminder is mirrored to the user's calendar
 
   @@index([remindAt, isSent])
@@ -534,6 +536,19 @@ model LeadDepartmentStageEvent {
   @@index([createdAt])
 }
 
+model Holiday {
+  id            String   @id @default(uuid())
+  date          DateTime @db.Date
+  name          String
+  department    String?  // null = company-wide; else a UserDepartment code (SALES, LOAN, …)
+  createdById   String?
+  createdByName String?
+  createdAt     DateTime @default(now())
+
+  @@unique([date, department])
+  @@index([date])
+}
+
 model Attendance {
   id        String           @id @default(uuid())
   userId    String
@@ -633,6 +648,7 @@ enum AttendanceStatus {
   LEAVE
   HALF_DAY
   WFH
+  HOLIDAY
 }
 
 enum LeaveStatus {
@@ -1149,3 +1165,10 @@ model Expense {
   @@index([createdById])
   @@index([date])
 }
+
+model ThirdPartyPortal {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+

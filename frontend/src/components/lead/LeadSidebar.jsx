@@ -54,7 +54,7 @@ export default function LeadSidebar({ lead, leadId, hideContact = false, calls, 
             queryClient.invalidateQueries({ queryKey: ["lead-activities", leadId] });
             toast.success(value ? "WhatsApp opt-in enabled" : "WhatsApp opt-in removed");
         },
-        onError: () => toast.error("Failed to update WhatsApp opt-in"),
+        onError: (err) => toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to update WhatsApp opt-in"),
     });
 
     return (

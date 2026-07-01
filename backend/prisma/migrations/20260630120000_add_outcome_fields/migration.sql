@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Task" ADD COLUMN "outcome" TEXT NOT NULL DEFAULT 'PENDING';
+
+-- AlterTable
+ALTER TABLE "Reminder" ADD COLUMN "outcome" TEXT NOT NULL DEFAULT 'PENDING';

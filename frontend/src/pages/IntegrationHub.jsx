@@ -634,7 +634,7 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
             if (res.data.ok === false) toast.error(res.data.message || "Failed");
             else { toast.success(res.data.message || "Saved & connected"); onSaved?.(); onClose(); }
         } catch (err) {
-            toast.error(err.response?.data?.message || "Save failed");
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Save failed");
         } finally { setSaving(false); }
     };
 
@@ -1336,7 +1336,7 @@ export default function IntegrationHub() {
             const res = await api.get(startPath);
             openOAuth(res.data.authUrl || res.data.url);
         } catch (err) {
-            toast.error(err.response?.data?.message || "Failed to start OAuth");
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to start OAuth");
         }
     };
 
@@ -1345,7 +1345,7 @@ export default function IntegrationHub() {
             const res = await api.post(`/integration-hub/${key}/sync`);
             toast.success(`Synced ${res.data.synced ?? 0} records`);
             refresh();
-        } catch (err) { toast.error(err.response?.data?.message || "Sync failed"); }
+        } catch (err) { toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Sync failed"); }
     };
 
     const handleDisconnect = async (key) => {
@@ -1358,7 +1358,7 @@ export default function IntegrationHub() {
             }
             toast.success("Disconnected");
             refresh();
-        } catch (err) { toast.error(err.response?.data?.message || "Failed"); }
+        } catch (err) { toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to disconnect"); }
     };
 
     const scrollToCard = (platform) => {

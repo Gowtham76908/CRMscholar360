@@ -333,7 +333,7 @@ function EditDealModal({ deal, members, onClose, onSaved }) {
     const mutation = useMutation({
         mutationFn: (data) => api.patch(`/deals/${deal.id}`, data),
         onSuccess: (res) => { onSaved(res.data); onClose(); },
-        onError: (err) => setError(err?.response?.data?.message || "Failed to save"),
+        onError: (err) => setError(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to save"),
     });
 
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));

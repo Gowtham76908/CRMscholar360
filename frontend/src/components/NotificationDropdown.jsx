@@ -49,7 +49,8 @@ const NotificationDropdown = () => {
         refetchInterval: 60000,
     });
 
-    const unreadCount = notifications.filter(n => !n.isRead).length;
+    const unreadNotifications = notifications.filter(n => !n.isRead);
+    const unreadCount = unreadNotifications.length;
 
     const markOne = useMutation({
         mutationFn: (id) => api.patch(`/notifications/${id}/read`),
@@ -81,7 +82,7 @@ const NotificationDropdown = () => {
         <div className="relative" ref={dropdownRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl relative transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-55 rounded-xl relative transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
                 <Bell className="h-5 w-5" />
                 {unreadCount > 0 && (
@@ -118,16 +119,12 @@ const NotificationDropdown = () => {
 
                     {/* List */}
                     <div className="max-h-96 overflow-y-auto divide-y divide-gray-100/60">
-                        {notifications.length > 0 ? (
-                            notifications.map((n) => (
+                        {unreadNotifications.length > 0 ? (
+                            unreadNotifications.map((n) => (
                                 <div
                                     key={n.id}
                                     onClick={() => handleClick(n)}
-                                    className={`p-4 flex items-start gap-3.5 cursor-pointer transition-colors relative border-l-2 ${
-                                        !n.isRead 
-                                            ? "bg-indigo-50/20 border-l-indigo-500 hover:bg-indigo-50/40" 
-                                            : "border-l-transparent hover:bg-gray-50/80"
-                                    }`}
+                                    className="p-4 flex items-start gap-3.5 cursor-pointer transition-colors relative border-l-2 bg-indigo-50/20 border-l-indigo-500 hover:bg-indigo-50/40"
                                 >
                                     <RenderIcon type={n.type} />
                                     <div className="flex-1 min-w-0">

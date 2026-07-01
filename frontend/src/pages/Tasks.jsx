@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
 import { toast } from "sonner";
@@ -8,7 +8,7 @@ import SlidePanel from "../components/SlidePanel";
 import AddTaskForm from "../components/AddTaskForm";
 import TaskCalendar from "../components/TaskCalendar";
 import { useAuth } from "../context/AuthContext";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 const getPages = (current, total) => {
     const delta = 2;
@@ -25,6 +25,11 @@ const getPages = (current, total) => {
 
 const Tasks = () => {
     const queryClient = useQueryClient();
+    const location = useLocation();
+
+    useEffect(() => {
+        localStorage.setItem("last-leads-path", location.pathname + location.search);
+    }, [location]);
     const [filter, setFilter] = useState("ALL");
     const [view, setView] = useState("list");
     const [page, setPage] = useState(1);
@@ -72,7 +77,7 @@ const Tasks = () => {
         },
         onError: (err, _vars, ctx) => {
             if (ctx?.prev) ctx.prev.forEach(([key, val]) => queryClient.setQueryData(key, val));
-            toast.error(err.response?.data?.message || "Failed to update task status");
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to update task status");
         },
         onSettled: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }),
     });
@@ -96,7 +101,7 @@ const Tasks = () => {
         return (
             <div className="bg-red-50 p-6 rounded-2xl border border-red-100 text-center">
                 <p className="text-red-600 font-bold">Failed to load tasks</p>
-                <p className="text-red-400 text-sm mt-1">{error.response?.data?.message || error.message}</p>
+                <p className="text-red-400 text-sm mt-1">{error.response?.data?.error?.message || error.response?.data?.message || error.message}</p>
                 <button
                     onClick={() => queryClient.invalidateQueries({ queryKey: ["tasks"] })}
                     className="mt-4 px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-red-100 hover:bg-red-700 transition-all"

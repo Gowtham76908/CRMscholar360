@@ -149,7 +149,7 @@ const AddTaskForm = ({ onClose, leadId: initialLeadId }) => {
             onClose();
         },
         onError: (error) => {
-            toast.error(error.response?.data?.message || "Failed to create task");
+            toast.error(error.response?.data?.error?.message || error.response?.data?.message || "Failed to create task");
         }
     });
 

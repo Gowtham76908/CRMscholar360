@@ -13,7 +13,7 @@ import {
     ChevronDown, ChevronRight, Play, Clock, AlertCircle, ChevronLeft,
     Zap, Users, Save, SlidersHorizontal, Eye, MousePointerClick, GitBranch,
     TrendingUp, IndianRupee, Pencil, Paperclip, ArrowRight,
-    PanelRightOpen, PanelRightClose, Archive, MoreVertical, RefreshCw, RotateCcw, Copy,
+    PanelRightOpen, PanelRightClose, Archive, MoreVertical, RefreshCw, RotateCcw, Copy, Trash2,
 } from "lucide-react";
 import { Modal } from "../components/Modal";
 import SlidePanel from "../components/SlidePanel";
@@ -24,6 +24,9 @@ import AddLeadForm from "../components/AddLeadForm";
 import LeadSidebar from "../components/lead/LeadSidebar";
 import LeadDepartmentsPanel from "../components/lead/LeadDepartmentsPanel";
 import StudentJourneyPanel from "../components/lead/StudentJourneyPanel";
+import LeadUniversitiesPanel from "../components/lead/LeadUniversitiesPanel";
+import LeadDepositPanel from "../components/lead/LeadDepositPanel";
+import LeadVisaPanel from "../components/lead/LeadVisaPanel";
 import SmartSuggestions from "../components/lead/SmartSuggestions";
 import WhatsAppModal from "../components/lead/WhatsAppModal";
 import PostCallPanel from "../components/lead/PostCallPanel";
@@ -48,6 +51,8 @@ const FILTER_PILLS = [
     { id: "activity",    label: "Activity" },
     { id: "task",        label: "Tasks" },
     { id: "attachment",  label: "Attachments" },
+    { id: "document",    label: "Documents" },
+    { id: "visa",        label: "Visa Details" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -123,6 +128,29 @@ function TimelineItem({ item }) {
                     {meta.category && ` · Category: ${meta.category}`}
                     {meta.score && ` · Score: ${meta.score}`}
                 </p>
+            );
+        }
+        if (item.action === "LEAD_UPDATED" && (meta.message || meta.changes)) {
+            return (
+                <div className="mt-1.5 bg-slate-50 border border-slate-100 rounded-xl p-3 max-w-md shadow-3xs space-y-1.5">
+                    {meta.message && <p className="text-xs font-bold text-slate-800">{meta.message}</p>}
+                    {meta.changes && (
+                        <div className="text-[10px] text-slate-550 space-y-1 font-semibold">
+                            {meta.changes.financial_proof_docs !== undefined && (
+                                <div><span className="text-slate-400">Financial Proof:</span> <span className="text-slate-700">{meta.changes.financial_proof_docs || "None"}</span></div>
+                            )}
+                            {meta.changes.cas_form_number !== undefined && (
+                                <div><span className="text-slate-400">CAS/I-20 Form Number:</span> <span className="text-slate-700">{meta.changes.cas_form_number || "None"}</span></div>
+                            )}
+                            {meta.changes.visa_appointment_date !== undefined && (
+                                <div><span className="text-slate-400">Visa Appointment Date:</span> <span className="text-slate-700">{meta.changes.visa_appointment_date ? new Date(meta.changes.visa_appointment_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "None"}</span></div>
+                            )}
+                            {meta.changes.visa_manager_approved !== undefined && (
+                                <div><span className="text-slate-400">Manager Approved:</span> <span className="text-slate-700">{meta.changes.visa_manager_approved ? "Yes" : "No"}</span></div>
+                            )}
+                        </div>
+                    )}
+                </div>
             );
         }
         if (item.action === "DEPARTMENTS_ALLOCATED" && meta.departments) {
@@ -526,7 +554,7 @@ function CallItem({ call, leadId }) {
                         </div>
                     )}
                     {transcribe.isError && (
-                        <p className="text-xs text-red-500">{transcribe.error?.response?.data?.message ?? "Transcription failed"}</p>
+                        <p className="text-xs text-red-500">{transcribe.error?.response?.data?.error?.message || transcribe.error?.response?.data?.message || "Transcription failed"}</p>
                     )}
                     {call.summary && (
                         <div>
@@ -724,7 +752,7 @@ function CustomFieldsPanel({ leadId, lead }) {
             qc.invalidateQueries({ queryKey: ["lead-activities", leadId] });
             setEditing(false);
         },
-        onError: () => toast.error("Failed to save fields"),
+        onError: (err) => toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to save fields"),
     });
 
     if (visibleFields.length === 0) return null;
@@ -836,7 +864,7 @@ function ConvertToDealModal({ leadId, leadName, onClose, onSuccess }) {
     const mutation = useMutation({
         mutationFn: (data) => api.post("/deals", data),
         onSuccess,
-        onError: (err) => setError(err?.response?.data?.message || "Failed to create deal"),
+        onError: (err) => setError(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to create deal"),
     });
 
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -1008,7 +1036,21 @@ export default function LeadDetail() {
     const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN";
 
     const lastPath = localStorage.getItem("last-leads-path");
-    const backUrl = (lastPath && (lastPath.startsWith("/leads") || lastPath.startsWith("/department-board"))) ? lastPath : "/leads?view=kanban";
+    const validPaths = ["/leads", "/department-board", "/my-day", "/dashboard", "/tasks", "/inbox", "/deals"];
+    const isValid = lastPath && validPaths.some(p => lastPath.startsWith(p));
+    const backUrl = isValid ? lastPath : "/leads?view=kanban";
+
+    const getBackLabel = (path) => {
+        if (!path) return "Leads";
+        if (path.startsWith("/my-day")) return "My Day";
+        if (path.startsWith("/dashboard")) return "Dashboard";
+        if (path.startsWith("/department-board")) return "Department Board";
+        if (path.startsWith("/tasks")) return "Tasks";
+        if (path.startsWith("/inbox")) return "Inbox";
+        if (path.startsWith("/deals")) return "Deals";
+        return "Leads";
+    };
+    const backLabel = getBackLabel(backUrl);
 
     const [noteText, setNoteText] = useState("");
     const [showTaskModal, setShowTaskModal] = useState(false);
@@ -1022,6 +1064,7 @@ export default function LeadDetail() {
     const [teamActivityOpen, setTeamActivityOpen] = useState(false);
     const [automationsOpen, setAutomationsOpen] = useState(false);
     const [timelineFilter, setTimelineFilter] = useState("all");
+    const [activityTab, setActivityTab] = useState("timeline");
     const [expandedGroups, setExpandedGroups] = useState(new Set());
     const noteRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -1029,8 +1072,7 @@ export default function LeadDetail() {
     const [uploadingFile, setUploadingFile] = useState(false);
     const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
 
-    const [composerTab, setComposerTab] = useState("reminder");
-    const [reminderMsg, setReminderMsg] = useState("");
+    const [showReminder, setShowReminder] = useState(false);
     const [reminderAt, setReminderAt] = useState("");
     const [addToGcal, setAddToGcal] = useState(false);
     const [showStageDropdown, setShowStageDropdown] = useState(false);
@@ -1151,7 +1193,7 @@ export default function LeadDetail() {
                     toast.success(`Moved to ${nextStage.label}`);
                 },
                 onError: (err) => {
-                    toast.error(err.response?.data?.message || "Failed to update stage");
+                    toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to update stage");
                 }
             }
         );
@@ -1167,7 +1209,7 @@ export default function LeadDetail() {
                     toast.success(`Moved back to ${prevStage.label}`);
                 },
                 onError: (err) => {
-                    toast.error(err.response?.data?.message || "Failed to update stage");
+                    toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to update stage");
                 }
             }
         );
@@ -1183,7 +1225,7 @@ export default function LeadDetail() {
                     toast.success("Lead archived");
                 },
                 onError: (err) => {
-                    toast.error(err.response?.data?.message || "Failed to archive lead");
+                    toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to archive lead");
                 }
             }
         );
@@ -1199,7 +1241,7 @@ export default function LeadDetail() {
                     toast.success("Moved to Future Prospect");
                 },
                 onError: (err) => {
-                    toast.error(err.response?.data?.message || "Failed to move to future prospect");
+                    toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to move to future prospect");
                 }
             }
         );
@@ -1215,7 +1257,7 @@ export default function LeadDetail() {
                     toast.success("Lead unarchived and moved to Enquiry");
                 },
                 onError: (err) => {
-                    toast.error(err.response?.data?.message || "Failed to unarchive lead");
+                    toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to unarchive lead");
                 }
             }
         );
@@ -1231,7 +1273,7 @@ export default function LeadDetail() {
                     toast.success("Moved to Enquiry");
                 },
                 onError: (err) => {
-                    toast.error(err.response?.data?.message || "Failed to move to enquiry");
+                    toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to move to enquiry");
                 }
             }
         );
@@ -1242,9 +1284,14 @@ export default function LeadDetail() {
         if (showStageDropdown && dropdownButtonRef.current) {
             const rect = dropdownButtonRef.current.getBoundingClientRect();
             setDropdownPosition({
-                top: rect.bottom + window.scrollY + 8,
-                right: window.innerWidth - rect.right + window.scrollX,
+                top: rect.bottom + 4,
+                right: window.innerWidth - rect.right,
             });
+
+            // Close dropdown on scroll so it doesn't float detached
+            const handleScroll = () => setShowStageDropdown(false);
+            window.addEventListener("scroll", handleScroll, true);
+            return () => window.removeEventListener("scroll", handleScroll, true);
         }
     }, [showStageDropdown]);
 
@@ -1273,6 +1320,10 @@ export default function LeadDetail() {
 
     const handleNoteSubmit = (e) => {
         e.preventDefault();
+        if (showReminder && reminderAt) {
+            addReminder.mutate({ leadId: id, message: noteText.trim() || "Reminder", remindAt: reminderAt });
+            return;
+        }
         if (!noteText.trim()) return;
         addNote.mutate(noteText.trim());
     };
@@ -1315,7 +1366,7 @@ export default function LeadDetail() {
                 try {
                     const reminderId = res.data?.id;
                     await api.post("/google/calendar/events", {
-                        summary: reminderMsg.trim() || "CRM Reminder",
+                        summary: noteText.trim() || "CRM Reminder",
                         description: `Lead: ${lead?.name || id}`,
                         startTime: reminderAt,
                         reminderId,
@@ -1328,21 +1379,15 @@ export default function LeadDetail() {
             } else {
                 toast.success("Reminder set");
             }
-            setReminderMsg("");
+            setNoteText("");
             setReminderAt("");
+            setShowReminder(false);
             setAddToGcal(false);
-            setComposerTab("note");
         },
         onError: () => {
             toast.error("Failed to set reminder");
         }
     });
-
-    const handleReminderSubmit = (e) => {
-        e.preventDefault();
-        if (!reminderAt) return;
-        addReminder.mutate({ leadId: id, message: reminderMsg.trim() || "Reminder", remindAt: reminderAt });
-    };
 
     // ─── Timeline: merge + filter ─────────────────────────────────────────────
     const timelineGroups = useMemo(() => {
@@ -1394,6 +1439,17 @@ export default function LeadDetail() {
         setExpandedGroups(new Set(timelineGroups.filter(g => g.recent).map(g => g.key)));
     }, [timelineGroups]);
 
+    // ─── Detail sections shown as tabs inside the Activity card ───────────────
+    // Always expose the detail tabs so they're discoverable and can be filled in,
+    // even before any data exists for this lead.
+    const activityTabs = [
+        { id: "timeline", label: "Timeline" },
+        { id: "universities", label: "Universities" },
+        { id: "deposit", label: "Deposit" },
+        { id: "visa", label: "Visa" },
+    ];
+    const effectiveTab = activityTabs.some(t => t.id === activityTab) ? activityTab : "timeline";
+
     // ─── Initiating call via click2call ──────────────────────────────────────
     const initiateCall = useMutation({
         mutationFn: () => api.post("/calls/click2call", {
@@ -1405,7 +1461,7 @@ export default function LeadDetail() {
             setTimeout(() => setShowPostCall(true), 3000);
         },
         onError: (err) => {
-            const msg = err?.response?.data?.message || err.message || "Failed to initiate call";
+            const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err.message || "Failed to initiate call";
             toast.error(`Call failed: ${msg}`);
         },
     });
@@ -1441,7 +1497,7 @@ export default function LeadDetail() {
             <div className="flex flex-col items-center justify-center h-64 gap-3">
                 <AlertCircle className="h-8 w-8 text-red-400" />
                 <p className="text-gray-600 font-medium">Lead not found</p>
-                <Link to={backUrl} className="text-sm text-indigo-600 hover:underline">← Back to Leads</Link>
+                <Link to={backUrl} className="text-sm text-indigo-600 hover:underline">← Back to {backLabel}</Link>
             </div>
         );
     }
@@ -1453,7 +1509,7 @@ export default function LeadDetail() {
             {/* Back nav + prev/next */}
             <div className="flex items-center justify-between">
                 <Link to={backUrl} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors font-medium">
-                    <ArrowLeft className="h-4 w-4" /> Leads
+                    <ArrowLeft className="h-4 w-4" /> {backLabel}
                 </Link>
                 <div className="flex items-center gap-3">
                     {leadNav && leadNav.length > 0 && (
@@ -1861,37 +1917,39 @@ export default function LeadDetail() {
                                 </span>
                             )}
                         </div>
-                        {/* Inline note/reminder compose */}
-                        <div className="border-b border-gray-100 overflow-hidden">
-                            {/* Composer Tabs */}
-                            <div className="flex gap-1.5 px-4 pt-3 pb-1.5 border-b border-gray-100 bg-gray-50/50">
-                                <button
-                                    type="button"
-                                    onClick={() => setComposerTab("reminder")}
-                                    className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                                        composerTab === "reminder"
-                                            ? "bg-white text-indigo-700 shadow-sm border border-gray-200"
-                                            : "text-gray-500 hover:text-gray-800"
-                                    }`}
-                                >
-                                    ⏰ Set Reminder
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setComposerTab("note")}
-                                    className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                                        composerTab === "note"
-                                            ? "bg-white text-indigo-700 shadow-sm border border-gray-200"
-                                            : "text-gray-500 hover:text-gray-800"
-                                    }`}
-                                >
-                                    📝 Add Note
-                                </button>
-                            </div>
 
-                            {composerTab === "note" ? (
-                                <div className="p-4">
-                                    <form onSubmit={handleNoteSubmit} className="flex gap-2 items-end">
+                        {/* Section tabs: Timeline + detail sections (only when they have data) */}
+                        {activityTabs.length > 1 && (
+                            <div className="px-4 pt-3 flex items-center gap-1.5 border-b border-gray-100">
+                                {activityTabs.map(t => (
+                                    <button
+                                        key={t.id}
+                                        onClick={() => setActivityTab(t.id)}
+                                        className={`text-xs font-bold px-3 py-2 -mb-px border-b-2 transition-colors ${
+                                            effectiveTab === t.id
+                                                ? "border-indigo-600 text-indigo-700"
+                                                : "border-transparent text-gray-400 hover:text-gray-700"
+                                        }`}
+                                    >
+                                        {t.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {effectiveTab === "universities" ? (
+                            <LeadUniversitiesPanel leadId={id} lead={lead} embedded />
+                        ) : effectiveTab === "deposit" ? (
+                            <LeadDepositPanel leadId={id} lead={lead} embedded />
+                        ) : effectiveTab === "visa" ? (
+                            <LeadVisaPanel leadId={id} lead={lead} embedded />
+                        ) : (
+                        <>
+                        {/* Inline note/reminder compose (unified) */}
+                        <div className="border-b border-gray-100 overflow-hidden">
+                            <div className="p-4">
+                                <form onSubmit={handleNoteSubmit} className="space-y-3">
+                                    <div className="flex gap-2 items-end">
                                         <textarea
                                             ref={noteRef}
                                             value={noteText}
@@ -1902,7 +1960,9 @@ export default function LeadDetail() {
                                                     handleNoteSubmit(e);
                                                 }
                                             }}
-                                            placeholder="Add a note… (Enter to save, Shift+Enter for new line)"
+                                            placeholder={showReminder
+                                                ? "Reminder message… (optional)"
+                                                : "Add a note… (Enter to save, Shift+Enter for new line)"}
                                             rows={2}
                                             className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400"
                                         />
@@ -1928,58 +1988,64 @@ export default function LeadDetail() {
                                         </button>
                                         <button
                                             type="submit"
-                                            disabled={addNote.isPending || !noteText.trim()}
+                                            disabled={
+                                                (addNote.isPending || addReminder.isPending) ||
+                                                (showReminder ? !reminderAt : !noteText.trim())
+                                            }
                                             className="flex-shrink-0 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-all cursor-pointer"
                                         >
-                                            {addNote.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+                                            {(addNote.isPending || addReminder.isPending)
+                                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                : "Save"}
                                         </button>
-                                    </form>
-                                </div>
-                            ) : (
-                                <div className="p-4 bg-amber-50/10">
-                                    <form onSubmit={handleReminderSubmit} className="space-y-3">
-                                        <textarea
-                                            value={reminderMsg}
-                                            onChange={e => setReminderMsg(e.target.value)}
-                                            placeholder="Reminder message… (optional)"
-                                            rows={2}
-                                            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400 bg-white"
-                                        />
-                                        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-                                            <div className="flex items-center gap-2 w-full sm:w-auto">
-                                                <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">Remind me at:</span>
-                                                <input
-                                                    type="datetime-local"
-                                                    value={reminderAt}
-                                                    onChange={e => setReminderAt(e.target.value)}
-                                                    className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white cursor-pointer"
-                                                />
-                                                <button
-                                                    type="submit"
-                                                    disabled={addReminder.isPending || !reminderAt}
-                                                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-all cursor-pointer shadow-sm flex items-center gap-1.5"
-                                                    title="Save reminder"
-                                                >
-                                                    {addReminder.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "OK"}
-                                                </button>
-                                            </div>
-                                            {gcalConnected && (
-                                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    </div>
+
+                                    {/* Optional reminder / calendar */}
+                                    <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                                            <input
+                                                type="checkbox"
+                                                checked={showReminder}
+                                                onChange={e => {
+                                                    setShowReminder(e.target.checked);
+                                                    if (!e.target.checked) setReminderAt("");
+                                                }}
+                                                className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
+                                            />
+                                            <span className="flex items-center gap-1 text-xs text-gray-600 font-semibold">
+                                                <Calendar className="h-3.5 w-3.5 text-indigo-500" /> Set reminder
+                                            </span>
+                                        </label>
+
+                                        {showReminder && (
+                                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">Remind me at:</span>
                                                     <input
-                                                        type="checkbox"
-                                                        checked={addToGcal}
-                                                        onChange={e => setAddToGcal(e.target.checked)}
-                                                        className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
+                                                        type="datetime-local"
+                                                        value={reminderAt}
+                                                        onChange={e => setReminderAt(e.target.value)}
+                                                        className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white cursor-pointer"
                                                     />
-                                                    <span className="flex items-center gap-1 text-xs text-gray-600 font-semibold">
-                                                        <Calendar className="h-3.5 w-3.5 text-blue-500" /> Add to GCal
-                                                    </span>
-                                                </label>
-                                            )}
-                                        </div>
-                                    </form>
-                                </div>
-                            )}
+                                                </div>
+                                                {gcalConnected && (
+                                                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={addToGcal}
+                                                            onChange={e => setAddToGcal(e.target.checked)}
+                                                            className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
+                                                        />
+                                                        <span className="flex items-center gap-1 text-xs text-gray-600 font-semibold">
+                                                            <Calendar className="h-3.5 w-3.5 text-blue-500" /> Add to GCal
+                                                        </span>
+                                                    </label>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </form>
+                            </div>
                         </div>
 
                         {/* Filter pills */}
@@ -2001,7 +2067,23 @@ export default function LeadDetail() {
 
                         {/* Timeline content */}
                         <div className="p-5 max-h-[550px] overflow-y-auto">
-                            {timelineGroups.length === 0 ? (
+                            {timelineFilter === "visa" ? (
+                                <VisaDetailsSection
+                                    lead={lead}
+                                    onChanged={() => {
+                                        queryClient.invalidateQueries({ queryKey: ["lead", id] });
+                                        queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
+                                    }}
+                                />
+                            ) : timelineFilter === "document" ? (
+                                <DocumentSection 
+                                    lead={lead} 
+                                    onChanged={() => {
+                                        queryClient.invalidateQueries({ queryKey: ["lead", id] });
+                                        queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
+                                    }} 
+                                />
+                            ) : timelineGroups.length === 0 ? (
                                 <p className="text-sm text-gray-400 text-center py-8">No activity yet.</p>
                             ) : (
                                 <div className="space-y-5">
@@ -2120,6 +2202,8 @@ export default function LeadDetail() {
                                 </div>
                             )}
                         </div>
+                        </>
+                        )}
                     </div>
 
                     {/* ── Tasks Section ───────────────────────────────────── */}
@@ -2355,5 +2439,367 @@ export default function LeadDetail() {
                 />
             )}
         </div>
+    );
+}
+
+function DocumentSection({ lead, onChanged }) {
+    const [uploadingName, setUploadingName] = useState(null);
+    const [customDocName, setCustomDocName] = useState("");
+    const [isUploadingCustom, setIsUploadingCustom] = useState(false);
+
+    const docList = lead.customFields?.documents || [];
+
+    const defaultDocNames = [
+        "10th Marksheet",
+        "12th Marksheet",
+        "Passport Front",
+        "Passport Back",
+        "CV",
+        "UG Marksheet",
+        "UG Degree Certificate",
+        "SOP (Statement of Purpose)",
+        "LOR (Letter of Recommendation)"
+    ];
+
+    const renderedDocs = [...defaultDocNames];
+    docList.forEach(d => {
+        if (!renderedDocs.some(name => name.toLowerCase() === d.name.toLowerCase())) {
+            renderedDocs.push(d.name);
+        }
+    });
+
+    const handleUpload = async (docName, file) => {
+        if (!file) return;
+        if (file.size > 10 * 1024 * 1024) {
+            toast.error("File size exceeds 10MB limit");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("document", file);
+        formData.append("documentName", docName);
+
+        setUploadingName(docName);
+        try {
+            await api.post(`/upload/document/${lead.id}`, formData, {
+                headers: { "Content-Type": "multipart/form-data" }
+            });
+            toast.success(`${docName} uploaded successfully!`);
+            onChanged();
+        } catch (error) {
+            console.error("Failed to upload document:", error);
+            const errMsg = error.response?.data?.error?.message || error.response?.data?.message || "Failed to upload document";
+            toast.error(errMsg);
+        } finally {
+            setUploadingName(null);
+        }
+    };
+
+    const handleDelete = async (docName) => {
+        if (!window.confirm(`Are you sure you want to delete ${docName}?`)) return;
+        
+        try {
+            const updatedDocs = docList.filter(d => d.name.toLowerCase() !== docName.toLowerCase());
+            await api.patch(`/leads/${lead.id}/custom-fields`, {
+                fields: { documents: updatedDocs }
+            });
+            toast.success(`${docName} deleted successfully`);
+            onChanged();
+        } catch (error) {
+            console.error("Failed to delete document:", error);
+            toast.error("Failed to delete document");
+        }
+    };
+
+    return (
+        <div className="space-y-4 p-4 border border-slate-100 bg-slate-50 rounded-2xl text-left">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Documents & Credentials</label>
+            
+            <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                        <tr className="border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                            <th className="py-2 pr-2">Document List</th>
+                            <th className="py-2 pr-2">Uploaded On</th>
+                            <th className="py-2 pr-2">QC Status</th>
+                            <th className="py-2 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {renderedDocs.map(name => {
+                            const docInfo = docList.find(d => d.name.toLowerCase() === name.toLowerCase());
+                            const isUploading = uploadingName === name;
+                            
+                            return (
+                                <tr key={name} className="hover:bg-slate-100/50">
+                                    <td className="py-2.5 pr-2 font-semibold text-slate-700">
+                                        {name}
+                                        {docInfo && <span className="ml-1.5 text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1 rounded">Uploaded</span>}
+                                    </td>
+                                    <td className="py-2.5 pr-2 text-slate-500">
+                                        {docInfo?.uploadedAt 
+                                            ? new Date(docInfo.uploadedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                                            : "--"}
+                                    </td>
+                                    <td className="py-2.5 pr-2">
+                                        {docInfo ? (
+                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                                docInfo.qcStatus === "Approved" 
+                                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
+                                                    : "bg-amber-50 text-amber-700 border border-amber-100"
+                                            }`}>
+                                                {docInfo.qcStatus || "Under Review"}
+                                            </span>
+                                        ) : "--"}
+                                    </td>
+                                    <td className="py-2.5 text-right">
+                                        <div className="flex items-center justify-end gap-2">
+                                            {docInfo?.url && (
+                                                <a 
+                                                    href={docInfo.url} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer"
+                                                    className="px-2.5 py-1 bg-white border border-slate-200 text-[10px] font-bold text-slate-600 rounded-lg hover:bg-slate-50 shadow-3xs cursor-pointer inline-block"
+                                                >
+                                                    View
+                                                </a>
+                                            )}
+                                            
+                                            <label className="px-2.5 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-700 cursor-pointer shadow-3xs hover:scale-[1.02] active:scale-[0.98] transition-all inline-flex items-center gap-1">
+                                                {isUploading ? (
+                                                    <>
+                                                        <Loader2 className="h-3 w-3 animate-spin" /> Uploading...
+                                                    </>
+                                                ) : "Upload"}
+                                                <input 
+                                                    type="file" 
+                                                    className="hidden" 
+                                                    onChange={(e) => handleUpload(name, e.target.files?.[0])}
+                                                    disabled={isUploading}
+                                                />
+                                            </label>
+
+                                            {docInfo?.url && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDelete(name)}
+                                                    className="p-1 rounded-lg hover:bg-rose-50 text-rose-500 hover:text-rose-700 transition-colors cursor-pointer"
+                                                    title="Delete document"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="border-t border-slate-200/60 pt-3 mt-2">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Upload Custom Document</p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <input 
+                        type="text" 
+                        placeholder="Enter document name (e.g. Course Completion)"
+                        value={customDocName}
+                        onChange={(e) => setCustomDocName(e.target.value)}
+                        className="flex-1 px-3 py-1.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 text-xs font-semibold"
+                    />
+                    <label className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all shadow-3xs text-center cursor-pointer select-none inline-flex items-center justify-center gap-1.5 ${
+                        customDocName.trim() 
+                            ? "bg-indigo-600 hover:bg-indigo-700 text-white hover:scale-[1.01]" 
+                            : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                    }`}>
+                        {isUploadingCustom ? (
+                            <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...
+                            </>
+                        ) : "Select & Upload"}
+                        {customDocName.trim() && (
+                            <input 
+                                type="file" 
+                                className="hidden" 
+                                onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                        setIsUploadingCustom(true);
+                                        await handleUpload(customDocName.trim(), file);
+                                        setCustomDocName("");
+                                        setIsUploadingCustom(false);
+                                    }
+                                }}
+                            />
+                        )}
+                    </label>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function VisaDetailsSection({ lead, onChanged }) {
+    const [editing, setEditing] = useState(false);
+    const [values, setValues] = useState({
+        financial_proof_docs: lead.customFields?.financial_proof_docs || "",
+        cas_form_number: lead.customFields?.cas_form_number || "",
+        visa_appointment_date: lead.customFields?.visa_appointment_date ? new Date(lead.customFields?.visa_appointment_date).toISOString().split("T")[0] : "",
+        visa_manager_approved: lead.customFields?.visa_manager_approved === true || lead.customFields?.visa_manager_approved === "true"
+    });
+
+    useEffect(() => {
+        setValues({
+            financial_proof_docs: lead.customFields?.financial_proof_docs || "",
+            cas_form_number: lead.customFields?.cas_form_number || "",
+            visa_appointment_date: lead.customFields?.visa_appointment_date ? new Date(lead.customFields?.visa_appointment_date).toISOString().split("T")[0] : "",
+            visa_manager_approved: lead.customFields?.visa_manager_approved === true || lead.customFields?.visa_manager_approved === "true"
+        });
+    }, [lead]);
+
+    const saveMutation = useMutation({
+        mutationFn: async () => {
+            await api.patch(`/leads/${lead.id}/custom-fields`, {
+                fields: {
+                    financial_proof_docs: values.financial_proof_docs,
+                    cas_form_number: values.cas_form_number,
+                    visa_appointment_date: values.visa_appointment_date || null,
+                    visa_manager_approved: values.visa_manager_approved
+                }
+            });
+        },
+        onSuccess: () => {
+            toast.success("Visa details updated successfully");
+            setEditing(false);
+            onChanged();
+        },
+        onError: (err) => {
+            console.error(err);
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to update visa details");
+        }
+    });
+
+    if (!editing) {
+        return (
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 space-y-4 text-left">
+                <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
+                    <div className="flex items-center gap-2">
+                        <span className="text-lg">🛡️</span>
+                        <h4 className="text-xs font-extrabold text-slate-750 uppercase tracking-wider">Visa File & Appointment Details</h4>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setEditing(true)}
+                        className="text-[10px] font-bold text-indigo-650 hover:text-indigo-850 transition-all bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl shadow-3xs cursor-pointer"
+                    >
+                        Edit Details
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-xs font-semibold">
+                    <div>
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase block tracking-wider mb-0.5">Financial Proof Documents</span>
+                        <span className="text-slate-800 font-bold">{values.financial_proof_docs || "N/A"}</span>
+                    </div>
+                    <div>
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase block tracking-wider mb-0.5">CAS / I-20 Form Number</span>
+                        <span className="text-slate-800 font-bold">{values.cas_form_number || "N/A"}</span>
+                    </div>
+                    <div>
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase block tracking-wider mb-0.5">Visa Appointment Date</span>
+                        <span className="text-slate-800 font-bold">
+                            {values.visa_appointment_date 
+                                ? new Date(values.visa_appointment_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) 
+                                : "N/A"}
+                        </span>
+                    </div>
+                    <div>
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase block tracking-wider mb-0.5">Visa Manager Approved</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            values.visa_manager_approved 
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
+                                : "bg-amber-50 text-amber-700 border border-amber-100"
+                        }`}>
+                            {values.visa_manager_approved ? "Approved" : "Pending"}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(); }} className="bg-slate-50 border border-slate-100 rounded-2xl p-5 space-y-4 text-left">
+            <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
+                <div className="flex items-center gap-2">
+                    <span className="text-lg">🛡️</span>
+                    <h4 className="text-xs font-extrabold text-slate-750 uppercase tracking-wider">Edit Visa Details</h4>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setEditing(false)}
+                        className="text-[10px] font-bold text-slate-550 hover:text-slate-700 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-3xs cursor-pointer"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={saveMutation.isPending}
+                        style={{ backgroundColor: '#4f46e5', borderColor: '#4f46e5', color: '#ffffff' }}
+                        className="text-[10px] font-bold px-3 py-1.5 rounded-xl shadow-3xs disabled:opacity-50 cursor-pointer"
+                    >
+                        {saveMutation.isPending ? "Saving..." : "Save"}
+                    </button>
+                </div>
+            </div>
+
+            <div className="space-y-4">
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Financial Proof Documents</label>
+                    <input
+                        type="text"
+                        placeholder="e.g. Education loan sanction letter / Bank statement"
+                        value={values.financial_proof_docs}
+                        onChange={e => setValues({ ...values, financial_proof_docs: e.target.value })}
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white"
+                    />
+                </div>
+
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">CAS / I-20 Form Number</label>
+                    <input
+                        type="text"
+                        placeholder="e.g. CAS-9473-GB"
+                        value={values.cas_form_number}
+                        onChange={e => setValues({ ...values, cas_form_number: e.target.value })}
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white"
+                    />
+                </div>
+
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Visa Appointment Date</label>
+                    <input
+                        type="date"
+                        value={values.visa_appointment_date}
+                        onChange={e => setValues({ ...values, visa_appointment_date: e.target.value })}
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white text-left font-semibold"
+                    />
+                </div>
+
+                <div className="pt-2">
+                    <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none font-bold">
+                        <input
+                            type="checkbox"
+                            checked={values.visa_manager_approved}
+                            onChange={e => setValues({ ...values, visa_manager_approved: e.target.checked })}
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-200"
+                        />
+                        Visa Manager Approved File
+                    </label>
+                </div>
+            </div>
+        </form>
     );
 }

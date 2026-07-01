@@ -326,4 +326,145 @@ router.post("/resume/:leadId", (req, res, next) => {
     }
 });
 
+// Configure multer storage for general student documents
+const documentUploadDir = "uploads/documents";
+if (!fs.existsSync(documentUploadDir)) {
+    fs.mkdirSync(documentUploadDir, { recursive: true });
+}
+
+const documentStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => {
+        cb(null, documentUploadDir);
+    },
+    filename: (_req, file, cb) => {
+        const uniqueName = `doc-${crypto.randomBytes(16).toString("hex")}${path.extname(file.originalname)}`;
+        cb(null, uniqueName);
+    }
+});
+
+// Multer upload configuration for general documents
+const uploadDocument = multer({
+    storage: documentStorage,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    fileFilter: (_req, file, cb) => {
+        const filetypes = /pdf|doc|docx|txt|rtf|odt|jpg|jpeg|png/;
+        const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = filetypes.test(file.mimetype) || 
+            file.mimetype === "application/pdf" || 
+            file.mimetype === "application/msword" || 
+            file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+            file.mimetype.startsWith("image/");
+        if (extname || mimetype) {
+            cb(null, true);
+        } else {
+            cb(new Error("Only document files (PDF, DOC, DOCX, TXT, images) are allowed"));
+        }
+    }
+});
+
+// Upload lead document
+router.post("/document/:leadId", (req, res, next) => {
+    uploadDocument.single("document")(req, res, (err) => {
+        if (err) {
+            console.error("Multer document upload error:", err);
+            return res.status(400).json({
+                error: {
+                    code: "UPLOAD_ERROR",
+                    message: err.message || "Failed to upload document."
+                }
+            });
+        }
+        next();
+    });
+}, async (req, res) => {
+    try {
+        const { leadId } = req.params;
+        const { documentName } = req.body;
+        const { userId } = req.user;
+
+        if (!req.file) {
+            return res.status(400).json({ message: "No file uploaded" });
+        }
+        if (!documentName) {
+            return res.status(400).json({ message: "documentName is required" });
+        }
+
+        const lead = await prisma.lead.findUnique({
+            where: { id: leadId }
+        });
+        if (!lead) {
+            return res.status(404).json({ message: "Lead not found" });
+        }
+
+        // Try uploading to Cloudinary
+        let documentUrl = await uploadToCloudinary(req.file.path, "documents", "raw");
+
+        // If Cloudinary succeeded, delete local file
+        if (documentUrl) {
+            fs.unlink(req.file.path, (err) => {
+                if (err) console.error("Error deleting local file after Cloudinary upload:", err);
+            });
+        } else {
+            documentUrl = `/uploads/documents/${req.file.filename}`;
+        }
+
+        const fileName = req.file.originalname;
+
+        const customFields = lead.customFields || {};
+        let docs = Array.isArray(customFields.documents) ? [...customFields.documents] : [];
+
+        const existingIdx = docs.findIndex(d => d.name.toLowerCase() === documentName.toLowerCase());
+        const docObj = {
+            name: documentName,
+            url: documentUrl,
+            fileName: fileName,
+            uploadedAt: new Date().toISOString(),
+            qcStatus: "Approved"
+        };
+
+        if (existingIdx > -1) {
+            docs[existingIdx] = docObj;
+        } else {
+            docs.push(docObj);
+        }
+
+        const updatedCustomFields = {
+            ...customFields,
+            documents: docs
+        };
+
+        await prisma.lead.update({
+            where: { id: leadId },
+            data: { customFields: updatedCustomFields }
+        });
+
+        // Log Activity
+        const logActivity = require("../utils/activityLogger");
+        await logActivity({
+            leadId,
+            userId,
+            action: "DOCUMENT_UPLOADED",
+            metadata: {
+                documentName,
+                documentUrl,
+                fileName,
+                uploadedBy: req.user.name || "System"
+            }
+        });
+
+        res.json({
+            message: "Document uploaded successfully",
+            documents: docs
+        });
+    } catch (error) {
+        console.error("Document upload error:", error);
+        if (req.file) {
+            fs.unlink(req.file.path, (err) => {
+                if (err) console.error("Error deleting file:", err);
+            });
+        }
+        res.status(500).json({ message: "Failed to upload document" });
+    }
+});
+
 module.exports = router;

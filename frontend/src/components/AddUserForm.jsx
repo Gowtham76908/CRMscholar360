@@ -130,7 +130,7 @@ const AddUserForm = ({ onClose }) => {
 
             {mutation.isError && (
                 <p className="text-sm text-red-600">
-                    {mutation.error?.response?.data?.message || "Failed to create user. Please try again."}
+                    {mutation.error?.response?.data?.error?.message || mutation.error?.response?.data?.message || "Failed to create user. Please try again."}
                 </p>
             )}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, forwardRef } from "react";
+import { useState, useEffect, useRef, forwardRef, useMemo } from "react";
 import { useForm, FormProvider, useFormContext, useController } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -6,12 +6,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
 import {
     Loader2, X, User, GraduationCap, Megaphone,
-    ChevronRight, ChevronLeft, Check, AlertTriangle, ChevronDown, Search,
+    ChevronRight, ChevronLeft, Check, AlertTriangle, ChevronDown, Search, Plus,
 } from "lucide-react";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 import { getExampleNumber } from "libphonenumber-js";
 import examples from "libphonenumber-js/mobile/examples";
+import { cn } from "../lib/utils";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -23,6 +24,12 @@ const DESTINATION_OPTIONS = [
     "Ireland",
     "Germany",
     "Other",
+];
+
+const STANDARD_OTHER_COUNTRIES = [
+    "New Zealand", "Singapore", "France", "Sweden", "Netherlands", 
+    "Italy", "Spain", "Switzerland", "United Arab Emirates", 
+    "Malaysia", "Japan", "South Korea", "Finland", "Norway", "Denmark"
 ];
 
 /**
@@ -121,6 +128,7 @@ const preferencesSchema = z.object({
 
 const attributionSchema = z.object({
     leadSource: z.string().min(1, "Lead source is required"),
+    leadSubSource: z.string().optional(),
 });
 
 const masterSchema = contactSchema.merge(preferencesSchema).merge(attributionSchema);
@@ -181,50 +189,26 @@ function RHFPhoneInput({ name, onChangeCallback }) {
     const { field } = useController({ name, control, defaultValue: "" });
     const [country, setCountry] = useState("IN");
 
-    // Get example placeholder dynamically
-    let placeholder = "Enter phone number";
-    try {
-        const example = getExampleNumber(country || "IN", examples);
-        if (example) {
-            placeholder = example.formatInternational();
-        }
-    } catch (e) {
-        // Fallback
-    }
-
     const containerBorderCls = err
         ? "border-red-400 ring-2 ring-red-100"
         : "border-gray-200 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100";
 
     return (
         <div className="space-y-1">
-            <div className={`phone-input-container rounded-xl border bg-white overflow-hidden transition-all ${containerBorderCls}`}>
+            <div className={`flex items-center border rounded-xl bg-white transition-all overflow-hidden ${containerBorderCls}`}>
                 <PhoneInput
-                    {...field}
-                    onChange={(value) => {
-                        field.onChange(value);
-                        if (onChangeCallback) {
-                            onChangeCallback(value);
-                        }
-                    }}
+                    international
                     defaultCountry="IN"
-                    country={country}
-                    onCountryChange={(c) => {
-                        if (c) setCountry(c);
+                    value={field.value}
+                    onChange={(val) => {
+                        field.onChange(val || "");
+                        if (onChangeCallback) onChangeCallback(val || "");
                     }}
-                    placeholder={placeholder}
+                    onCountryChange={setCountry}
                     inputComponent={PhoneInputCustomComponent}
-                    className="w-full flex items-center bg-transparent"
                 />
             </div>
-
-            {/* Zod error */}
-            {err && (
-                <p className="text-red-500 text-xs font-medium flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3 flex-shrink-0" />
-                    {err.message}
-                </p>
-            )}
+            {err && <p className="text-red-500 text-xs mt-1 font-medium">{err.message}</p>}
         </div>
     );
 }
@@ -235,16 +219,98 @@ function RHFMultiSelect({ name, options }) {
     const err = name.split(".").reduce((o, k) => o?.[k], errors);
     const { field } = useController({ name, control, defaultValue: [] });
 
+    // Local state for custom countries & search
+    const [customCountries, setCustomCountries] = useState(() => {
+        try {
+            return JSON.parse(localStorage.getItem("crm-custom-countries") || "[]");
+        } catch (e) {
+            return [];
+        }
+    });
+
+    const [showOtherDropdown, setShowOtherDropdown] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const dropdownRef = useRef(null);
+
+    // Close dropdown on click outside
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setShowOtherDropdown(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
     const toggle = (opt) => {
         const cur = field.value || [];
         field.onChange(cur.includes(opt) ? cur.filter(v => v !== opt) : [...cur, opt]);
     };
 
+    // Combine standard other countries and custom countries
+    const allOtherCountries = useMemo(() => {
+        const set = new Set([
+            ...STANDARD_OTHER_COUNTRIES,
+            ...customCountries
+        ]);
+        // Remove the main options to avoid duplicates
+        options.forEach(o => set.delete(o));
+        return Array.from(set).sort();
+    }, [customCountries, options]);
+
+    // Filtered other countries based on search query
+    const filteredOtherCountries = useMemo(() => {
+        if (!searchQuery) return allOtherCountries;
+        const q = searchQuery.toLowerCase().trim();
+        return allOtherCountries.filter(c => c.toLowerCase().includes(q));
+    }, [allOtherCountries, searchQuery]);
+
+    // Check if the search query matches any country exactly (case-insensitive)
+    const hasExactMatch = useMemo(() => {
+        const q = searchQuery.toLowerCase().trim();
+        if (!q) return true;
+        return allOtherCountries.some(c => c.toLowerCase() === q) || options.some(c => c.toLowerCase() === q);
+    }, [allOtherCountries, options, searchQuery]);
+
+    const handleAddCountry = () => {
+        const raw = searchQuery.trim();
+        if (!raw) return;
+        
+        // Convert to Title Case
+        const formatted = raw.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+        
+        // Check if it already exists case-insensitively
+        const lowerFormatted = formatted.toLowerCase();
+        const existingInMain = options.find(o => o.toLowerCase() === lowerFormatted);
+        const existingInOthers = allOtherCountries.find(o => o.toLowerCase() === lowerFormatted);
+
+        if (existingInMain) {
+            toggle(existingInMain);
+        } else if (existingInOthers) {
+            toggle(existingInOthers);
+        } else {
+            // Add to custom countries and save to localStorage
+            const updated = [...customCountries, formatted];
+            setCustomCountries(updated);
+            localStorage.setItem("crm-custom-countries", JSON.stringify(updated));
+            toggle(formatted);
+        }
+        setSearchQuery("");
+    };
+
+    const mainOptions = options.filter(o => o !== "Other");
+    const selectedValues = field.value || [];
+
+    // Selected countries that are not in the main options list
+    const selectedOtherCountries = selectedValues.filter(v => !mainOptions.includes(v));
+
     return (
-        <>
+        <div className="space-y-3">
+            {/* Main Options Pills */}
             <div className="flex flex-wrap gap-2 mt-1">
-                {options.map(opt => {
-                    const active = (field.value || []).includes(opt);
+                {mainOptions.map(opt => {
+                    const active = selectedValues.includes(opt);
                     return (
                         <button
                             key={opt}
@@ -260,9 +326,112 @@ function RHFMultiSelect({ name, options }) {
                         </button>
                     );
                 })}
+
+                {/* Selected "Other" Countries Pills */}
+                {selectedOtherCountries.map(opt => (
+                    <button
+                        key={opt}
+                        type="button"
+                        onClick={() => toggle(opt)}
+                        className="px-3.5 py-2 rounded-xl text-sm font-semibold border bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200 flex items-center gap-1.5"
+                    >
+                        {opt}
+                        <X className="h-3.5 w-3.5 shrink-0 text-indigo-200 hover:text-white transition-colors" />
+                    </button>
+                ))}
+
+                {/* Other Countries Dropdown Trigger */}
+                <div className="relative" ref={dropdownRef}>
+                    <button
+                        type="button"
+                        onClick={() => setShowOtherDropdown(prev => !prev)}
+                        className={`px-3.5 py-2 rounded-xl text-sm font-semibold border transition-all flex items-center gap-1.5 ${
+                            showOtherDropdown
+                                ? "bg-indigo-50 border-indigo-350 text-indigo-650"
+                                : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600"
+                        }`}
+                    >
+                        Other Countries...
+                        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showOtherDropdown ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {/* Searchable Dropdown Panel */}
+                    {showOtherDropdown && (
+                        <div className="absolute left-0 mt-2 w-72 bg-white rounded-2xl border border-gray-200 shadow-xl z-50 p-3.5 space-y-3 animate-fadeIn">
+                            {/* Search Box */}
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search or add country..."
+                                    className="pl-9 pr-8 w-full border border-gray-200 rounded-xl py-2 text-xs focus:ring-2 focus:ring-indigo-150 focus:border-indigo-400 outline-none bg-gray-55"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            if (!hasExactMatch) {
+                                                handleAddCountry();
+                                            }
+                                        }
+                                    }}
+                                />
+                                {searchQuery && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSearchQuery("")}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                    >
+                                        <X className="h-3.5 w-3.5" />
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Countries List */}
+                            <div className="max-h-48 overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent text-left">
+                                {filteredOtherCountries.map(country => {
+                                    const active = selectedValues.includes(country);
+                                    return (
+                                        <button
+                                            key={country}
+                                            type="button"
+                                            onClick={() => toggle(country)}
+                                            className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+                                                active
+                                                    ? "bg-indigo-50 text-indigo-700"
+                                                    : "hover:bg-gray-50 text-gray-700"
+                                            }`}
+                                        >
+                                            <span>{country}</span>
+                                            {active && <Check className="h-3.5 w-3.5 text-indigo-600" />}
+                                        </button>
+                                    );
+                                })}
+
+                                {filteredOtherCountries.length === 0 && searchQuery && hasExactMatch && (
+                                    <p className="text-xs text-gray-400 text-center py-4">No countries found</p>
+                                )}
+                            </div>
+
+                            {/* Add Custom Country Option */}
+                            {searchQuery && !hasExactMatch && (
+                                <div className="border-t border-gray-100 pt-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleAddCountry}
+                                        className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold text-indigo-600 hover:bg-indigo-50 flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <Plus className="h-3.5 w-3.5 shrink-0" />
+                                        Add "{searchQuery.trim()}"
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
             {err && <p className="text-red-500 text-xs mt-1.5 font-medium">{err.message}</p>}
-        </>
+        </div>
     );
 }
 
@@ -434,6 +603,166 @@ function StepPreferences() {
     );
 }
 
+// ─── Sub-Source Selector (for Reference / Education Fair) ────────────────────
+function RHFSubSourceSelect({ name, source }) {
+    const { register, setValue, watch } = useFormContext();
+    const currentValue = watch(name) || "";
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const containerRef = useRef(null);
+
+    // Load custom sub-sources from localStorage
+    const [customSources, setCustomSources] = useState(() => {
+        try {
+            const saved = localStorage.getItem("crm-custom-sub-sources");
+            return saved ? JSON.parse(saved) : [];
+        } catch {
+            return [];
+        }
+    });
+
+    const standardOptions = ["Offline", "Online", "Event"];
+    
+    // Combine standard and custom options, removing duplicates case-insensitively
+    const allOptions = useMemo(() => {
+        const seen = new Set();
+        const result = [];
+        [...standardOptions, ...customSources].forEach(opt => {
+            const lower = opt.trim().toLowerCase();
+            if (!seen.has(lower)) {
+                seen.add(lower);
+                result.push(opt.trim());
+            }
+        });
+        return result;
+    }, [customSources]);
+
+    // Filtered options based on search query
+    const filteredOptions = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        if (!query) return allOptions;
+        return allOptions.filter(opt => opt.toLowerCase().includes(query));
+    }, [allOptions, searchQuery]);
+
+    // Check if the exact query exists (case-insensitive)
+    const showAddButton = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        if (!query) return false;
+        return !allOptions.some(opt => opt.toLowerCase() === query);
+    }, [allOptions, searchQuery]);
+
+    // Format query to Title Case
+    const toTitleCase = (str) => {
+        return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+    };
+
+    const handleSelect = (val) => {
+        setValue(name, val, { shouldValidate: true, shouldDirty: true });
+        setIsOpen(false);
+        setSearchQuery("");
+    };
+
+    const handleAddCustom = () => {
+        const trimmed = searchQuery.trim();
+        if (!trimmed) return;
+        const formatted = toTitleCase(trimmed);
+        
+        // Add to state and save to localStorage
+        const updated = [...customSources, formatted];
+        setCustomSources(updated);
+        localStorage.setItem("crm-custom-sub-sources", JSON.stringify(updated));
+        
+        handleSelect(formatted);
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (containerRef.current && !containerRef.current.contains(e.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    return (
+        <div className="relative" ref={containerRef}>
+            <input type="hidden" {...register(name)} />
+            
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className={cn(
+                    "w-full px-3.5 py-2.5 text-sm border rounded-xl bg-white outline-none transition-all flex items-center justify-between text-left",
+                    isOpen ? "border-indigo-500 ring-2 ring-indigo-100" : "border-gray-205 hover:border-gray-300"
+                )}
+            >
+                <span className={cn(currentValue ? "text-gray-900 font-medium" : "text-gray-400")}>
+                    {currentValue || `Select ${source.toLowerCase()} detail...`}
+                </span>
+                <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform duration-200", isOpen && "transform rotate-180")} />
+            </button>
+
+            {isOpen && (
+                <div className="absolute left-0 right-0 mt-2 bg-white border border-gray-150 rounded-xl shadow-xl z-50 p-2.5 space-y-2 max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150">
+                    {/* Search bar */}
+                    <div className="relative">
+                        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder={`Search or add custom ${source.toLowerCase()}...`}
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 outline-none focus:bg-white focus:border-indigo-550 focus:ring-2 focus:ring-indigo-100"
+                            autoFocus
+                        />
+                    </div>
+
+                    {/* Options list */}
+                    <div className="space-y-0.5">
+                        {filteredOptions.length > 0 ? (
+                            filteredOptions.map((opt) => (
+                                <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => handleSelect(opt)}
+                                    className={cn(
+                                        "w-full text-left px-2.5 py-1.5 text-xs rounded-lg font-semibold transition-colors flex items-center justify-between",
+                                        currentValue === opt
+                                            ? "bg-indigo-50 text-indigo-700"
+                                            : "text-gray-600 hover:bg-gray-55"
+                                    )}
+                                >
+                                    <span>{opt}</span>
+                                    {currentValue === opt && <Check className="h-3.5 w-3.5 text-indigo-650" />}
+                                </button>
+                            ))
+                        ) : (
+                            !showAddButton && (
+                                <p className="text-[11px] text-gray-400 text-center py-2">No options found</p>
+                            )
+                        )}
+                    </div>
+
+                    {/* Add custom option button */}
+                    {showAddButton && (
+                        <div className="border-t border-gray-100 pt-2 mt-1">
+                            <button
+                                type="button"
+                                onClick={handleAddCustom}
+                                className="w-full text-left px-2.5 py-2 text-xs text-indigo-650 hover:bg-indigo-50/70 rounded-lg font-bold flex items-center gap-1.5 transition-colors"
+                            >
+                                <Plus className="h-3.5 w-3.5 shrink-0 text-indigo-500" />
+                                <span className="truncate">Add "{toTitleCase(searchQuery)}"</span>
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── Step 3 – Marketing & Attribution ────────────────────────────────────────
 function StepAttribution() {
     const { watch } = useFormContext();
@@ -459,6 +788,13 @@ function StepAttribution() {
                     placeholder="— Select lead source —"
                 />
             </Field>
+
+            {/* Conditionally show Sub-Source Dropdown */}
+            {(selected === "Reference" || selected === "Education Fair") && (
+                <Field name="leadSubSource" label={`${selected} Detail / Sub-Source`} hint="optional">
+                    <RHFSubSourceSelect name="leadSubSource" source={selected} />
+                </Field>
+            )}
 
             {/* Visual confirmation card */}
             {sourceObj && (
@@ -538,6 +874,7 @@ const AddLeadForm = ({ onClose, lead }) => {
             leadSource:           lead?.customFields?.leadSourceDetail ||
                                   LEAD_SOURCE_OPTIONS.find(s => s.backendValue === lead?.source)?.label ||
                                   "",
+            leadSubSource:        lead?.customFields?.leadSubSource || "",
         },
     });
 
@@ -613,6 +950,7 @@ const AddLeadForm = ({ onClose, lead }) => {
                 ...(values.intakeTerm                    && { intakeTerm:           values.intakeTerm }),
                 ...(values.destinationCountries?.length  && { destinationCountries: values.destinationCountries.join(", ") }),
                 ...(values.leadSource                    && { leadSourceDetail:     values.leadSource }),
+                ...(values.leadSubSource                 && { leadSubSource:        values.leadSubSource }),
             },
         };
 
@@ -771,7 +1109,7 @@ const AddLeadForm = ({ onClose, lead }) => {
                     <div className="flex items-center gap-3">
                         {mutation.isError && (
                             <p className="text-xs text-red-600 font-medium max-w-[180px] text-right leading-tight">
-                                {mutation.error?.response?.data?.message || "Failed to save. Try again."}
+                                {mutation.error?.response?.data?.error?.message || mutation.error?.response?.data?.message || "Failed to save. Try again."}
                             </p>
                         )}
 

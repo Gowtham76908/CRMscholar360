@@ -3,7 +3,6 @@ import { useLocation } from "react-router-dom";
 import { LayoutDashboard, Users, MessageSquare, Zap, BarChart, Settings2, Command } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import Avatar from "../Avatar";
-import Scholar360Logo from "../Scholar360Logo";
 import { cn } from "../../lib/utils";
 
 // ─── Mode definitions ─────────────────────────────────────────────────────────
@@ -106,14 +105,7 @@ export default function NavigationRail({ panelOpen, onModeClick, unreadCounts = 
 
     return (
         <aside className="fixed inset-y-0 left-0 z-30 w-16 bg-white border-r border-gray-200 hidden md:flex flex-col items-center py-5">
-            {/* Logo mark */}
-            <div className="mb-4 transform hover:scale-105 transition-transform" title="scholar360">
-                <Scholar360Logo size="sm" showText={false} />
-            </div>
-
-            <div className="w-10 h-px bg-gray-100 mb-4" />
-
-            {/* Avatar */}
+            {/* Avatar (logo now lives in the context panel header) */}
             <div className="mb-4 cursor-pointer transform hover:scale-105 transition-transform" title={user?.name}>
                 <Avatar user={user} size="sm" status={onlineStatus} />
             </div>

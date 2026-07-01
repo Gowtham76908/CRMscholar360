@@ -28,15 +28,15 @@ const login = async (req, res, next) => {
         const isMatch = await bcrypt.compare(password || "", user?.password ?? DECOY_HASH);
 
         if (!user) {
-            return res.status(401).json({ error: { code: ERROR_CODES.AUTH_INVALID_CREDENTIALS, message: "Invalid credentials" } });
+            return res.status(401).json({ error: { code: ERROR_CODES.AUTH_INVALID_CREDENTIALS, message: "No account found with that email address." } });
         }
 
         if (!user.isActive) {
-            return res.status(403).json({ error: { code: ERROR_CODES.AUTH_ACCOUNT_INACTIVE, message: "Account is inactive. Contact your administrator." } });
+            return res.status(403).json({ error: { code: ERROR_CODES.AUTH_ACCOUNT_INACTIVE, message: "Your account has been deactivated. Please contact your administrator." } });
         }
 
         if (!isMatch) {
-            return res.status(401).json({ error: { code: ERROR_CODES.AUTH_INVALID_CREDENTIALS, message: "Invalid credentials" } });
+            return res.status(401).json({ error: { code: ERROR_CODES.AUTH_INVALID_CREDENTIALS, message: "Incorrect password. Please try again." } });
         }
 
         const jwtSecret = process.env.JWT_SECRET;

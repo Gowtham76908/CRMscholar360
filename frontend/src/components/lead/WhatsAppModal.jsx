@@ -193,7 +193,7 @@ export default function WhatsAppModal({ leadId, lead, onClose }) {
 
                     {send.error && (
                         <p className="text-xs text-red-500">
-                            {send.error?.response?.data?.message || "Send failed. Try again."}
+                            {send.error?.response?.data?.error?.message || send.error?.response?.data?.message || "Send failed. Try again."}
                         </p>
                     )}
                 </div>

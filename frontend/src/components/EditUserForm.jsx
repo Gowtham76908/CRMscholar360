@@ -52,7 +52,7 @@ const EditUserForm = ({ user, onClose }) => {
             onClose();
         },
         onError: (error) => {
-            toast.error(error.response?.data?.message || "Failed to update user");
+            toast.error(error.response?.data?.error?.message || error.response?.data?.message || "Failed to update user");
         },
     });
 

@@ -123,7 +123,7 @@ const CreateInvoiceModal = ({ onClose, editData = null, company, clientPrefill =
             qc.invalidateQueries({ queryKey: ["balance-sheet"] });
             onClose();
         },
-        onError: (e) => setError(e.response?.data?.message || "Failed to save invoice"),
+        onError: (e) => setError(e.response?.data?.error?.message || e.response?.data?.message || "Failed to save invoice"),
     });
 
     const addItem    = () => setItems((p) => [...p, { ...EMPTY_ITEM }]);
@@ -578,7 +578,7 @@ const SendEmailModal = ({ invoice, onClose }) => {
     const mutation = useMutation({
         mutationFn: () => api.post(`/invoices/${invoice.id}/send-email`, { recipientEmail: email }),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ["invoices"] }); onClose(); },
-        onError: (e) => setError(e.response?.data?.message || "Failed to send"),
+        onError: (e) => setError(e.response?.data?.error?.message || e.response?.data?.message || "Failed to send"),
     });
     return (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -639,7 +639,7 @@ const AddPaymentModal = ({ invoice, onClose }) => {
     const mutation = useMutation({
         mutationFn: () => api.post(`/invoices/${invoice.id}/payments`, { ...form, amount: parseFloat(form.amount) }),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ["invoices"] }); qc.invalidateQueries({ queryKey: ["balance-sheet"] }); onClose(); },
-        onError: (e) => setError(e.response?.data?.message || "Failed to record payment"),
+        onError: (e) => setError(e.response?.data?.error?.message || e.response?.data?.message || "Failed to record payment"),
     });
 
     const handleRecord = () => {

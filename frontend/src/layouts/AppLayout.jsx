@@ -18,25 +18,22 @@ export default function AppLayout() {
     const location = useLocation();
     const navigate  = useNavigate();
 
-    const [panelOpen, setPanelOpen] = useState(() =>
-        localStorage.getItem("nav-panel-open") !== "false"
-    );
+    // `panelOpen` = pinned open via an explicit click. Starts closed and is
+    // session-only (not persisted) so the panel is collapsed on every load.
+    const [panelOpen, setPanelOpen] = useState(false);
+    // `hovered` = transient hover preview — opens the panel without pinning it.
+    const [hovered, setHovered] = useState(false);
+    const effectiveOpen = panelOpen || hovered;
 
     const activeMode = useMemo(() => getModeFromPath(location.pathname, location.search), [location.pathname, location.search]);
 
     const handleModeClick = useCallback((modeId, defaultPath) => {
         if (modeId === activeMode) {
-            // Second click on same mode → toggle panel
-            setPanelOpen(v => {
-                const next = !v;
-                localStorage.setItem("nav-panel-open", String(next));
-                return next;
-            });
+            // Click on the already-active tab → toggle it open / closed.
+            setPanelOpen(v => !v);
         } else {
-            // Different mode → navigate to its default path + open panel
+            // Switch to a different tab → navigate but preserve the pinned state.
             navigate(defaultPath);
-            setPanelOpen(true);
-            localStorage.setItem("nav-panel-open", "true");
         }
     }, [activeMode, navigate]);
 
@@ -54,15 +51,19 @@ export default function AppLayout() {
 
     return (
         <div className="min-h-screen bg-[#f8f6ff] flex">
-            {/* Zone 1 — Navigation Rail (56px) */}
-            <NavigationRail
-                panelOpen={panelOpen}
-                onModeClick={handleModeClick}
-                unreadCounts={{ communicate: totalUnread }}
-            />
+            {/* Zones 1 & 2 share a hover region: hovering the rail/panel opens a
+                preview; clicking a mode pins it open. */}
+            <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+                {/* Zone 1 — Navigation Rail (56px) */}
+                <NavigationRail
+                    panelOpen={effectiveOpen}
+                    onModeClick={handleModeClick}
+                    unreadCounts={{ communicate: totalUnread }}
+                />
 
-            {/* Zone 2 — Context Panel (240px) */}
-            <ContextPanel activeMode={activeMode} open={panelOpen} onClose={() => setPanelOpen(false)} />
+                {/* Zone 2 — Context Panel (240px) */}
+                <ContextPanel activeMode={activeMode} open={effectiveOpen} pinned={panelOpen} onClose={() => setPanelOpen(false)} />
+            </div>
 
             {/* Zone 3 — Main Workspace */}
             <div

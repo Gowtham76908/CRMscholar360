@@ -766,10 +766,12 @@ async function runImportJob(jobId, { buffer, originalname, allocationMode, userI
                 const finalVal = counterRows[0].currentValue;
                 const startVal = finalVal - countToInsert + 1;
 
-                const { count } = await tx.lead.createMany({
-                    data: chunk.map((r, idx) => {
-                        const nextVal = startVal + idx;
-                        const leadId = `L-${String(nextVal).padStart(5, '0')}`;
+                 const year = new Date().getFullYear().toString().slice(-2);
+                 const { count } = await tx.lead.createMany({
+                     data: chunk.map((r, idx) => {
+                         const nextVal = startVal + idx;
+                         const seq = String(nextVal - 10000).padStart(4, '0');
+                         const leadId = `sch-${year}-${seq}`;
                         return {
                             name: r.name,
                             email: r.email || null,

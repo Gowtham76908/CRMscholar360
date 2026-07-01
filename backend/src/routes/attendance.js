@@ -1,10 +1,16 @@
 ﻿const express = require("express");
 const router = express.Router();
 const attendanceController = require("../controllers/attendanceController");
+const holidayController = require("../controllers/holidayController");
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
 
 router.use(authMiddleware);
+
+// Holidays — Super Admin (company-wide or any dept) and Managers (their depts)
+router.get("/holidays", holidayController.listHolidays);
+router.post("/holidays", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), holidayController.createHoliday);
+router.delete("/holidays/:id", roleMiddleware(["SUPER_ADMIN", "ADMIN"]), holidayController.deleteHoliday);
 
 // Employee routes
 router.post("/check-in", attendanceController.checkIn);

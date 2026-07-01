@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useState, useMemo, useEffect } from "react";
+import { Link, useSearchParams, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -109,6 +109,11 @@ export default function Deals() {
     const { user } = useAuth();
     const queryClient = useQueryClient();
     const [searchParams, setSearchParams] = useSearchParams();
+    const location = useLocation();
+
+    useEffect(() => {
+        localStorage.setItem("last-leads-path", location.pathname + location.search);
+    }, [location]);
 
     const search    = searchParams.get("search") || "";
     const stage     = searchParams.get("stage")  || "";
@@ -144,7 +149,7 @@ export default function Deals() {
             queryClient.invalidateQueries({ queryKey: ["deals"] });
             toast.success("Deal deleted");
         },
-        onError: () => toast.error("Failed to delete deal"),
+        onError: (err) => toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to delete deal"),
     });
 
     const deals = data?.data ?? [];

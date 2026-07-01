@@ -24,7 +24,7 @@ const MergeLeadModal = ({ leads, onClose, onSuccess }) => {
             onSuccess();
             onClose();
         } catch (error) {
-            toast.error("Merge failed: " + (error.response?.data?.message || error.message));
+            toast.error("Merge failed: " + (error.response?.data?.error?.message || error.response?.data?.message || error.message));
         } finally {
             setLoading(false);
             setConfirmOpen(false);
