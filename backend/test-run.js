@@ -7,7 +7,7 @@ async function main() {
     const leads = await prisma.lead.findMany({
         take: 5,
         orderBy: { createdAt: "desc" },
-        select: { id: true, name: true, status: true, createdAt: true, updatedAt: true }
+        select: { id: true, name: true, createdAt: true, updatedAt: true }
     });
 
     if (leads.length === 0) {
