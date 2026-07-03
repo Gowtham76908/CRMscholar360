@@ -51,42 +51,42 @@ const TaskCard = ({ task, onDragStart, onClick }) => {
             draggable
             onDragStart={(e) => onDragStart(e, task.id)}
             onClick={() => onClick(task)}
-            className="bg-white border border-gray-200 rounded-xl p-3.5 cursor-pointer shadow-sm hover:shadow-md hover:border-indigo-300 transition-all group select-none"
+            className="bg-white border border-gray-200 rounded-lg p-2.5 cursor-pointer shadow-sm hover:shadow-md hover:border-indigo-300 transition-all group select-none"
         >
-            {/* Type + Priority */}
-            <div className="flex items-center justify-between mb-2">
-                <span className="text-sm">{TYPE_EMOJI[task.type] || "🔵"} <span className="text-xs text-gray-400 font-medium">{task.type}</span></span>
-                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${pm.cls}`}>
+            {/* Header: Type + Priority */}
+            <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs">{TYPE_EMOJI[task.type] || "🔵"} <span className="text-[10px] text-gray-400 font-medium">{task.type}</span></span>
+                <span className={`inline-flex items-center gap-0.5 px-1 py-0.2 rounded border text-[10px] font-medium ${pm.cls}`}>
                     {pm.icon}{pm.label}
                 </span>
             </div>
 
             {/* Title */}
-            <p className="text-sm font-semibold text-gray-800 leading-snug mb-2 group-hover:text-indigo-700 transition-colors line-clamp-2">
+            <p className="text-xs font-semibold text-gray-800 leading-tight mb-1.5 group-hover:text-indigo-700 transition-colors line-clamp-2">
                 {task.title}
             </p>
 
             {/* Labels */}
             {task.labels?.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-2">
+                <div className="flex flex-wrap gap-1 mb-1.5">
                     {task.labels.slice(0, 3).map(l => (
-                        <span key={l} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded text-xs">{l}</span>
+                        <span key={l} className="px-1 py-0.2 bg-indigo-50 text-indigo-600 rounded text-[10px] font-medium">{l}</span>
                     ))}
                 </div>
             )}
 
             {/* Footer */}
             <div className="flex items-center justify-between mt-1">
-                <div className={`flex items-center gap-1 text-xs font-medium ${overdue ? "text-red-500" : "text-gray-400"}`}>
-                    <Calendar className="h-3 w-3" />
+                <div className={`flex items-center gap-1 text-[10px] font-medium ${overdue ? "text-red-500" : "text-gray-400"}`}>
+                    <Calendar className="h-3 w-3 shrink-0" />
                     {overdue ? "Overdue · " : ""}{fmtDate(task.dueDate)}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 shrink-0">
                     {task.storyPoints && (
-                        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{task.storyPoints}pt</span>
+                        <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1 py-0.2 rounded">{task.storyPoints}pt</span>
                     )}
                     {task.assignedTo && (
-                        <div className="h-6 w-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold" title={task.assignedTo.name}>
+                        <div className="h-5 w-5 rounded-full bg-indigo-500 flex items-center justify-center text-white text-[9px] font-bold" title={task.assignedTo.name}>
                             {initials(task.assignedTo.name)}
                         </div>
                     )}
@@ -493,7 +493,10 @@ const Kanban = () => {
                             </div>
 
                             {/* Drop zone */}
-                            <div className={`flex-1 space-y-3 min-h-[120px] rounded-xl transition-all ${isDragTarget ? "bg-indigo-50 border-2 border-dashed border-indigo-300 p-2" : "p-0"}`}>
+                            <div
+                                className={`flex-1 space-y-2 min-h-[120px] rounded-xl transition-all overflow-y-auto pr-1 ${isDragTarget ? "bg-indigo-50 border-2 border-dashed border-indigo-300 p-2" : "p-0"}`}
+                                style={{ maxHeight: "calc(100vh - 220px)" }}
+                            >
                                 {colTasks.map(task => (
                                     <TaskCard
                                         key={task.id}

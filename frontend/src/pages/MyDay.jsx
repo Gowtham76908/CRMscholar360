@@ -197,7 +197,7 @@ function TaskItem({ task, onComplete, preferDept }) {
     const navigate = useNavigate();
     return (
         <div className="p-3 rounded-xl bg-white ring-1 ring-slate-200/70 border-l-[3px] border-l-amber-500 shadow-[0_1px_2px_rgb(0,0,0,0.04)] hover:shadow-[0_4px_16px_-6px_rgb(0,0,0,0.15)] hover:ring-amber-200 transition-all duration-200 group cursor-pointer"
-            onClick={() => navigate(`/tasks/${task.id}`)}>
+            onClick={() => navigate(task.lead?.id ? `/leads/${task.lead.id}` : `/tasks/${task.id}`)}>
             <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate group-hover:text-indigo-700 transition-colors">{task.title}</p>

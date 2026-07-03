@@ -232,16 +232,16 @@ function StageColumn({ stage, department, accent, rows, stages, canAssign, onMov
     const { isOver, setNodeRef } = useDroppable({ id: `col:${stage.code}` });
     return (
         <div className="flex flex-col min-w-[250px] flex-1">
-            <div className={`rounded-t-xl px-3 py-2.5 flex items-center justify-between border ${accent}`}>
-                <span className="font-bold text-sm">{stage.label}</span>
-                <span className="bg-white/60 text-[11px] font-bold px-1.5 py-0.5 rounded-full">{rows.length}</span>
+            <div className={`rounded-t-xl px-3 py-2 flex items-center justify-between border ${accent}`}>
+                <span className="font-bold text-xs">{stage.label}</span>
+                <span className="bg-white/60 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{rows.length}</span>
             </div>
             <div
                 ref={setNodeRef}
-                className={`flex-1 bg-gray-50/60 rounded-b-xl p-2 space-y-2 min-h-[200px] transition-colors overflow-y-auto ${
+                className={`flex-1 bg-gray-50/60 rounded-b-xl p-1.5 space-y-1.5 min-h-[200px] transition-colors overflow-y-auto ${
                     isOver ? "ring-2 ring-inset ring-indigo-400 bg-indigo-50/60" : ""
                 }`}
-                style={{ maxHeight: "calc(100vh - 280px)" }}
+                style={{ maxHeight: "calc(100vh - 200px)" }}
             >
                 <AnimatePresence>
                     {rows.map((r, i) => (
@@ -288,47 +288,69 @@ function ServiceCard({ row, department, stages, canAssign = false, onMove, moveL
         <div
             ref={!overlay ? setNodeRef : undefined}
             style={style}
-            className={`group bg-white border border-gray-200 rounded-xl p-3 shadow-sm select-none
+            className={`group bg-white border border-gray-200 rounded-lg p-2 shadow-sm select-none
                 ${overlay ? "shadow-2xl rotate-1 scale-105 ring-2 ring-indigo-300" : "hover:shadow-md hover:border-indigo-300"} transition-all`}
         >
-            <div className="flex items-start gap-1.5">
+            <div className="flex items-start gap-1">
                 <div
                     {...(!overlay ? { ...attributes, ...listeners } : {})}
                     className="mt-0.5 text-gray-300 hover:text-gray-500 shrink-0 cursor-grab active:cursor-grabbing"
                 >
-                    <GripVertical className="h-3.5 w-3.5" />
+                    <GripVertical className="h-3 w-3" />
                 </div>
-                <Link
-                    to={`/leads/${lead.id}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-sm font-bold text-gray-900 leading-tight flex-1 min-w-0 truncate pr-1 hover:text-indigo-700 transition-colors flex items-center gap-1.5 flex-wrap"
-                >
-                    {lead.name || "—"}
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-1 min-w-0">
+                        <Link
+                            to={`/leads/${lead.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs font-bold text-gray-900 leading-tight hover:text-indigo-700 transition-colors truncate flex-1 min-w-0"
+                        >
+                            {lead.name || "—"}
+                        </Link>
+                        {typeof lead.score === "number" && (
+                            <span className={`text-[8px] font-bold px-1 py-0.2 rounded shrink-0 ${getScoreStyle(lead.score)}`}>{lead.score}</span>
+                        )}
+                        {!overlay && (
+                            <MoveStageMenu
+                                stages={stages}
+                                currentStage={row.stage}
+                                loading={moveLoading === row.id}
+                                onMove={(s) => onMove(row.id, s, lead.id)}
+                            />
+                        )}
+                    </div>
+
                     {lead.leadId && (
-                        <span className="text-[9px] font-mono font-bold bg-slate-100 text-slate-500 px-1 py-0.2 rounded border border-slate-200 select-all">
-                            {lead.leadId}
-                        </span>
+                        <p className="text-[8px] font-mono text-slate-400 mt-0.5">ID: {lead.leadId}</p>
                     )}
-                </Link>
-                {typeof lead.score === "number" && (
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${getScoreStyle(lead.score)}`}>{lead.score}</span>
-                )}
-                {!overlay && (
-                    <MoveStageMenu
-                        stages={stages}
-                        currentStage={row.stage}
-                        loading={moveLoading === row.id}
-                        onMove={(s) => onMove(row.id, s, lead.id)}
-                    />
-                )}
+
+                    {(lead.phone || lead.email) && (
+                        <p className="text-[10px] text-gray-400 truncate mt-0.5">{lead.phone || lead.email}</p>
+                    )}
+
+                    <div className="mt-1.5 flex items-center justify-between gap-1.5">
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setShowOtherAssignees(!showOtherAssignees);
+                            }}
+                            className={`flex items-center gap-0.5 text-[10px] text-gray-500 min-w-0 hover:text-indigo-600 transition-colors focus:outline-none px-1 rounded hover:bg-slate-100 truncate ${showOtherAssignees ? "text-indigo-600 bg-indigo-50/70" : ""}`}
+                            title="View all department assignees"
+                        >
+                            <User className="h-2.5 w-2.5 shrink-0" />
+                            <span className="truncate font-semibold">{row.assignedEmployee?.name || "Unassigned"}</span>
+                        </button>
+                        {!overlay && canAssign && (
+                            <AssignControl leadDepartmentId={row.id} department={department} currentId={row.assignedEmployeeId} />
+                        )}
+                    </div>
+                </div>
             </div>
 
-            <p className="mt-1 ml-5 text-xs text-gray-400 truncate">{lead.phone || lead.email || ""}</p>
-
-            {/* Expanded Department Assignees list (triggered by clicking the avatar/assignee badge) */}
             {showOtherAssignees && (
-                <div className="mt-3 ml-5 space-y-1.5 border-t border-slate-100 pt-2.5 animate-fadeIn">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Department Assignees</p>
+                <div className="mt-2 pl-4 space-y-0.5 border-t border-slate-100 pt-1.5 animate-fadeIn">
+                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Assignees</p>
                     {(lead.leadDepartments || []).map(ld => {
                         const dotColor = 
                             ld.department === "SALES" ? "bg-indigo-500" :
@@ -338,13 +360,13 @@ function ServiceCard({ row, department, stages, canAssign = false, onMove, moveL
                             ld.department === "FOREX" ? "bg-violet-500" :
                             "bg-slate-400";
                         return (
-                            <div key={ld.id} className="flex items-center justify-between text-[11px] font-semibold py-0.5">
-                                <div className="flex items-center gap-1.5">
-                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
-                                    <span className="text-slate-500">{departmentLabel(ld.department)} Team:</span>
+                            <div key={ld.id} className="flex items-center justify-between text-[10px] font-semibold py-0.5">
+                                <div className="flex items-center gap-1">
+                                    <span className={`w-1 h-1 rounded-full shrink-0 ${dotColor}`} />
+                                    <span className="text-slate-400">{departmentLabel(ld.department)}:</span>
                                 </div>
-                                <span className="text-slate-800 truncate pl-2 max-w-[120px]">
-                                    {ld.assignedEmployee?.name || <span className="text-slate-400 italic font-normal">Unassigned</span>}
+                                <span className="text-slate-700 truncate pl-2 max-w-[90px]">
+                                    {ld.assignedEmployee?.name || "Unassigned"}
                                 </span>
                             </div>
                         );
@@ -352,36 +374,14 @@ function ServiceCard({ row, department, stages, canAssign = false, onMove, moveL
                 </div>
             )}
 
-            <div className="mt-2 ml-5 flex items-center justify-between">
-                <button
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setShowOtherAssignees(!showOtherAssignees);
-                    }}
-                    className={`flex items-center gap-1 text-[11px] text-gray-600 min-w-0 hover:text-indigo-600 transition-colors focus:outline-none px-1 rounded hover:bg-slate-100 ${showOtherAssignees ? "text-indigo-600 bg-indigo-50/70 hover:bg-indigo-55/70" : ""}`}
-                    title="Click to view all department assignees"
-                >
-                    <User className="h-3 w-3 shrink-0" />
-                    {row.assignedEmployee ? (
-                        <span className="truncate font-semibold">{row.assignedEmployee.name}</span>
-                    ) : (
-                        <span className="italic text-amber-600">Unassigned</span>
-                    )}
-                </button>
-                {!overlay && canAssign && (
-                    <AssignControl leadDepartmentId={row.id} department={department} currentId={row.assignedEmployeeId} />
-                )}
-            </div>
-
             {!overlay && (
-                <div className="mt-2 ml-5 pt-2 border-t border-gray-100 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Link to={`/leads/${lead.id}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-indigo-600 px-1.5 py-1 rounded hover:bg-indigo-50 transition-colors">
-                        <ExternalLink className="h-3 w-3" /> Lead
+                <div className="mt-1.5 pl-4 pt-1 border-t border-gray-100 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Link to={`/leads/${lead.id}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-0.5 text-[9px] text-gray-500 hover:text-indigo-600 px-1 py-0.5 rounded hover:bg-indigo-50 transition-colors">
+                        <ExternalLink className="h-2.5 w-2.5" /> Lead
                     </Link>
                     {lead.phone && (
-                        <a href={`tel:${lead.phone}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-blue-600 px-1.5 py-1 rounded hover:bg-blue-50 transition-colors">
-                            <Phone className="h-3 w-3" /> Call
+                        <a href={`tel:${lead.phone}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-0.5 text-[9px] text-gray-500 hover:text-blue-600 px-1 py-0.5 rounded hover:bg-blue-50 transition-colors">
+                            <Phone className="h-2.5 w-2.5" /> Call
                         </a>
                     )}
                 </div>
