@@ -84,15 +84,17 @@ const getChannels = async (req, res, next) => {
             orderBy: { joinedAt: "asc" },
         });
 
-        // Unread = messages authored by someone else after the caller's lastReadAt.
+        // Unread = messages from others sent after the caller last read the channel.
+        // Fall back to joinedAt when they've never opened it, so pre-existing history
+        // and messages sent before they joined are not counted as unread.
         const unreadCounts = await Promise.all(
-            memberships.map(({ channel, lastReadAt }) =>
+            memberships.map(({ channel, lastReadAt, joinedAt }) =>
                 prisma.chatMessage.count({
                     where: {
                         channelId: channel.id,
                         deletedAt: null,
                         authorId: { not: userId },
-                        ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {}),
+                        createdAt: { gt: lastReadAt ?? joinedAt },
                     },
                 })
             )
