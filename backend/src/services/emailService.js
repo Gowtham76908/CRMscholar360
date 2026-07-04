@@ -50,16 +50,16 @@ const sendReminderEmail = async (user, reminder) => {
 
 const sendInvoiceEmail = async ({ to, invoice, items, company }) => {
     const co = company || {};
-    const coName    = co.companyName || "Hexite Technologies Private Limited";
-    const coGstin   = co.gstin       || "33AAHCH4159D1ZT";
-    const coAddress = co.address     || "No 98, Varadharajan Street Kaladipet";
-    const coCity    = `${co.city || "Chennai"}, ${co.state || "Tamil Nadu"} - ${co.pincode || "600019"}`;
-    const coPhone   = co.phone       || "+91 9994081905";
-    const coEmail   = co.email       || "praveen@hexitetechnologies.com";
-    const bankName  = co.bankName    || "Axis Bank";
-    const accountNo = co.accountNo   || "924020046598227";
-    const ifsc      = co.ifsc        || "UTIB0001619";
-    const branch    = co.branch      || "Thiruvottriyur";
+    const coName    = co.companyName || "CRM SCHOLAR PRIVATE LIMITED";
+    const coGstin   = co.gstin       || "22AAAAA0000A1Z5";
+    const coAddress = co.address     || "123, Tech Park Phase 1";
+    const coCity    = `${co.city || "Chennai"}, ${co.state || "Tamil Nadu"} - ${co.pincode || "600001"}`;
+    const coPhone   = co.phone       || "+91 9876543210";
+    const coEmail   = co.email       || "info@crmscholar360.com";
+    const bankName  = co.bankName    || "ICICI Bank";
+    const accountNo = co.accountNo   || "000011112222";
+    const ifsc      = co.ifsc        || "ICIC0000123";
+    const branch    = co.branch      || "Main Branch";
     const subject = `${invoice.invoiceType === "PROFORMA" ? "Proforma Invoice" : "Tax Invoice"} #${invoice.invoiceNumber} from ${coName}`;
 
     const itemRows = items.map((item, i) => `

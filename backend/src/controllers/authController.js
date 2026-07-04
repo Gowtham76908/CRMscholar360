@@ -57,7 +57,7 @@ const login = async (req, res, next) => {
             path:     "/",
         });
 
-        res.json({ message: "Login successful", user: toSafeUser(user) });
+        res.json({ message: "Login successful", user: toSafeUser(user), token });
 
         // Fire-and-forget: on the 1st of every month, notify the winner of last month's leaderboard
         notifyIfLeaderboardWinner(user.id).catch(err =>

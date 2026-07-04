@@ -163,7 +163,20 @@ const getLeads = async ({
     }
 
     if (filters.source)      where.source      = filters.source;
-    if (filters.category)    where.category    = filters.category;
+    if (filters.category) {
+        where.score = where.score || {};
+        if (filters.category === "PREMIUM") {
+            where.score.gte = 81;
+        } else if (filters.category === "HOT") {
+            where.score.gte = 61;
+            where.score.lte = 80;
+        } else if (filters.category === "WARM") {
+            where.score.gte = 31;
+            where.score.lte = 60;
+        } else if (filters.category === "COLD") {
+            where.score.lte = 30;
+        }
+    }
     if (filters.enquiryType) where.enquiryType = filters.enquiryType;
 
     // SLA filter: leads with no activity beyond N days. "Active" now means the lead

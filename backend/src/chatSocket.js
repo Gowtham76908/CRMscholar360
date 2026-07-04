@@ -1,6 +1,64 @@
 const prisma = require("./utils/prisma");
 const logger = require("./utils/logger");
 
+async function emitToChannel(io, channelId, event, data) {
+    try {
+        const members = await prisma.chatMember.findMany({
+            where: { channelId },
+            select: { userId: true },
+        });
+        for (const m of members) {
+            io.to(m.userId).emit(event, data);
+        }
+    } catch (err) {
+        logger.warn({ err: err.message }, `[chatSocket] emitToChannel error for ${event}`);
+    }
+}
+
+// Persist a bell notification for every member except the author. Deduped per
+// channel: while an unread chat notification for a channel exists, we refresh it
+// in place instead of stacking a new row for every message.
+async function notifyOtherMembers(io, channelId, message) {
+    try {
+        const channel = await prisma.chatChannel.findUnique({
+            where: { id: channelId },
+            select: { name: true, type: true },
+        });
+        const members = await prisma.chatMember.findMany({
+            where: { channelId, userId: { not: message.authorId } },
+            select: { userId: true },
+        });
+        if (members.length === 0) return;
+
+        const senderName = message.author?.name || "Someone";
+        const title = channel?.type === "dm"
+            ? `💬 ${senderName}`
+            : `💬 ${senderName} in ${channel?.name || "a channel"}`;
+        const preview = message.text.length > 80 ? message.text.slice(0, 80) + "…" : message.text;
+        const link = `/messages?channel=${channelId}`;
+
+        for (const { userId } of members) {
+            const existing = await prisma.notification.findFirst({
+                where: { userId, type: "CHAT_MESSAGE", isRead: false, link },
+                select: { id: true },
+            });
+
+            const notification = existing
+                ? await prisma.notification.update({
+                    where: { id: existing.id },
+                    data: { title, message: preview, createdAt: new Date() },
+                })
+                : await prisma.notification.create({
+                    data: { userId, title, message: preview, type: "CHAT_MESSAGE", link },
+                });
+
+            io.to(userId).emit("notification:new", notification);
+        }
+    } catch (err) {
+        logger.warn({ err: err.message }, "[chatSocket] notifyOtherMembers error");
+    }
+}
+
 function registerChatHandlers(socket, io) {
     const { userId, userName } = socket.data;
 
@@ -22,7 +80,7 @@ function registerChatHandlers(socket, io) {
         if (channelId) socket.leave(`chat:${channelId}`);
     });
 
-    // Send a message — saved to DB, then broadcast to the channel room
+    // Send a message — saved to DB, then broadcast to the channel members
     socket.on("chat:send", async ({ channelId, text, parentId }) => {
         if (!channelId || !text?.trim()) return;
         try {
@@ -43,7 +101,8 @@ function registerChatHandlers(socket, io) {
                 },
             });
 
-            io.to(`chat:${channelId}`).emit("chat:message", message);
+            await emitToChannel(io, channelId, "chat:message", message);
+            await notifyOtherMembers(io, channelId, message);
         } catch (err) {
             logger.warn({ err: err.message }, "[chatSocket] chat:send error");
         }
@@ -73,7 +132,7 @@ function registerChatHandlers(socket, io) {
                 include: { author: { select: { id: true, name: true, profilePhoto: true } } },
             });
 
-            io.to(`chat:${updated.channelId}`).emit("chat:message-updated", updated);
+            await emitToChannel(io, updated.channelId, "chat:message-updated", updated);
         } catch (err) {
             logger.warn({ err: err.message }, "[chatSocket] chat:edit error");
         }
@@ -91,7 +150,7 @@ function registerChatHandlers(socket, io) {
                 data: { deletedAt: new Date() },
             });
 
-            io.to(`chat:${msg.channelId}`).emit("chat:message-deleted", {
+            await emitToChannel(io, msg.channelId, "chat:message-deleted", {
                 messageId,
                 channelId: msg.channelId,
             });
@@ -123,7 +182,7 @@ function registerChatHandlers(socket, io) {
                 data: { reactions },
             });
 
-            io.to(`chat:${msg.channelId}`).emit("chat:reaction", {
+            await emitToChannel(io, msg.channelId, "chat:reaction", {
                 messageId,
                 reactions: updated.reactions,
                 channelId: msg.channelId,

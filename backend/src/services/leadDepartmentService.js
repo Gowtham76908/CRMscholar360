@@ -817,14 +817,64 @@ async function buildQueueWhere({ department, actor, filters = {} }) {
     }
 
     if (filters.stage) where.stage = filters.stage;
+
+    const leadFilter = {};
     if (filters.search) {
-        where.lead = {
-            OR: [
-                { name: { contains: filters.search, mode: "insensitive" } },
-                { phone: { contains: filters.search, mode: "insensitive" } },
-                { email: { contains: filters.search, mode: "insensitive" } },
-            ],
-        };
+        leadFilter.OR = [
+            { name: { contains: filters.search, mode: "insensitive" } },
+            { phone: { contains: filters.search, mode: "insensitive" } },
+            { email: { contains: filters.search, mode: "insensitive" } },
+        ];
+    }
+    if (filters.source)      leadFilter.source      = filters.source;
+    if (filters.category) {
+        leadFilter.score = leadFilter.score || {};
+        if (filters.category === "PREMIUM") {
+            leadFilter.score.gte = 81;
+        } else if (filters.category === "HOT") {
+            leadFilter.score.gte = 61;
+            leadFilter.score.lte = 80;
+        } else if (filters.category === "WARM") {
+            leadFilter.score.gte = 31;
+            leadFilter.score.lte = 60;
+        } else if (filters.category === "COLD") {
+            leadFilter.score.lte = 30;
+        }
+    }
+    if (filters.enquiryType) leadFilter.enquiryType = filters.enquiryType;
+
+    if (filters.score_min !== undefined || filters.score_max !== undefined) {
+        leadFilter.score = leadFilter.score || {};
+        if (filters.score_min !== undefined) leadFilter.score.gte = parseInt(filters.score_min, 10);
+        if (filters.score_max !== undefined) leadFilter.score.lte = parseInt(filters.score_max, 10);
+    }
+
+    if (filters.startDate || filters.endDate) {
+        leadFilter.createdAt = {};
+        if (filters.startDate) {
+            leadFilter.createdAt.gte = new Date(filters.startDate);
+        }
+        if (filters.endDate) {
+            const end = new Date(filters.endDate);
+            if (end.getUTCHours() === 0 && end.getUTCMinutes() === 0 && end.getUTCSeconds() === 0) {
+                end.setUTCHours(23, 59, 59, 999);
+            }
+            leadFilter.createdAt.lte = end;
+        }
+    }
+
+    if (filters.sla) {
+        const cutoffMs = filters.sla === "breach" ? 7 * 86_400_000 : 3 * 86_400_000;
+        const cutoff   = new Date(Date.now() - cutoffMs);
+        const slaOr = [
+            { lastActivityAt: { lt: cutoff } },
+            { AND: [{ lastActivityAt: null }, { updatedAt: { lt: cutoff } }] },
+        ];
+        leadFilter.OR = slaOr;
+    }
+
+    if (Object.keys(leadFilter).length > 0) {
+        where.lead = leadFilter;
     }
 
     return where;

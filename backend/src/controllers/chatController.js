@@ -84,7 +84,21 @@ const getChannels = async (req, res, next) => {
             orderBy: { joinedAt: "asc" },
         });
 
-        const channels = memberships.map(({ channel }) => ({
+        // Unread = messages authored by someone else after the caller's lastReadAt.
+        const unreadCounts = await Promise.all(
+            memberships.map(({ channel, lastReadAt }) =>
+                prisma.chatMessage.count({
+                    where: {
+                        channelId: channel.id,
+                        deletedAt: null,
+                        authorId: { not: userId },
+                        ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {}),
+                    },
+                })
+            )
+        );
+
+        const channels = memberships.map(({ channel }, i) => ({
             id: channel.id,
             name: channel.name,
             type: channel.type,
@@ -98,6 +112,7 @@ const getChannels = async (req, res, next) => {
                 role: m.role,
             })),
             lastMessage: channel.messages[0] || null,
+            unreadCount: unreadCounts[i],
         }));
 
         res.json(channels);
@@ -365,6 +380,32 @@ const seedDemoData = async (req, res, next) => {
     }
 };
 
+// POST /api/chat/channels/:id/read  — mark a channel as read for the caller
+const markChannelRead = async (req, res, next) => {
+    try {
+        const { id: channelId } = req.params;
+        const { userId } = req.user;
+
+        const updated = await prisma.chatMember.updateMany({
+            where: { channelId, userId },
+            data: { lastReadAt: new Date() },
+        });
+        if (updated.count === 0) {
+            throw new ApiError(403, "ACCESS_DENIED", "You are not a member of this channel");
+        }
+
+        // Clear any pending chat notifications for this channel from the bell.
+        await prisma.notification.updateMany({
+            where: { userId, type: "CHAT_MESSAGE", isRead: false, link: `/messages?channel=${channelId}` },
+            data: { isRead: true },
+        });
+
+        res.json({ message: "Channel marked as read" });
+    } catch (err) {
+        return next(err);
+    }
+};
+
 // POST /api/chat/channels/:id/members  — add a member to a group channel
 const addMember = async (req, res, next) => {
     try {
@@ -432,6 +473,7 @@ module.exports = {
     startDirectChat,
     getUsersForChat,
     getChannelMessages,
+    markChannelRead,
     addMember,
     removeMember,
     seedDemoData,

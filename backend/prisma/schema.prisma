@@ -840,21 +840,21 @@ model InvoiceCounter {
 
 model CompanySettings {
   id            String   @id @default(uuid())
-  companyName   String   @default("HEXITE TECHNOLOGIES PRIVATE LIMITED")
-  shortName     String   @default("HXZ")
-  gstin         String   @default("33AAHCH4159D1ZT")
-  address       String   @default("No 98, Varadharajan Street Kaladipet")
+  companyName   String   @default("CRM SCHOLAR PRIVATE LIMITED")
+  shortName     String   @default("CRMS360")
+  gstin         String   @default("22AAAAA0000A1Z5")
+  address       String   @default("123, Tech Park Phase 1")
   city          String   @default("Chennai")
   state         String   @default("Tamil Nadu")
-  pincode       String   @default("600019")
-  phone         String   @default("+91 9994081905, 9566999018")
-  email         String   @default("praveen@hexitetechnologies.com")
-  website       String   @default("https://hexitetechnologies.com/")
+  pincode       String   @default("600001")
+  phone         String   @default("+91 9876543210")
+  email         String   @default("info@crmscholar360.com")
+  website       String   @default("https://crmscholar360.com/")
   placeOfSupply String   @default("33-Tamil Nadu")
-  bankName      String   @default("Axis Bank")
-  accountNo     String   @default("924020046598227")
-  ifsc          String   @default("UTIB0001619")
-  branch        String   @default("Thiruvottriyur")
+  bankName      String   @default("ICICI Bank")
+  accountNo     String   @default("000011112222")
+  ifsc          String   @default("ICIC0000123")
+  branch        String   @default("Main Branch")
   defaultTaxRate Float   @default(18)
   defaultNotes  String   @default("")
   smtpHost      String?
@@ -1099,11 +1099,12 @@ model ChatChannel {
 }
 
 model ChatMember {
-  id        String      @id @default(uuid())
-  channelId String
-  userId    String
-  role      String      @default("member")
-  joinedAt  DateTime    @default(now())
+  id         String      @id @default(uuid())
+  channelId  String
+  userId     String
+  role       String      @default("member")
+  joinedAt   DateTime    @default(now())
+  lastReadAt DateTime?
   channel   ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 

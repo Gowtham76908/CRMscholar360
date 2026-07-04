@@ -4,9 +4,9 @@
  * Score is always on a 0–100 scale across the whole app.
  */
 const categoryFromScore = (score) => {
-    if (score >= 80) return "PREMIUM";
-    if (score >= 56) return "HOT";
-    if (score >= 26) return "WARM";
+    if (score >= 81) return "PREMIUM";
+    if (score >= 61) return "HOT";
+    if (score >= 31) return "WARM";
     return "COLD";
 };
 

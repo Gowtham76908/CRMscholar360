@@ -23,6 +23,9 @@ function initSocket(server) {
     const allowedOrigins = [
         "http://localhost:5173",
         "http://localhost:5000",
+        "https://scholar360.vercel.app",
+        "https://crmscholar360.onrender.com",
+        "https://cr-mscholar360.vercel.app",
         "https://scholar360-testing.vercel.app",
         "https://scholar360-testing.onrender.com"
     ];

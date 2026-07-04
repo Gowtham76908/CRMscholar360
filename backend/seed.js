@@ -744,13 +744,13 @@ async function main() {
     if (!existingSettings) {
         await prisma.companySettings.create({
             data: {
-                companyName: "HEXITE TECHNOLOGIES PRIVATE LIMITED",
-                shortName: "HXZ",
-                gstin: "33AAHCH4159D1ZT",
-                address: "No 98, Varadharajan Street Kaladipet",
+                companyName: "CRM SCHOLAR PRIVATE LIMITED",
+                shortName: "CRMS360",
+                gstin: "22AAAAA0000A1Z5",
+                address: "123, Tech Park Phase 1",
                 city: "Chennai",
                 state: "Tamil Nadu",
-                pincode: "600019",
+                pincode: "600001",
             },
         });
         console.log("  ✓ Company settings created");

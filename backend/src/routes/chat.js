@@ -15,6 +15,7 @@ router.get("/channels",         chat.getChannels);
 router.post("/group",           chat.createGroupChannel);
 router.post("/dm",              chat.startDirectChat);
 router.get("/channels/:id/messages", chat.getChannelMessages);
+router.post("/channels/:id/read",    chat.markChannelRead);
 
 // Member management
 router.post("/channels/:id/members",        chat.addMember);
