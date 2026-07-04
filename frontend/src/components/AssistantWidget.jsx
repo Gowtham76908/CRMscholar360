@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, Link } from "react-router-dom";
-import { Bot, X, Send, AlertCircle, Sparkles, Mic, Volume2, VolumeX } from "lucide-react";
+import { Bot, X, Send, AlertCircle, Sparkles, Mic, Volume2, VolumeX, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
-import { useSpeechRecognition, useSpeechSynthesis } from "../hooks/useVoice";
+import { useVoiceRecorder, useSpeechSynthesis } from "../hooks/useVoice";
 import { cn } from "../lib/utils";
 
 // Internal entity link schemes the LLM emits — clicking them navigates inside the SPA.
@@ -34,24 +34,43 @@ export default function AssistantWidget() {
     const [input, setInput]       = useState("");
     const [sending, setSending]   = useState(false);
     const [voiceOut, setVoiceOut] = useState(() => localStorage.getItem("asst-voice-out") === "true");
+    const [transcribing, setTranscribing] = useState(false);
     const scrollRef = useRef(null);
     const inputRef  = useRef(null);
     // Tracks whether the *current* draft was dictated; reset on manual typing or send.
     const usedVoiceForCurrentDraft = useRef(false);
 
-    // Voice input: append finalised transcript to whatever's already in the input
-    const mic = useSpeechRecognition({
-        onResult: ({ final }) => {
-            if (final) {
-                usedVoiceForCurrentDraft.current = true;
-                setInput(prev => (prev ? `${prev.trim()} ${final}`.trim() : final.trim()));
+    // Voice input: record audio → transcribe server-side (Whisper) → append text.
+    // Works in every browser since it doesn't rely on the browser's speech backend.
+    const mic = useVoiceRecorder({
+        onAudio: async (blob) => {
+            setTranscribing(true);
+            try {
+                const form = new FormData();
+                form.append("audio", blob, "speech.webm");
+                const res  = await api.post("/assistant/transcribe", form, {
+                    headers: { "Content-Type": "multipart/form-data" },
+                });
+                const text = (res.data?.text || "").trim();
+                if (text) {
+                    usedVoiceForCurrentDraft.current = true;
+                    setInput(prev => (prev ? `${prev.trim()} ${text}`.trim() : text));
+                    setTimeout(() => inputRef.current?.focus(), 50);
+                } else {
+                    toast.error("Didn't catch that — please try speaking again.");
+                }
+            } catch (err) {
+                const type = err.response?.data?.error?.type;
+                if (type === "PROVIDER_DOWN") toast.error("Voice transcription isn't configured on the server.");
+                else if (type === "DISABLED") toast.error("The assistant is currently disabled.");
+                else toast.error("Couldn't transcribe your voice. Please try again.");
+            } finally {
+                setTranscribing(false);
             }
         },
-        onError:  (err) => {
+        onError: (err) => {
             if (err === "not-allowed") toast.error("Microphone access denied. Check browser permissions.");
-            else if (err === "network") toast.error("Voice input needs an internet connection and works best in Google Chrome.");
-            else if (err === "no-speech") toast.error("Didn't catch that — please try speaking again.");
-            else if (err !== "aborted") toast.error(`Voice input failed: ${err}`);
+            else toast.error(`Voice input failed: ${err}`);
         },
     });
 
@@ -94,7 +113,7 @@ export default function AssistantWidget() {
         const trimmed = input.trim();
         if (!trimmed || sending) return;
 
-        if (mic.listening) mic.stop();
+        if (mic.recording) mic.stop();
         tts.cancel(); // user starting a new turn — don't keep talking over them
 
         setMessages(m => [...m, { role: "user", content: trimmed }]);
@@ -127,7 +146,8 @@ export default function AssistantWidget() {
     };
 
     const handleMicClick = () => {
-        if (mic.listening) mic.stop();
+        if (transcribing) return;
+        if (mic.recording) mic.stop();
         else               mic.start();
     };
 
@@ -209,7 +229,7 @@ export default function AssistantWidget() {
                                     setInput(e.target.value);
                                 }}
                                 onKeyDown={handleKeyDown}
-                                placeholder={mic.listening ? "Listening…" : "Ask anything…"}
+                                placeholder={mic.recording ? "Listening… click mic to stop" : transcribing ? "Transcribing…" : "Ask anything…"}
                                 rows={1}
                                 disabled={sending}
                                 className="flex-1 resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500 max-h-32"
@@ -217,17 +237,17 @@ export default function AssistantWidget() {
                             {mic.supported && (
                                 <button
                                     onClick={handleMicClick}
-                                    disabled={sending}
-                                    aria-label={mic.listening ? "Stop listening" : "Speak your message"}
-                                    title={mic.listening ? "Listening — click to stop" : "Click to speak"}
+                                    disabled={sending || transcribing}
+                                    aria-label={mic.recording ? "Stop recording" : "Speak your message"}
+                                    title={mic.recording ? "Recording — click to stop" : transcribing ? "Transcribing…" : "Click to speak"}
                                     className={cn(
                                         "h-9 w-9 rounded-xl flex items-center justify-center transition-colors shrink-0 disabled:cursor-not-allowed",
-                                        mic.listening
+                                        mic.recording
                                             ? "bg-red-500 hover:bg-red-600 text-white animate-pulse"
                                             : "bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:bg-gray-50 disabled:text-gray-400",
                                     )}
                                 >
-                                    <Mic className="h-4 w-4" />
+                                    {transcribing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
                                 </button>
                             )}
                             <button

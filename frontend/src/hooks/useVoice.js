@@ -83,6 +83,65 @@ export function useSpeechRecognition({ onResult, onError } = {}) {
     return { supported, listening, start, stop };
 }
 
+// Server-side dictation: record the mic with MediaRecorder and hand the audio
+// blob to the caller (which uploads it to /assistant/transcribe → Whisper).
+// Unlike Web Speech, this works in every browser and doesn't need Google's
+// speech backend — only microphone permission.
+export function useVoiceRecorder({ onAudio, onError } = {}) {
+    const supported = typeof window !== "undefined"
+        && !!navigator.mediaDevices?.getUserMedia
+        && typeof window.MediaRecorder !== "undefined";
+
+    const [recording, setRecording] = useState(false);
+    const recorderRef = useRef(null);
+    const chunksRef   = useRef([]);
+    const streamRef   = useRef(null);
+
+    const onAudioRef = useRef(onAudio);
+    const onErrorRef = useRef(onError);
+    useEffect(() => { onAudioRef.current = onAudio; onErrorRef.current = onError; });
+
+    const stop = useCallback(() => {
+        try { recorderRef.current?.state !== "inactive" && recorderRef.current?.stop(); }
+        catch { /* already stopped */ }
+    }, []);
+
+    const start = useCallback(async () => {
+        if (!supported || recording) return;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            streamRef.current = stream;
+            const rec = new MediaRecorder(stream);
+            chunksRef.current = [];
+
+            rec.ondataavailable = (e) => { if (e.data?.size) chunksRef.current.push(e.data); };
+            rec.onstop = () => {
+                streamRef.current?.getTracks().forEach(t => t.stop());
+                streamRef.current = null;
+                setRecording(false);
+                const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
+                chunksRef.current = [];
+                if (blob.size) onAudioRef.current?.(blob);
+            };
+
+            rec.start();
+            recorderRef.current = rec;
+            setRecording(true);
+        } catch (err) {
+            const name = err?.name === "NotAllowedError" ? "not-allowed" : (err?.message || "failed-to-start");
+            onErrorRef.current?.(name);
+        }
+    }, [supported, recording]);
+
+    // Cleanup on unmount
+    useEffect(() => () => {
+        try { recorderRef.current?.stop(); } catch { /* noop */ }
+        streamRef.current?.getTracks().forEach(t => t.stop());
+    }, []);
+
+    return { supported, recording, start, stop };
+}
+
 export function useSpeechSynthesis() {
     const supported = typeof window !== "undefined" && "speechSynthesis" in window;
     const [speaking, setSpeaking] = useState(false);

@@ -84,8 +84,8 @@ const StatCard = ({ icon: Icon, label, value, sub, accent, count }) => {
             <div className="min-w-0">
                 <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">{label}</p>
                 {count !== undefined
-                    ? <p className={`text-2xl font-black mt-1 tracking-tight ${a.val}`}>{count}</p>
-                    : <p className={`text-2xl font-black mt-1 tracking-tight ${a.val}`}>₹{fmt(value)}</p>
+                    ? <p className={`text-xl sm:text-2xl font-black mt-1 tracking-tight truncate ${a.val}`} title={count}>{count}</p>
+                    : <p className={`text-xl sm:text-2xl font-black mt-1 tracking-tight truncate ${a.val}`} title={`₹${fmt(value)}`}>₹{fmt(value)}</p>
                 }
                 {sub && <p className="text-xs text-zinc-400 mt-1 leading-none font-medium">{sub}</p>}
             </div>
@@ -1109,7 +1109,7 @@ const BalanceSheet = () => {
 
     return (
         <div className="space-y-5">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard icon={Receipt}      label="Total Invoiced"  value={summary.totalInvoiced}   sub={`${summary.invoiceCount} invoices`}  accent="indigo" />
                 <StatCard icon={TrendingDown} label="Total Received"  value={summary.totalReceived}   sub={`${summary.paidCount} fully paid`}   accent="emerald" />
                 <StatCard icon={TrendingUp}   label="Outstanding"     value={summary.totalOutstanding} sub={`${summary.partialCount} partial`}  accent="amber" />
@@ -1699,7 +1699,7 @@ export default function InvoiceBilling() {
             )}
 
             {/* ── Stats ───────────────────────────────────────────────────── */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard icon={Users}        label="Total Clients"   count={clientCount}    sub={`${invoices.length} invoices`} accent="violet" />
                 <StatCard icon={Receipt}      label="Total Invoiced"  value={totalInvoiced}  sub={`across all clients`}          accent="indigo" />
                 <StatCard icon={TrendingDown} label="Amount Received" value={totalReceived}  sub={`${invoices.filter((i) => i.status === "PAID").length} fully paid`} accent="emerald" />
