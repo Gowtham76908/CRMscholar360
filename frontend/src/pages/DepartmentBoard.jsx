@@ -241,7 +241,7 @@ function StageColumn({ stage, department, accent, rows, stages, canAssign, onMov
                 className={`flex-1 bg-gray-50/60 rounded-b-xl p-1.5 space-y-1.5 min-h-[200px] transition-colors overflow-y-auto ${
                     isOver ? "ring-2 ring-inset ring-indigo-400 bg-indigo-50/60" : ""
                 }`}
-                style={{ maxHeight: "calc(100vh - 200px)" }}
+                style={{ maxHeight: "calc(100vh - 145px)" }}
             >
                 <AnimatePresence>
                     {rows.map((r, i) => (

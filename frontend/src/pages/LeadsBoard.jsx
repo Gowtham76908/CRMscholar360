@@ -200,7 +200,7 @@ export default function LeadsBoard({
                     {/* Board fills the viewport down to the bottom; each column's card
                         area scrolls internally so there's no dead gap below the board. */}
                     <div
-                        className={`flex gap-5 overflow-x-auto pb-4 pt-2 items-stretch transition-opacity duration-150 select-none scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent h-[calc(100vh-130px)] ${isFetching ? "opacity-60" : ""}`}
+                        className={`flex gap-5 overflow-x-auto pb-4 pt-2 items-stretch transition-opacity duration-150 select-none scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent h-[calc(100vh-85px)] ${isFetching ? "opacity-60" : ""}`}
                     >
                         {stages.map((stage) => (
                             <StageColumn
