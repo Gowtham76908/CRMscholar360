@@ -99,6 +99,14 @@ export default function LeadsBoard({
     slaBreachDays = 7,
     boardControlsExpanded = false,
     setBoardControlsExpanded,
+    source,
+    category,
+    enquiryType,
+    sla,
+    startDate,
+    endDate,
+    score_min,
+    score_max,
 }) {
     const { user } = useAuth();
     const { getStages, hasWorkflow, isLoading: workflowsLoading } = useWorkflows();
@@ -124,8 +132,16 @@ export default function LeadsBoard({
         const f = {};
         if (search) f.search = search;
         if (mine && user?.id) f.assignedEmployeeId = user.id;
+        if (source) f.source = source;
+        if (category) f.category = category;
+        if (enquiryType) f.enquiryType = enquiryType;
+        if (sla) f.sla = sla;
+        if (startDate) f.startDate = startDate;
+        if (endDate) f.endDate = endDate;
+        if (score_min) f.score_min = score_min;
+        if (score_max) f.score_max = score_max;
         return f;
-    }, [search, mine, user]);
+    }, [search, mine, user, source, category, enquiryType, sla, startDate, endDate, score_min, score_max]);
 
     const { data, isLoading, isFetching } = useDepartmentBoard(department, filters, 1, PER_STAGE);
     // Already split server-side, one entry per stage: { [stageCode]: { rows, total, totalPages } }.

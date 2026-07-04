@@ -21,6 +21,8 @@ export function useSpeechRecognition({ onResult, onError } = {}) {
     const supported = Boolean(SR);
     const [listening, setListening] = useState(false);
     const recRef = useRef(null);
+    const retriedRef = useRef(false); // one silent retry per session for transient "network" errors
+    const startRef = useRef(null);    // holds latest start() so the retry can re-invoke it
 
     // Keep latest callbacks in refs so start() stays stable
     const onResultRef = useRef(onResult);
@@ -35,6 +37,7 @@ export function useSpeechRecognition({ onResult, onError } = {}) {
         rec.lang           = "en-IN"; // bias to Indian English; falls back to default if unsupported
 
         rec.onresult = (e) => {
+            retriedRef.current = false; // recognition is working; allow future retries
             let interim = "", final = "";
             for (let i = e.resultIndex; i < e.results.length; i++) {
                 const r = e.results[i];
@@ -43,7 +46,19 @@ export function useSpeechRecognition({ onResult, onError } = {}) {
             }
             onResultRef.current?.({ interim, final });
         };
-        rec.onerror = (e) => onErrorRef.current?.(e.error || "unknown");
+        rec.onerror = (e) => {
+            const err = e.error || "unknown";
+            // The Web Speech backend occasionally drops the first connection. Retry
+            // once transparently before bubbling the error up to the user.
+            if (err === "network" && !retriedRef.current) {
+                retriedRef.current = true;
+                recRef.current = null;
+                setListening(false);
+                setTimeout(() => startRef.current?.(), 400);
+                return;
+            }
+            onErrorRef.current?.(err);
+        };
         rec.onend   = () => setListening(false);
 
         try {
@@ -54,6 +69,8 @@ export function useSpeechRecognition({ onResult, onError } = {}) {
             onErrorRef.current?.(err.message || "failed-to-start");
         }
     }, [SR, supported, listening]);
+
+    useEffect(() => { startRef.current = start; }, [start]);
 
     const stop = useCallback(() => {
         recRef.current?.stop();

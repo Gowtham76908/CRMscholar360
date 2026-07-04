@@ -3,24 +3,24 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Zap, Plus, Trash2, ToggleLeft, ToggleRight, ChevronDown, ChevronRight, Loader2, X } from "lucide-react";
 import api from "../api/axios";
 import { roleLabel } from "../lib/roles";
+import { useWorkflows } from "../hooks/useDepartments";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TRIGGER_TYPES = [
     { value: "LEAD_CREATED",   label: "Lead is created" },
-    { value: "STATUS_CHANGED", label: "Lead status changes to…" },
-    { value: "LEAD_ASSIGNED",  label: "Lead is assigned" },
+    { value: "STAGE_CHANGED",  label: "Lead stage changes to…" },
+    { value: "ASSIGNED",       label: "Consultant is assigned" },
     { value: "NO_ACTIVITY",    label: "No activity for N days" },
     { value: "MISSED_CALL",    label: "Missed / unanswered call" },
 ];
 
-const STATUS_OPTIONS       = ["NEW", "CONTACTED", "FOLLOW_UP", "CONVERTED", "LOST"];
 const SOURCE_OPTIONS       = ["FACEBOOK", "INSTAGRAM", "GMAIL", "WEBSITE", "PHONE_CALL", "LINKEDIN"];
 const ENQUIRY_TYPE_OPTIONS = ["PRODUCT", "WHITE_LABEL", "LMS", "SERVICES"];
 
 const CONDITION_FIELDS = [
     { value: "source",      label: "Lead Source" },
-    { value: "status",      label: "Lead Status" },
+    { value: "stage",       label: "Lead Stage" },
     { value: "assignedTo",  label: "Assigned To" },
     { value: "enquiryType", label: "Enquiry Type" },
 ];
@@ -33,8 +33,8 @@ const OPERATORS = [
 ];
 
 const ACTION_TYPES = [
-    { value: "CHANGE_STATUS",      label: "Change lead status" },
-    { value: "ASSIGN_LEAD",        label: "Assign lead to user" },
+    { value: "CHANGE_STAGE",       label: "Change lead stage" },
+    { value: "ASSIGN_CONSULTANT",  label: "Assign consultant to lead" },
     { value: "CREATE_TASK",        label: "Create a task" },
     { value: "CREATE_REMINDER",    label: "Create a reminder" },
     { value: "SEND_NOTIFICATION",  label: "Send in-app notification" },
@@ -42,20 +42,15 @@ const ACTION_TYPES = [
     { value: "SEND_EMAIL",         label: "Send email" },
 ];
 
-const STATUS_COLORS = {
-    NEW: "bg-blue-100 text-blue-700",
-    CONTACTED: "bg-indigo-100 text-indigo-700",
-    FOLLOW_UP: "bg-amber-100 text-amber-700",
-    CONVERTED: "bg-green-100 text-green-700",
-    LOST: "bg-red-100 text-red-700",
-};
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function triggerLabel(rule) {
+function triggerLabel(rule, stageLabel) {
     const base = TRIGGER_TYPES.find(t => t.value === rule.triggerType)?.label ?? rule.triggerType;
-    if (rule.triggerType === "STATUS_CHANGED" && rule.triggerConfig?.status)
-        return `${base.replace("…", "")} ${rule.triggerConfig.status}`;
+    if (rule.triggerType === "STAGE_CHANGED" && rule.triggerConfig?.stage) {
+        const dept = rule.triggerConfig.department || "SALES";
+        const label = stageLabel ? stageLabel(dept, rule.triggerConfig.stage) : rule.triggerConfig.stage;
+        return `Lead stage changes to ${dept} · ${label}`;
+    }
     if (rule.triggerType === "NO_ACTIVITY" && rule.triggerConfig?.days)
         return `No activity for ${rule.triggerConfig.days} day(s)`;
     return base;
@@ -81,7 +76,7 @@ const CONSTRAINT_TYPES = [
 
 const emptyConstraint = () => ({ type: "COOLDOWN", hours: 24 });
 const emptyCondition = () => ({ field: "source", operator: "equals", value: "" });
-const emptyAction    = () => ({ type: "CHANGE_STATUS", config: {} });
+const emptyAction    = () => ({ type: "CHANGE_STAGE", config: {} });
 
 // ─── Rule Builder Modal ───────────────────────────────────────────────────────
 
@@ -107,6 +102,9 @@ function RuleModal({ initial, users, onSave, onClose }) {
     const removeConstraint = (i) => setConstraints(getConstraints().filter((_, idx) => idx !== i));
     const setConstraint = (i, patch) => setConstraints(getConstraints().map((c, idx) => idx === i ? { ...c, ...patch } : c));
 
+    const { byDepartment, getStages } = useWorkflows();
+    const departments = Object.keys(byDepartment);
+
     const hasWA = form.actions.some(a => a.type === "SEND_WHATSAPP");
     const { data: waTemplates = [], error: waError, isLoading: waLoading } = useQuery({
         queryKey: ["wa-templates"],
@@ -119,9 +117,9 @@ function RuleModal({ initial, users, onSave, onClose }) {
 
     const needsValue = (op) => op === "equals" || op === "not_equals";
     const fieldValues = (field) => {
-        if (field === "source")      return SOURCE_OPTIONS;
-        if (field === "status")      return STATUS_OPTIONS;
-        if (field === "enquiryType") return ENQUIRY_TYPE_OPTIONS;
+        if (field === "source")      return SOURCE_OPTIONS.map(v => ({ value: v, label: v.replace("_", " ") }));
+        if (field === "stage")       return getStages(form.triggerConfig?.department || "SALES").map(s => ({ value: s.code, label: s.label }));
+        if (field === "enquiryType") return ENQUIRY_TYPE_OPTIONS.map(v => ({ value: v, label: v.replace("_", " ") }));
         return [];
     };
 
@@ -160,15 +158,28 @@ function RuleModal({ initial, users, onSave, onClose }) {
                         >
                             {TRIGGER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                         </select>
-                        {form.triggerType === "STATUS_CHANGED" && (
-                            <select
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                                value={form.triggerConfig?.status ?? ""}
-                                onChange={e => set({ triggerConfig: { ...form.triggerConfig, status: e.target.value } })}
-                            >
-                                <option value="">— select status —</option>
-                                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
+                        {form.triggerType === "STAGE_CHANGED" && (
+                            <div className="grid grid-cols-2 gap-3">
+                                <select
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                    value={form.triggerConfig?.department ?? ""}
+                                    onChange={e => set({ triggerConfig: { ...form.triggerConfig, department: e.target.value, stage: "" } })}
+                                >
+                                    <option value="">— select department —</option>
+                                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
+                                <select
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                    value={form.triggerConfig?.stage ?? ""}
+                                    onChange={e => set({ triggerConfig: { ...form.triggerConfig, stage: e.target.value } })}
+                                    disabled={!form.triggerConfig?.department}
+                                >
+                                    <option value="">— select stage —</option>
+                                    {getStages(form.triggerConfig?.department).map(s => (
+                                        <option key={s.code} value={s.code}>{s.label}</option>
+                                    ))}
+                                </select>
+                            </div>
                         )}
                         {form.triggerType === "NO_ACTIVITY" && (
                             <div className="flex items-center gap-2">
@@ -296,7 +307,7 @@ function RuleModal({ initial, users, onSave, onClose }) {
                                             onChange={e => setCondition(i, { value: e.target.value })}
                                         >
                                             <option value="">— select —</option>
-                                            {fieldValues(cond.field).map(v => <option key={v} value={v}>{v.replace("_", " ")}</option>)}
+                                            {fieldValues(cond.field).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
                                         </select>
                                     ) : (
                                         <input
@@ -340,17 +351,19 @@ function RuleModal({ initial, users, onSave, onClose }) {
                                     </button>
                                 </div>
                                 {/* Action config fields */}
-                                {action.type === "CHANGE_STATUS" && (
+                                {action.type === "CHANGE_STAGE" && (
                                     <select
                                         className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
-                                        value={action.config.status ?? ""}
-                                        onChange={e => setActionConfig(i, { status: e.target.value })}
+                                        value={action.config.stage ?? ""}
+                                        onChange={e => setActionConfig(i, { stage: e.target.value })}
                                     >
-                                        <option value="">— select status —</option>
-                                        {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                                        <option value="">— select stage —</option>
+                                        {getStages(form.triggerConfig?.department || "SALES").map(s => (
+                                            <option key={s.code} value={s.code}>{s.label}</option>
+                                        ))}
                                     </select>
                                 )}
-                                {action.type === "ASSIGN_LEAD" && (
+                                {action.type === "ASSIGN_CONSULTANT" && (
                                     <select
                                         className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
                                         value={action.config.userId ?? ""}
@@ -550,6 +563,7 @@ function RuleCard({ rule, users, onEdit, onDelete, onToggle }) {
         enabled: logsOpen,
     });
 
+    const { stageLabel } = useWorkflows();
     const userMap = Object.fromEntries(users.map(u => [u.id, u.name]));
 
     return (
@@ -565,7 +579,7 @@ function RuleCard({ rule, users, onEdit, onDelete, onToggle }) {
                     {rule.description && <p className="text-xs text-gray-500 mb-2">{rule.description}</p>}
                     <div className="flex flex-wrap gap-2 text-xs">
                         <span className="bg-violet-50 text-violet-700 border border-violet-100 px-2 py-0.5 rounded-full font-medium">
-                            ⚡ {triggerLabel(rule)}
+                            ⚡ {triggerLabel(rule, stageLabel)}
                         </span>
                         {rule.conditions.length > 0 && (
                             <span className="bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full font-medium">
@@ -613,8 +627,8 @@ function RuleCard({ rule, users, onEdit, onDelete, onToggle }) {
                 {rule.actions.map((a, i) => (
                     <div key={a.id} className="flex items-center gap-2 text-xs text-gray-600">
                         <span className="font-bold text-gray-400">→</span>
-                        {a.type === "CHANGE_STATUS"     && `Change status to ${a.config.status}`}
-                        {a.type === "ASSIGN_LEAD"       && `Assign to ${userMap[a.config.userId] ?? a.config.userId}`}
+                        {a.type === "CHANGE_STAGE"     && `Change stage to ${stageLabel(rule.triggerConfig?.department || "SALES", a.config.stage)}`}
+                        {a.type === "ASSIGN_CONSULTANT" && `Assign to ${userMap[a.config.userId] ?? a.config.userId}`}
                         {a.type === "CREATE_TASK"       && `Create task "${a.config.title}" in ${a.config.dueDaysFromNow ?? 1}d`}
                         {a.type === "CREATE_REMINDER"   && `Set reminder: "${a.config.message}" in ${a.config.dueHoursFromNow ?? 24}h`}
                         {a.type === "SEND_NOTIFICATION" && `Notify: "${a.config.title ?? "Alert"}"`}

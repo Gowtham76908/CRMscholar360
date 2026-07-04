@@ -8,5 +8,7 @@ export function getSocket() {
             .replace(/\/api$/, "");
         socket = io(base, { withCredentials: true, autoConnect: false });
     }
+    const token = sessionStorage.getItem("token");
+    socket.auth = { token };
     return socket;
 }

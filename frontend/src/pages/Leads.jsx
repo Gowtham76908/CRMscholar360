@@ -709,6 +709,14 @@ const Leads = () => {
                     slaBreachDays={slaBreachDays}
                     boardControlsExpanded={boardControlsExpanded}
                     setBoardControlsExpanded={setBoardControlsExpanded}
+                    source={sourceFilter || undefined}
+                    category={categoryFilter || undefined}
+                    enquiryType={enquiryFilter || undefined}
+                    sla={slaFilter || undefined}
+                    startDate={dateFrom || undefined}
+                    endDate={dateTo || undefined}
+                    score_min={scoreMin || undefined}
+                    score_max={scoreMax || undefined}
                 />
             ) : viewMode === "grid" ? (
                 <div className={`grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 transition-opacity duration-150 ${isFetching && !isLoading ? "opacity-60" : ""}`}>
@@ -988,6 +996,9 @@ const Leads = () => {
                                 onSuccess={() => {
                                     setSelectedLeads([]);
                                     queryClient.invalidateQueries({ queryKey: ["leads"] });
+                                    queryClient.invalidateQueries({ queryKey: ["department-board"] });
+                                    queryClient.invalidateQueries({ queryKey: ["department-queue"] });
+                                    queryClient.invalidateQueries({ queryKey: ["lead-departments"] });
                                 }}
                             />
                         </div>

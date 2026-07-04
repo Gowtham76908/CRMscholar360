@@ -49,6 +49,8 @@ export default function AssistantWidget() {
         },
         onError:  (err) => {
             if (err === "not-allowed") toast.error("Microphone access denied. Check browser permissions.");
+            else if (err === "network") toast.error("Voice input needs an internet connection and works best in Google Chrome.");
+            else if (err === "no-speech") toast.error("Didn't catch that — please try speaking again.");
             else if (err !== "aborted") toast.error(`Voice input failed: ${err}`);
         },
     });

@@ -39,9 +39,11 @@ export const AuthProvider = ({ children }) => {
     const login = async (email, password) => {
         try {
             const data = await loginApi({ email, password });
-            const { user } = data;
-            // JWT is stored in httpOnly cookie by the server — not accessible here
+            const { user, token } = data;
             sessionStorage.setItem("user", JSON.stringify(user));
+            if (token) {
+                sessionStorage.setItem("token", token);
+            }
             setUser(user);
             setOnlineStatus(user.onlineStatus || "OFFLINE");
             return { success: true };
@@ -56,6 +58,7 @@ export const AuthProvider = ({ children }) => {
     const logout = useCallback(async () => {
         try { await api.post("/auth/logout"); } catch { /* ignore */ }
         sessionStorage.removeItem("user");
+        sessionStorage.removeItem("token");
         sessionStorage.removeItem("streamToken");
         setUser(null);
         setOnlineStatus("OFFLINE");

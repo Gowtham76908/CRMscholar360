@@ -172,6 +172,9 @@ export default function ImportLeadsModal({ onClose }) {
                     if (data.failed > 0)     parts.push(`${data.failed} failed`);
                     toast.success(parts.join(" · "), { duration: 6000 });
                     queryClient.invalidateQueries({ queryKey: ["leads"] });
+                    queryClient.invalidateQueries({ queryKey: ["department-board"] });
+                    queryClient.invalidateQueries({ queryKey: ["department-queue"] });
+                    queryClient.invalidateQueries({ queryKey: ["lead-departments"] });
                     onClose();
                 } else if (data.status === "failed") {
                     clearInterval(pollRef.current);

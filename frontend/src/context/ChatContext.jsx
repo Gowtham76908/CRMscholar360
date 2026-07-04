@@ -68,6 +68,18 @@ export const ChatProvider = ({ children }) => {
         try {
             const { data } = await api.get("/chat/channels");
             setChannels(data);
+            // Seed unread badges from server so counts survive reloads / offline messages.
+            setUnreadMap(prev => {
+                const next = { ...prev };
+                for (const ch of data) {
+                    if (ch.id === activeChIdRef.current) {
+                        delete next[ch.id];
+                    } else if (ch.unreadCount > 0) {
+                        next[ch.id] = ch.unreadCount;
+                    }
+                }
+                return next;
+            });
         } catch {
             // Chat stays empty if server is unreachable
         }
@@ -103,9 +115,16 @@ export const ChatProvider = ({ children }) => {
 
         const onMessage = (msg) => {
             // Update sidebar last-message
-            setChannels(prev => prev.map(ch =>
-                ch.id === msg.channelId ? { ...ch, lastMessage: msg } : ch
-            ));
+            setChannels(prev => {
+                const exists = prev.some(ch => ch.id === msg.channelId);
+                if (!exists) {
+                    fetchChannels();
+                    return prev;
+                }
+                return prev.map(ch =>
+                    ch.id === msg.channelId ? { ...ch, lastMessage: msg } : ch
+                );
+            });
 
             // Increment unread badge for channels the user isn't currently viewing
             if (activeChIdRef.current !== msg.channelId && msg.author?.id !== user.id) {
@@ -128,6 +147,12 @@ export const ChatProvider = ({ children }) => {
         };
 
         const onNotification = (notif) => {
+            // Chat messages have their own toast (see onMessage). Here we only need
+            // the bell to update, so refresh the notifications query and stop.
+            if (notif.type === "CHAT_MESSAGE") {
+                queryClient.invalidateQueries({ queryKey: ["notifications"] });
+                return;
+            }
             playNotificationSound();
             toast.message(notif.title || "🔔 Notification", {
                 description: notif.message,
@@ -165,8 +190,12 @@ export const ChatProvider = ({ children }) => {
                 delete next[channelId];
                 return next;
             });
+            // Persist the read state so the badge and bell stay cleared after reload.
+            api.post(`/chat/channels/${channelId}/read`)
+                .then(() => queryClient.invalidateQueries({ queryKey: ["notifications"] }))
+                .catch(() => { /* non-fatal: badge already cleared client-side */ });
         }
-    }, []);
+    }, [queryClient]);
 
     const clearUnread = useCallback(() => setUnreadMap({}), []);
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -81,17 +82,19 @@ const ChannelPreview = ({ channel, active, onSelect, unread, currentUserId }) =>
                 )}
             </div>
             <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                    <span className={cn("text-sm font-semibold truncate", active ? "text-[#F97316]" : "text-[#18181B]")}>{name}</span>
+                <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                        <span className={cn("text-sm font-semibold truncate", active ? "text-[#F97316]" : "text-[#18181B]")}>{name}</span>
+                        {unread > 0 && (
+                            <span className="h-4 min-w-4 px-1 shrink-0 bg-[#F97316] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                                {unread > 9 ? "9+" : unread}
+                            </span>
+                        )}
+                    </div>
                     <span className="text-[10px] text-[#71717A] shrink-0 ml-1">{time}</span>
                 </div>
                 <div className="flex items-center justify-between mt-0.5">
                     <span className={cn("text-xs truncate", unread > 0 ? "font-semibold text-[#18181B]" : "text-[#71717A]")}>{preview}</span>
-                    {unread > 0 && (
-                        <span className="ml-1 h-4 min-w-4 px-1 shrink-0 bg-[#F97316] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                            {unread > 9 ? "9+" : unread}
-                        </span>
-                    )}
                 </div>
             </div>
         </button>
@@ -329,16 +332,33 @@ const Messages = () => {
     const typingTimers   = useRef({}); // userId → timer id
     const prevChannelRef = useRef(null);
 
+    const [searchParams, setSearchParams] = useSearchParams();
+
     const activeChannel = channels.find(c => c.id === activeChannelId) ?? null;
 
+    // Open the channel referenced by ?channel=<id> (e.g. from a bell notification).
+    useEffect(() => {
+        const target = searchParams.get("channel");
+        if (target && channels.some(c => c.id === target)) {
+            setActiveChannelId(target);
+            searchParams.delete("channel");
+            setSearchParams(searchParams, { replace: true });
+        }
+    }, [searchParams, channels, setSearchParams]);
+
     // ── Fetch messages for active channel ─────────────────────────────────────
-    const { isLoading: loadingMessages } = useQuery({
+    const { isLoading: loadingMessages, data: chatData } = useQuery({
         queryKey: ["chat-messages", activeChannelId],
         queryFn:  () => api.get(`/chat/channels/${activeChannelId}/messages`, { params: { limit: 50 } }).then(r => r.data),
         enabled:  !!activeChannelId,
         staleTime: 0,
-        onSuccess: (data) => setMessages(data.messages || []),
     });
+
+    useEffect(() => {
+        if (chatData) {
+            setMessages(chatData.messages || []);
+        }
+    }, [chatData]);
 
     // ── Socket: join/leave channel rooms ─────────────────────────────────────
     useEffect(() => {
@@ -352,6 +372,10 @@ const Messages = () => {
         }
         prevChannelRef.current = activeChannelId;
         setTypingUsers({});
+
+        return () => {
+            setActiveChannel(null);
+        };
     }, [socket, activeChannelId, setActiveChannel]);
 
     // ── Socket: incoming events ───────────────────────────────────────────────
