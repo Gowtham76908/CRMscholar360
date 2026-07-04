@@ -907,6 +907,7 @@ const LEAD_SELECT_FOR_BOARD = {
             id: true,
             department: true,
             stage: true,
+            assignedEmployeeId: true,
             assignedEmployee: {
                 select: {
                     id: true,
