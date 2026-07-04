@@ -99,7 +99,7 @@ const StatCard = ({ icon: Icon, label, value, sub, accent, count }) => {
 const CreateInvoiceModal = ({ onClose, editData = null, company, clientPrefill = null }) => {
     const qc = useQueryClient();
     const [form, setForm] = useState({
-        invoiceType:   editData?.invoiceType   || "PROFORMA",
+        invoiceType:   editData?.invoiceType   || "TAX_INVOICE",
         clientName:    editData?.clientName    || clientPrefill?.clientName    || "",
         clientEmail:   editData?.clientEmail   || clientPrefill?.clientEmail   || "",
         clientPhone:   editData?.clientPhone   || clientPrefill?.clientPhone   || "",
@@ -197,12 +197,6 @@ const CreateInvoiceModal = ({ onClose, editData = null, company, clientPrefill =
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        {["PROFORMA", "TAX_INVOICE"].map((t) => (
-                            <button key={t} onClick={() => setField("invoiceType", t)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${form.invoiceType === t ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" : "bg-white text-gray-500 border-gray-200 hover:border-indigo-300"}`}>
-                                {t === "PROFORMA" ? "Proforma" : "Tax Invoice"}
-                            </button>
-                        ))}
                         <button onClick={onClose} className="ml-2 p-1.5 hover:bg-gray-100 rounded-lg transition">
                             <X className="h-4 w-4 text-gray-400" />
                         </button>
@@ -923,10 +917,7 @@ ${inv.notes ? `<div class="notes"><strong>Note: </strong>${inv.notes}</div>` : "
                                 <div>
                                     <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest block mb-2">Invoice Summary</span>
                                     <div className="space-y-1">
-                                        <div className="flex justify-between text-[11px] text-zinc-500">
-                                            <span>Document Type</span>
-                                            <span className="font-bold text-zinc-700">{inv.invoiceType === "TAX_INVOICE" ? "Tax Invoice" : "Proforma Invoice"}</span>
-                                        </div>
+
                                         {inv.poNumber && (
                                             <div className="flex justify-between text-[11px] text-zinc-500">
                                                 <span>PO Number</span>
@@ -1395,8 +1386,8 @@ const ClientDetail = ({ client, company, onBack, onNewInvoice, onView, onEdit, o
                             <table className="w-full text-xs">
                                 <thead className="bg-zinc-50/50 border-b border-zinc-100">
                                     <tr>
-                                        {["Invoice #","Type","Date","Due Date","Total","Paid","Balance","Status","Actions"].map((h, i) => (
-                                            <th key={h} className={`px-4 py-3.5 font-bold text-zinc-400 uppercase tracking-wider text-[10px] ${[4,5,6].includes(i) ? "text-right" : i === 8 ? "text-center" : "text-left"}`}>{h}</th>
+                                        {["Invoice #","Date","Due Date","Total","Paid","Balance","Status","Actions"].map((h, i) => (
+                                            <th key={h} className={`px-4 py-3.5 font-bold text-zinc-400 uppercase tracking-wider text-[10px] ${[3,4,5].includes(i) ? "text-right" : i === 7 ? "text-center" : "text-left"}`}>{h}</th>
                                         ))}
                                     </tr>
                                 </thead>
@@ -1406,7 +1397,6 @@ const ClientDetail = ({ client, company, onBack, onNewInvoice, onView, onEdit, o
                                             <td className="px-4 py-3.5">
                                                 <button onClick={() => onView(inv)} className="font-extrabold text-violet-600 hover:text-violet-850">{inv.invoiceNumber}</button>
                                             </td>
-                                            <td className="px-4 py-3.5"><TypePill type={inv.invoiceType} /></td>
                                             <td className="px-4 py-3.5 text-zinc-500 font-medium">{fmtDate(inv.createdAt)}</td>
                                             <td className="px-4 py-3.5 text-zinc-500 font-medium">{fmtDate(inv.dueDate)}</td>
                                             <td className="px-4 py-3.5 text-right font-bold text-zinc-800">₹{fmt(inv.total)}</td>
@@ -1763,14 +1753,6 @@ export default function InvoiceBilling() {
                             <option value="">All Statuses</option>
                             {Object.entries(STATUS_CFG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                         </select>
-                        <select
-                            className="h-10 px-3.5 text-xs border border-zinc-200 rounded-xl bg-white text-zinc-700 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition-all shadow-sm/5 min-w-[130px]"
-                            value={filterType} onChange={(e) => setFilterType(e.target.value)}
-                        >
-                            <option value="">All Types</option>
-                            <option value="PROFORMA">Proforma</option>
-                            <option value="TAX_INVOICE">Tax Invoice</option>
-                        </select>
                         <span className="ml-auto text-xs font-bold text-zinc-400">{filtered.length} invoice{filtered.length !== 1 ? "s" : ""}</span>
                     </div>
 
@@ -1787,8 +1769,8 @@ export default function InvoiceBilling() {
                             <table className="w-full text-xs border-collapse">
                                 <thead className="bg-zinc-50 border-b border-zinc-150/60 text-zinc-400 font-bold uppercase tracking-wider text-[10px]">
                                     <tr>
-                                        {["Invoice #","Client","Type","Date","Total","Paid","Balance","Status","Actions"].map((h, i) => (
-                                            <th key={h} className={`px-5 py-3.5 font-bold ${[4,5,6].includes(i) ? "text-right" : i === 8 ? "text-center" : "text-left"}`}>{h}</th>
+                                        {["Invoice #","Client","Date","Total","Paid","Balance","Status","Actions"].map((h, i) => (
+                                            <th key={h} className={`px-5 py-3.5 font-bold ${[3,4,5].includes(i) ? "text-right" : i === 7 ? "text-center" : "text-left"}`}>{h}</th>
                                         ))}
                                     </tr>
                                 </thead>
@@ -1805,7 +1787,6 @@ export default function InvoiceBilling() {
                                                 </button>
                                                 {inv.clientEmail && <p className="text-zinc-400 text-[10px] mt-0.5 font-medium">{inv.clientEmail}</p>}
                                             </td>
-                                            <td className="px-5 py-3.5"><TypePill type={inv.invoiceType} /></td>
                                             <td className="px-5 py-3.5 text-zinc-500 font-semibold">{fmtDate(inv.createdAt)}</td>
                                             <td className="px-5 py-3.5 text-right font-black text-zinc-850">₹{fmt(inv.total)}</td>
                                             <td className="px-5 py-3.5 text-right font-bold text-emerald-600">₹{fmt(inv.totalPaid || 0)}</td>

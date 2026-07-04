@@ -38,7 +38,7 @@ const INV_STATUS_CFG = {
 function CreateInvoiceModal({ deal, onClose, onCreated }) {
     const DEFAULT_TAX_RATES = [0, 5, 12, 18, 28];
     const [form, setForm] = useState({
-        invoiceType: "PROFORMA",
+        invoiceType: "TAX_INVOICE",
         clientName:  deal.lead?.name  ?? "",
         clientEmail: deal.lead?.email ?? "",
         clientPhone: deal.lead?.phone ?? "",
@@ -97,20 +97,7 @@ function CreateInvoiceModal({ deal, onClose, onCreated }) {
                 </div>
 
                 <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                    {/* Type */}
-                    <div className="flex gap-2">
-                        {["PROFORMA", "TAX_INVOICE"].map(t => (
-                            <button key={t} type="button"
-                                onClick={() => setField("invoiceType", t)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                                    form.invoiceType === t
-                                        ? "bg-indigo-600 text-white border-indigo-600"
-                                        : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"
-                                }`}>
-                                {t === "PROFORMA" ? "Proforma" : "Tax Invoice"}
-                            </button>
-                        ))}
-                    </div>
+
 
                     {/* Client */}
                     <div className="grid grid-cols-2 gap-3">
