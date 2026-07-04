@@ -279,6 +279,8 @@ function StageColumn({ stage, department, accent, rows, stages, canAssign, onMov
 // ─── Card ────────────────────────────────────────────────────────────────────
 
 function ServiceCard({ row, department, stages, canAssign = false, onMove, moveLoading, overlay = false }) {
+    const qc = useQueryClient();
+    const [showAssignMenu, setShowAssignMenu] = useState(false);
     const [showOtherAssignees, setShowOtherAssignees] = useState(false);
     const lead = row.lead || {};
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: row.id });
@@ -328,21 +330,34 @@ function ServiceCard({ row, department, stages, canAssign = false, onMove, moveL
                         <p className="text-[10px] text-gray-400 truncate mt-0.5">{lead.phone || lead.email}</p>
                     )}
 
-                    <div className="mt-1.5 flex items-center justify-between gap-1.5">
+                    <div className="mt-1.5 flex items-center justify-between gap-1.5 relative">
                         <button
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                setShowOtherAssignees(!showOtherAssignees);
+                                if (canAssign) {
+                                    setShowAssignMenu(!showAssignMenu);
+                                } else {
+                                    setShowOtherAssignees(!showOtherAssignees);
+                                }
                             }}
-                            className={`flex items-center gap-0.5 text-[10px] text-gray-500 min-w-0 hover:text-indigo-600 transition-colors focus:outline-none px-1 rounded hover:bg-slate-100 truncate ${showOtherAssignees ? "text-indigo-600 bg-indigo-50/70" : ""}`}
-                            title="View all department assignees"
+                            className={`flex items-center gap-0.5 text-[10px] text-gray-500 min-w-0 hover:text-indigo-600 transition-colors focus:outline-none px-1 rounded hover:bg-slate-100 truncate ${(canAssign ? showAssignMenu : showOtherAssignees) ? "text-indigo-600 bg-indigo-50/70" : ""}`}
+                            title={canAssign ? "Click to assign consultant" : "View all department assignees"}
                         >
                             <User className="h-2.5 w-2.5 shrink-0" />
                             <span className="truncate font-semibold">{row.assignedEmployee?.name || "Unassigned"}</span>
                         </button>
-                        {!overlay && canAssign && (
-                            <AssignControl leadDepartmentId={row.id} department={department} currentId={row.assignedEmployeeId} />
+                        {showAssignMenu && (
+                            <AssignMenu
+                                leadDepartmentId={row.id}
+                                department={department}
+                                currentId={row.assignedEmployeeId}
+                                onClose={() => setShowAssignMenu(false)}
+                                onDone={() => {
+                                    qc.invalidateQueries({ queryKey: ["department-board"] });
+                                    qc.invalidateQueries({ queryKey: ["department-queue"] });
+                                }}
+                            />
                         )}
                     </div>
                 </div>

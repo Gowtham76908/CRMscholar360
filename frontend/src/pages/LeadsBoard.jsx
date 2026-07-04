@@ -1,11 +1,13 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
     Building2, Loader2, Mail, Phone, Globe, Tag, Calendar,
-    ClipboardList, X, ChevronDown,
+    ClipboardList, X, ChevronDown, UserPlus,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { useWorkflows, useDepartmentBoard } from "../hooks/useDepartments";
+import { useWorkflows, useDepartmentBoard, useDepartmentMembers } from "../hooks/useDepartments";
 import { DEPARTMENT_ORDER, departmentLabel } from "../lib/departments";
 import { getCategoryFromScore, getSLAStatus } from "../utils/leadScore";
 import Avatar from "../components/Avatar";
@@ -204,6 +206,7 @@ export default function LeadsBoard({
                             <StageColumn
                                 key={stage.code}
                                 stage={stage}
+                                department={department}
                                 rows={columns[stage.code]?.rows || []}
                                 totalInStage={columns[stage.code]?.total ?? 0}
                                 slaWarningDays={slaWarningDays}
@@ -234,7 +237,7 @@ function stageColor(code) {
     return "bg-indigo-50 text-indigo-700 border-indigo-200";
 }
 
-function StageColumn({ stage, rows, totalInStage, slaWarningDays, slaBreachDays, onPreviewTask }) {
+function StageColumn({ stage, department, rows, totalInStage, slaWarningDays, slaBreachDays, onPreviewTask }) {
     const theme = STAGE_THEME[stage.code] || { border: "border-t-indigo-500" };
 
     return (
@@ -251,7 +254,7 @@ function StageColumn({ stage, rows, totalInStage, slaWarningDays, slaBreachDays,
             {/* Column Card Container with dynamic height limits */}
             <div className="p-3.5 space-y-3.5 overflow-y-auto flex-1 min-h-0 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                 {rows.map((row) => (
-                    <LeadCard key={row.id} row={row} slaWarningDays={slaWarningDays} slaBreachDays={slaBreachDays} onPreviewTask={onPreviewTask} />
+                    <LeadCard key={row.id} row={row} department={department} slaWarningDays={slaWarningDays} slaBreachDays={slaBreachDays} onPreviewTask={onPreviewTask} />
                 ))}
                 {rows.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-16 px-4 bg-white/40 border border-dashed border-slate-200/60 rounded-2xl">
@@ -295,7 +298,11 @@ function formatLastUpdated(date) {
     return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
 }
 
-function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
+function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTask }) {
+    const { user } = useAuth();
+    const qc = useQueryClient();
+    const isManager = ["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"].includes(user?.role);
+    const [showAssignMenu, setShowAssignMenu] = useState(false);
     const [showOtherAssignees, setShowOtherAssignees] = useState(false);
     const lead = row.lead || {};
     const sla = getSLAStatus(lead, slaWarningDays, slaBreachDays);
@@ -432,34 +439,55 @@ function LeadCard({ row, slaWarningDays, slaBreachDays, onPreviewTask }) {
                     </div>
                 )}
 
-                {row.assignedEmployee ? (
-                    <button
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setShowOtherAssignees(!showOtherAssignees);
-                        }}
-                        className={`flex items-center gap-1.5 bg-slate-50 hover:bg-indigo-50 border border-slate-200/50 pl-1 pr-2.5 py-1 rounded-full shadow-sm max-w-[150px] transition-all duration-200 hover:border-indigo-300 ring-offset-2 focus:outline-none ${showOtherAssignees ? "ring-2 ring-indigo-400 bg-indigo-50/50 border-indigo-300" : ""}`}
-                        title="Click to view all department assignees"
-                    >
-                        <Avatar user={row.assignedEmployee} size="xs" className="w-5 h-5 ring-2 ring-white" />
-                        <span className="text-xs text-slate-655 font-bold truncate">
-                            {row.assignedEmployee.name.split(" ")[0]}
-                        </span>
-                    </button>
-                ) : (
-                    <button
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setShowOtherAssignees(!showOtherAssignees);
-                        }}
-                        className={`text-[10px] text-slate-400 font-bold bg-slate-50 border border-slate-200/40 px-2 py-0.5 rounded-full shadow-sm hover:bg-indigo-50 hover:border-indigo-350 transition-all focus:outline-none ${showOtherAssignees ? "ring-2 ring-indigo-400 bg-indigo-50 border-indigo-300" : ""}`}
-                        title="Click to view all department assignees"
-                    >
-                        Unassigned
-                    </button>
-                )}
+                <div className="relative">
+                    {row.assignedEmployee ? (
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (isManager) {
+                                    setShowAssignMenu(!showAssignMenu);
+                                } else {
+                                    setShowOtherAssignees(!showOtherAssignees);
+                                }
+                            }}
+                            className={`flex items-center gap-1.5 bg-slate-50 hover:bg-indigo-50 border border-slate-200/50 pl-1 pr-2.5 py-1 rounded-full shadow-sm max-w-[150px] transition-all duration-200 hover:border-indigo-300 ring-offset-2 focus:outline-none ${(isManager ? showAssignMenu : showOtherAssignees) ? "ring-2 ring-indigo-400 bg-indigo-50/50 border-indigo-300" : ""}`}
+                            title={isManager ? "Click to assign consultant" : "Click to view all department assignees"}
+                        >
+                            <Avatar user={row.assignedEmployee} size="xs" className="w-5 h-5 ring-2 ring-white" />
+                            <span className="text-xs text-slate-655 font-bold truncate">
+                                {row.assignedEmployee.name.split(" ")[0]}
+                            </span>
+                        </button>
+                    ) : (
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (isManager) {
+                                    setShowAssignMenu(!showAssignMenu);
+                                } else {
+                                    setShowOtherAssignees(!showOtherAssignees);
+                                }
+                            }}
+                            className={`text-[10px] text-slate-400 font-bold bg-slate-50 border border-slate-200/40 px-2 py-0.5 rounded-full shadow-sm hover:bg-indigo-50 hover:border-indigo-350 transition-all focus:outline-none ${(isManager ? showAssignMenu : showOtherAssignees) ? "ring-2 ring-indigo-400 bg-indigo-50 border-indigo-300" : ""}`}
+                            title={isManager ? "Click to assign consultant" : "Click to view all department assignees"}
+                        >
+                            Unassigned
+                        </button>
+                    )}
+                    {showAssignMenu && (
+                        <AssignMenu
+                            leadDepartmentId={row.id}
+                            department={department}
+                            currentId={row.assignedEmployeeId}
+                            onClose={() => setShowAssignMenu(false)}
+                            onDone={() => {
+                                qc.invalidateQueries({ queryKey: ["department-board"] });
+                            }}
+                        />
+                    )}
+                </div>
             </div>
 
             {/* Row 6 — most recent task, click opens a read-only preview */}
@@ -512,6 +540,39 @@ function TaskPreviewModal({ task, onClose }) {
                     Open full task →
                 </Link>
             </div>
+        </div>
+    );
+}
+
+function AssignMenu({ leadDepartmentId, department, currentId, onClose, onDone }) {
+    const { data: members = [], isLoading } = useDepartmentMembers(department);
+    const mut = useMutation({
+        mutationFn: (consultantId) =>
+            api.patch(`/lead-departments/${leadDepartmentId}/assign`, { consultantId }).then((r) => r.data),
+        onSuccess: () => { toast.success("Consultant assigned"); onDone(); onClose(); },
+        onError: (e) => toast.error(e.response?.data?.error?.message || "Could not assign"),
+    });
+    return (
+        <div className="absolute right-0 mt-1 z-50 bg-white border border-indigo-100 rounded-lg shadow-lg p-2 w-56 animate-fadeIn" onClick={(e) => e.stopPropagation()}>
+            {isLoading ? (
+                <div className="flex justify-center py-1"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /></div>
+            ) : members.length === 0 ? (
+                <p className="text-[11px] text-gray-400 py-1">No members in {departmentLabel(department)}.</p>
+            ) : (
+                <select
+                    autoFocus
+                    defaultValue={currentId || ""}
+                    disabled={mut.isPending}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => e.target.value && mut.mutate(e.target.value)}
+                    className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                >
+                    <option value="" disabled>Select consultant…</option>
+                    {members.map((m) => (
+                        <option key={m.id} value={m.id}>{m.name}{m.role === "ADMIN" ? " (Manager)" : ""}</option>
+                    ))}
+                </select>
+            )}
         </div>
     );
 }
