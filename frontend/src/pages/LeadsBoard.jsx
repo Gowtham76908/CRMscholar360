@@ -1,15 +1,16 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
     Building2, Loader2, Mail, Phone, Globe, Tag, Calendar,
-    ClipboardList, X, ChevronDown, UserPlus,
+    ClipboardList, X, ChevronDown, UserPlus, User, Users,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useWorkflows, useDepartmentBoard, useDepartmentMembers } from "../hooks/useDepartments";
-import { DEPARTMENT_ORDER, departmentLabel } from "../lib/departments";
+import { DEPARTMENT_ORDER, departmentLabel, departmentStyle } from "../lib/departments";
 import { getCategoryFromScore, getSLAStatus } from "../utils/leadScore";
+import api from "../api/axios";
 import Avatar from "../components/Avatar";
 
 // Show all leads in single page - set high limit
@@ -120,6 +121,8 @@ export default function LeadsBoard({
 
     const [department, setDepartment] = useState(initialDepartment && categories.includes(initialDepartment) ? initialDepartment : null);
     const [previewTask, setPreviewTask] = useState(null);
+    const [assigningLead, setAssigningLead] = useState(null);   // stores the full lead object
+    const qc = useQueryClient();
 
     // Auto-initialize department when categories load
     if (!department && categories.length > 0) {
@@ -212,6 +215,7 @@ export default function LeadsBoard({
                                 slaWarningDays={slaWarningDays}
                                 slaBreachDays={slaBreachDays}
                                 onPreviewTask={setPreviewTask}
+                                onAssignClick={(lead) => setAssigningLead(lead)}
                             />
                         ))}
                     </div>
@@ -219,6 +223,15 @@ export default function LeadsBoard({
             )}
 
             {previewTask && <TaskPreviewModal task={previewTask} onClose={() => setPreviewTask(null)} />}
+            {assigningLead && (
+                <AssignAllDepartmentsModal
+                    lead={assigningLead}
+                    onClose={() => setAssigningLead(null)}
+                    onDone={() => {
+                        qc.invalidateQueries({ queryKey: ["department-board"] });
+                    }}
+                />
+            )}
         </div>
     );
 }
@@ -237,7 +250,7 @@ function stageColor(code) {
     return "bg-indigo-50 text-indigo-700 border-indigo-200";
 }
 
-function StageColumn({ stage, department, rows, totalInStage, slaWarningDays, slaBreachDays, onPreviewTask }) {
+function StageColumn({ stage, department, rows, totalInStage, slaWarningDays, slaBreachDays, onPreviewTask, onAssignClick }) {
     const theme = STAGE_THEME[stage.code] || { border: "border-t-indigo-500" };
 
     return (
@@ -254,7 +267,7 @@ function StageColumn({ stage, department, rows, totalInStage, slaWarningDays, sl
             {/* Column Card Container with dynamic height limits */}
             <div className="p-3.5 space-y-3.5 overflow-y-auto flex-1 min-h-0 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                 {rows.map((row) => (
-                    <LeadCard key={row.id} row={row} department={department} slaWarningDays={slaWarningDays} slaBreachDays={slaBreachDays} onPreviewTask={onPreviewTask} />
+                    <LeadCard key={row.id} row={row} department={department} slaWarningDays={slaWarningDays} slaBreachDays={slaBreachDays} onPreviewTask={onPreviewTask} onAssignClick={onAssignClick} />
                 ))}
                 {rows.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-16 px-4 bg-white/40 border border-dashed border-slate-200/60 rounded-2xl">
@@ -298,12 +311,10 @@ function formatLastUpdated(date) {
     return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
 }
 
-function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTask }) {
+function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTask, onAssignClick }) {
     const { user } = useAuth();
-    const qc = useQueryClient();
     const isManager = ["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"].includes(user?.role);
-    const [showAssignMenu, setShowAssignMenu] = useState(false);
-    const [showOtherAssignees, setShowOtherAssignees] = useState(false);
+    const [showDeptAssignees, setShowDeptAssignees] = useState(false);
     const lead = row.lead || {};
     const sla = getSLAStatus(lead, slaWarningDays, slaBreachDays);
     const category = getCategoryFromScore(lead.score ?? 0);
@@ -323,7 +334,7 @@ function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTas
     return (
         <Link
             to={`/leads/${lead.id}`}
-            className={`group block bg-white rounded-xl border transition-all duration-300 p-3.5 relative overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-indigo-400/80 ${
+            className={`group block bg-white rounded-xl border transition-all duration-300 p-3.5 relative overflow-visible shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-indigo-400/80 ${
                 sla?.level === "breach" 
                     ? "border-red-200 bg-gradient-to-br from-white to-red-50/5 border-l-[4px] border-l-red-500" 
                     : sla?.level === "warning"
@@ -389,7 +400,7 @@ function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTas
             </div>
 
             {/* Expanded Department Assignees list (triggered by clicking the avatar/assignee badge) */}
-            {showOtherAssignees && (
+            {showDeptAssignees && (
                 <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 animate-fadeIn">
                     <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-1">Department Assignees</p>
                     {(lead.leadDepartments || []).map(ld => {
@@ -412,6 +423,20 @@ function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTas
                             </div>
                         );
                     })}
+                    {isManager && (
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setShowDeptAssignees(false);
+                                onAssignClick(lead);
+                            }}
+                            className="mt-2 w-full flex items-center justify-center gap-1.5 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-2 rounded-xl transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
+                        >
+                            <UserPlus className="h-3.5 w-3.5" />
+                            Update Assignee
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -445,14 +470,10 @@ function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTas
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                if (isManager) {
-                                    setShowAssignMenu(!showAssignMenu);
-                                } else {
-                                    setShowOtherAssignees(!showOtherAssignees);
-                                }
+                                setShowDeptAssignees(!showDeptAssignees);
                             }}
-                            className={`flex items-center gap-1.5 bg-slate-50 hover:bg-indigo-50 border border-slate-200/50 pl-1 pr-2.5 py-1 rounded-full shadow-sm max-w-[150px] transition-all duration-200 hover:border-indigo-300 ring-offset-2 focus:outline-none ${(isManager ? showAssignMenu : showOtherAssignees) ? "ring-2 ring-indigo-400 bg-indigo-50/50 border-indigo-300" : ""}`}
-                            title={isManager ? "Click to assign consultant" : "Click to view all department assignees"}
+                            className={`flex items-center gap-1.5 bg-slate-50 hover:bg-indigo-50 border border-slate-200/50 pl-1 pr-2.5 py-1 rounded-full shadow-sm max-w-[150px] transition-all duration-200 hover:border-indigo-300 ring-offset-2 focus:outline-none ${showDeptAssignees ? "ring-2 ring-indigo-400 bg-indigo-50/50 border-indigo-300" : ""}`}
+                            title="Click to view all department assignees"
                         >
                             <Avatar user={row.assignedEmployee} size="xs" className="w-5 h-5 ring-2 ring-white" />
                             <span className="text-xs text-slate-655 font-bold truncate">
@@ -464,28 +485,13 @@ function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTas
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                if (isManager) {
-                                    setShowAssignMenu(!showAssignMenu);
-                                } else {
-                                    setShowOtherAssignees(!showOtherAssignees);
-                                }
+                                setShowDeptAssignees(!showDeptAssignees);
                             }}
-                            className={`text-[10px] text-slate-400 font-bold bg-slate-50 border border-slate-200/40 px-2 py-0.5 rounded-full shadow-sm hover:bg-indigo-50 hover:border-indigo-350 transition-all focus:outline-none ${(isManager ? showAssignMenu : showOtherAssignees) ? "ring-2 ring-indigo-400 bg-indigo-50 border-indigo-300" : ""}`}
-                            title={isManager ? "Click to assign consultant" : "Click to view all department assignees"}
+                            className={`text-[10px] text-slate-400 font-bold bg-slate-50 border border-slate-200/40 px-2 py-0.5 rounded-full shadow-sm hover:bg-indigo-50 hover:border-indigo-350 transition-all focus:outline-none ${showDeptAssignees ? "ring-2 ring-indigo-400 bg-indigo-50 border-indigo-300" : ""}`}
+                            title="Click to view all department assignees"
                         >
                             Unassigned
                         </button>
-                    )}
-                    {showAssignMenu && (
-                        <AssignMenu
-                            leadDepartmentId={row.id}
-                            department={department}
-                            currentId={row.assignedEmployeeId}
-                            onClose={() => setShowAssignMenu(false)}
-                            onDone={() => {
-                                qc.invalidateQueries({ queryKey: ["department-board"] });
-                            }}
-                        />
                     )}
                 </div>
             </div>
@@ -544,34 +550,146 @@ function TaskPreviewModal({ task, onClose }) {
     );
 }
 
-function AssignMenu({ leadDepartmentId, department, currentId, onClose, onDone }) {
-    const { data: members = [], isLoading } = useDepartmentMembers(department);
+// ─── Multi-department Assign Modal ─────────────────────────────────────────
+// Shows ALL departments for a lead and lets the manager assign a consultant per department.
+
+function AssignAllDepartmentsModal({ lead: initialLead, onClose, onDone }) {
+    // The board data already includes ALL departments (LEAD_SELECT_FOR_BOARD),
+    // so we can render immediately. We also fetch fresh data so that after an
+    // assignment the "Current" highlight refreshes without reopening the modal.
+    const { data: fullLead } = useQuery({
+        queryKey: ["lead-full", initialLead.id],
+        queryFn: () => api.get(`/leads/${initialLead.id}`).then((r) => r.data),
+        enabled: Boolean(initialLead.id),
+        staleTime: 0,
+    });
+
+    // Use fullLead's departments if available (has assignedEmployeeId), else fall
+    // back to the board data (already has all departments but may lack that field).
+    const departments = (fullLead || initialLead).leadDepartments || [];
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <div
+                className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-100 animate-scaleIn max-h-[85vh] flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+                    <div>
+                        <h3 className="text-sm font-black text-slate-800">Update Assignees</h3>
+                        <p className="text-xs text-slate-400 mt-0.5 font-medium">{initialLead.name || "—"}</p>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-700 transition-colors p-1 rounded-lg hover:bg-slate-50">
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+                {/* Department sections */}
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                    {departments.length === 0 ? (
+                        <p className="text-xs text-slate-400 text-center py-10 italic">No departments assigned to this lead</p>
+                    ) : (
+                        departments.map((ld) => (
+                            <DepartmentAssignSection
+                                key={ld.id}
+                                ld={ld}
+                                onDone={onDone}
+                            />
+                        ))
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// Each department section shows the current assignee and lets the manager pick a new one.
+function DepartmentAssignSection({ ld, onDone }) {
+    const [expanded, setExpanded] = useState(false);
+    const { data: members = [], isLoading } = useDepartmentMembers(ld.department);
+    const qc = useQueryClient();
+
     const mut = useMutation({
         mutationFn: (consultantId) =>
-            api.patch(`/lead-departments/${leadDepartmentId}/assign`, { consultantId }).then((r) => r.data),
-        onSuccess: () => { toast.success("Consultant assigned"); onDone(); onClose(); },
+            api.patch(`/lead-departments/${ld.id}/assign`, { consultantId }).then((r) => r.data),
+        onSuccess: () => {
+            toast.success(`Assigned in ${departmentLabel(ld.department)}`);
+            qc.invalidateQueries({ queryKey: ["department-board"] });
+            qc.invalidateQueries({ queryKey: ["department-queue"] });
+            onDone();
+            setExpanded(false);
+        },
         onError: (e) => toast.error(e.response?.data?.error?.message || "Could not assign"),
     });
+
+    const deptDotColor =
+        ld.department === "SALES" ? "bg-indigo-500" :
+        ld.department === "APPLICATION_VISA" ? "bg-sky-500" :
+        ld.department === "LOAN" ? "bg-emerald-500" :
+        ld.department === "ACCOMMODATION_TICKETS" ? "bg-amber-500" :
+        ld.department === "FOREX" ? "bg-violet-500" :
+        "bg-slate-400";
+
     return (
-        <div className="absolute right-0 mt-1 z-50 bg-white border border-indigo-100 rounded-lg shadow-lg p-2 w-56 animate-fadeIn" onClick={(e) => e.stopPropagation()}>
-            {isLoading ? (
-                <div className="flex justify-center py-1"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /></div>
-            ) : members.length === 0 ? (
-                <p className="text-[11px] text-gray-400 py-1">No members in {departmentLabel(department)}.</p>
-            ) : (
-                <select
-                    autoFocus
-                    defaultValue={currentId || ""}
-                    disabled={mut.isPending}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => e.target.value && mut.mutate(e.target.value)}
-                    className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                >
-                    <option value="" disabled>Select consultant…</option>
-                    {members.map((m) => (
-                        <option key={m.id} value={m.id}>{m.name}{m.role === "ADMIN" ? " (Manager)" : ""}</option>
-                    ))}
-                </select>
+        <div className="rounded-xl border border-slate-200/70 overflow-hidden hover:border-slate-300 transition-colors">
+            {/* Department header row */}
+            <button
+                onClick={() => setExpanded(!expanded)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-slate-50/80 hover:bg-slate-100/80 transition-colors"
+            >
+                <div className="flex items-center gap-2.5">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${deptDotColor}`} />
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${departmentStyle(ld.department)}`}>
+                        {departmentLabel(ld.department)}
+                    </span>
+                </div>
+                <div className="flex items-center gap-2">
+                    {ld.assignedEmployee ? (
+                        <span className="text-xs text-slate-700 font-semibold">{ld.assignedEmployee.name}</span>
+                    ) : (
+                        <span className="text-xs text-slate-400 italic">Unassigned</span>
+                    )}
+                    <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+                </div>
+            </button>
+
+            {/* Expandable member list */}
+            {expanded && (
+                <div className="px-4 py-3 border-t border-slate-100 bg-white space-y-1 animate-fadeIn">
+                    {isLoading ? (
+                        <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-indigo-500" /></div>
+                    ) : members.length === 0 ? (
+                        <p className="text-xs text-slate-400 text-center py-4 italic">No members in this department</p>
+                    ) : (
+                        members.map((m) => {
+                            const isCurrent = m.id === ld.assignedEmployeeId;
+                            return (
+                                <button
+                                    key={m.id}
+                                    disabled={mut.isPending}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        mut.mutate(m.id);
+                                    }}
+                                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all duration-200 hover:bg-slate-50 focus:outline-none ${
+                                        isCurrent ? "bg-indigo-50/60 ring-1 ring-indigo-200" : "text-slate-700"
+                                    } ${mut.isPending ? "opacity-50 cursor-wait" : ""}`}
+                                >
+                                    <Avatar user={m} size="xs" className="w-7 h-7 shrink-0" />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-bold truncate leading-snug">{m.name}</p>
+                                        <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">{m.role.toLowerCase()}</p>
+                                    </div>
+                                    {isCurrent && (
+                                        <span className="text-[9px] font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">Current</span>
+                                    )}
+                                </button>
+                            );
+                        })
+                    )}
+                </div>
             )}
         </div>
     );

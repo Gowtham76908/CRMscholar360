@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     DndContext, DragOverlay, closestCorners,
@@ -47,6 +47,7 @@ export default function DepartmentBoard() {
     const [unassignedOnly, setUnassignedOnly] = useState(false);
     const [activeId, setActiveId] = useState(null);
     const [moveLoading, setMoveLoading] = useState(null);
+    const [assigningLead, setAssigningLead] = useState(null);
 
     const onSearch = (v) => {
         setSearch(v);
@@ -210,6 +211,7 @@ export default function DepartmentBoard() {
                                         canAssign={isManager}
                                         onMove={handleMove}
                                         moveLoading={moveLoading}
+                                        onAssignClick={(lead) => setAssigningLead(lead)}
                                     />
                                 ))}
                             </div>
@@ -222,13 +224,24 @@ export default function DepartmentBoard() {
                     )}
                 </>
             )}
+
+            {assigningLead && (
+                <AssignAllDepartmentsModal
+                    lead={assigningLead}
+                    onClose={() => setAssigningLead(null)}
+                    onDone={() => {
+                        qc.invalidateQueries({ queryKey: ["department-board"] });
+                        qc.invalidateQueries({ queryKey: ["department-queue"] });
+                    }}
+                />
+            )}
         </div>
     );
 }
 
 // ─── Column ──────────────────────────────────────────────────────────────────
 
-function StageColumn({ stage, department, accent, rows, stages, canAssign, onMove, moveLoading }) {
+function StageColumn({ stage, department, accent, rows, stages, canAssign, onMove, moveLoading, onAssignClick }) {
     const { isOver, setNodeRef } = useDroppable({ id: `col:${stage.code}` });
     return (
         <div className="flex flex-col min-w-[250px] flex-1">
@@ -260,6 +273,7 @@ function StageColumn({ stage, department, accent, rows, stages, canAssign, onMov
                                 canAssign={canAssign}
                                 onMove={onMove}
                                 moveLoading={moveLoading}
+                                onAssignClick={onAssignClick}
                             />
                         </motion.div>
                     ))}
@@ -278,9 +292,7 @@ function StageColumn({ stage, department, accent, rows, stages, canAssign, onMov
 
 // ─── Card ────────────────────────────────────────────────────────────────────
 
-function ServiceCard({ row, department, stages, canAssign = false, onMove, moveLoading, overlay = false }) {
-    const qc = useQueryClient();
-    const [showAssignMenu, setShowAssignMenu] = useState(false);
+function ServiceCard({ row, department, stages, canAssign = false, onMove, moveLoading, overlay = false, onAssignClick }) {
     const [showOtherAssignees, setShowOtherAssignees] = useState(false);
     const lead = row.lead || {};
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: row.id });
@@ -335,30 +347,14 @@ function ServiceCard({ row, department, stages, canAssign = false, onMove, moveL
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                if (canAssign) {
-                                    setShowAssignMenu(!showAssignMenu);
-                                } else {
-                                    setShowOtherAssignees(!showOtherAssignees);
-                                }
+                                setShowOtherAssignees(!showOtherAssignees);
                             }}
-                            className={`flex items-center gap-0.5 text-[10px] text-gray-500 min-w-0 hover:text-indigo-600 transition-colors focus:outline-none px-1 rounded hover:bg-slate-100 truncate ${(canAssign ? showAssignMenu : showOtherAssignees) ? "text-indigo-600 bg-indigo-50/70" : ""}`}
-                            title={canAssign ? "Click to assign consultant" : "View all department assignees"}
+                            className={`flex items-center gap-0.5 text-[10px] text-gray-500 min-w-0 hover:text-indigo-600 transition-colors focus:outline-none px-1 rounded hover:bg-slate-100 truncate ${showOtherAssignees ? "text-indigo-600 bg-indigo-50/70" : ""}`}
+                            title="View all department assignees"
                         >
                             <User className="h-2.5 w-2.5 shrink-0" />
                             <span className="truncate font-semibold">{row.assignedEmployee?.name || "Unassigned"}</span>
                         </button>
-                        {showAssignMenu && (
-                            <AssignMenu
-                                leadDepartmentId={row.id}
-                                department={department}
-                                currentId={row.assignedEmployeeId}
-                                onClose={() => setShowAssignMenu(false)}
-                                onDone={() => {
-                                    qc.invalidateQueries({ queryKey: ["department-board"] });
-                                    qc.invalidateQueries({ queryKey: ["department-queue"] });
-                                }}
-                            />
-                        )}
                     </div>
                 </div>
             </div>
@@ -386,6 +382,20 @@ function ServiceCard({ row, department, stages, canAssign = false, onMove, moveL
                             </div>
                         );
                     })}
+                    {canAssign && (
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setShowOtherAssignees(false);
+                                onAssignClick(lead);
+                            }}
+                            className="mt-1.5 w-full flex items-center justify-center gap-1 text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-2 py-1.5 rounded-lg transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
+                        >
+                            <UserPlus className="h-3 w-3" />
+                            Update Assignee
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -467,34 +477,140 @@ function AssignControl({ leadDepartmentId, department, currentId }) {
     );
 }
 
-function AssignMenu({ leadDepartmentId, department, currentId, onClose, onDone }) {
-    const { data: members = [], isLoading } = useDepartmentMembers(department);
+function AssignAllDepartmentsModal({ lead: initialLead, onClose, onDone }) {
+    // The board data already includes ALL departments (LEAD_SELECT_FOR_BOARD),
+    // so we can render immediately. We also fetch fresh data so that after an
+    // assignment the "Current" highlight refreshes without reopening the modal.
+    const { data: fullLead } = useQuery({
+        queryKey: ["lead-full", initialLead.id],
+        queryFn: () => api.get(`/leads/${initialLead.id}`).then((r) => r.data),
+        enabled: Boolean(initialLead.id),
+        staleTime: 0,
+    });
+
+    // Use fullLead's departments if available (has assignedEmployeeId), else fall
+    // back to the board data (already has all departments but may lack that field).
+    const departments = (fullLead || initialLead).leadDepartments || [];
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <div
+                className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-100 animate-scaleIn max-h-[85vh] flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+                    <div>
+                        <h3 className="text-sm font-black text-slate-800">Update Assignees</h3>
+                        <p className="text-xs text-slate-400 mt-0.5 font-medium">{initialLead.name || "—"}</p>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-700 transition-colors p-1 rounded-lg hover:bg-slate-50">
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+                {/* Department sections */}
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                    {departments.length === 0 ? (
+                        <p className="text-xs text-slate-400 text-center py-10 italic">No departments assigned to this lead</p>
+                    ) : (
+                        departments.map((ld) => (
+                            <DepartmentAssignSection
+                                key={ld.id}
+                                ld={ld}
+                                onDone={onDone}
+                            />
+                        ))
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function DepartmentAssignSection({ ld, onDone }) {
+    const [expanded, setExpanded] = useState(false);
+    const { data: members = [], isLoading } = useDepartmentMembers(ld.department);
+    const qc = useQueryClient();
+
     const mut = useMutation({
         mutationFn: (consultantId) =>
-            api.patch(`/lead-departments/${leadDepartmentId}/assign`, { consultantId }).then((r) => r.data),
-        onSuccess: () => { toast.success("Consultant assigned"); onDone(); onClose(); },
+            api.patch(`/lead-departments/${ld.id}/assign`, { consultantId }).then((r) => r.data),
+        onSuccess: () => {
+            toast.success(`Assigned in ${departmentLabel(ld.department)}`);
+            qc.invalidateQueries({ queryKey: ["department-board"] });
+            qc.invalidateQueries({ queryKey: ["department-queue"] });
+            onDone();
+            setExpanded(false);
+        },
         onError: (e) => toast.error(e.response?.data?.error?.message || "Could not assign"),
     });
+
+    const deptDotColor =
+        ld.department === "SALES" ? "bg-indigo-500" :
+        ld.department === "APPLICATION_VISA" ? "bg-sky-500" :
+        ld.department === "LOAN" ? "bg-emerald-500" :
+        ld.department === "ACCOMMODATION_TICKETS" ? "bg-amber-500" :
+        ld.department === "FOREX" ? "bg-violet-500" :
+        "bg-slate-400";
+
     return (
-        <div className="absolute right-0 mt-1 z-50 bg-white border border-indigo-100 rounded-lg shadow-lg p-2 w-56">
-            {isLoading ? (
-                <div className="flex justify-center py-1"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /></div>
-            ) : members.length === 0 ? (
-                <p className="text-[11px] text-gray-400 py-1">No members in {departmentLabel(department)}.</p>
-            ) : (
-                <select
-                    autoFocus
-                    defaultValue={currentId || ""}
-                    disabled={mut.isPending}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => e.target.value && mut.mutate(e.target.value)}
-                    className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                >
-                    <option value="" disabled>Select consultant…</option>
-                    {members.map((m) => (
-                        <option key={m.id} value={m.id}>{m.name}{m.role === "ADMIN" ? " (Manager)" : ""}</option>
-                    ))}
-                </select>
+        <div className="rounded-xl border border-slate-200/70 overflow-hidden hover:border-slate-300 transition-colors">
+            <button
+                onClick={() => setExpanded(!expanded)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-slate-50/80 hover:bg-slate-100/80 transition-colors"
+            >
+                <div className="flex items-center gap-2.5">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${deptDotColor}`} />
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${departmentStyle(ld.department)}`}>
+                        {departmentLabel(ld.department)}
+                    </span>
+                </div>
+                <div className="flex items-center gap-2">
+                    {ld.assignedEmployee ? (
+                        <span className="text-xs text-slate-700 font-semibold">{ld.assignedEmployee.name}</span>
+                    ) : (
+                        <span className="text-xs text-slate-400 italic">Unassigned</span>
+                    )}
+                    <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+                </div>
+            </button>
+
+            {expanded && (
+                <div className="px-4 py-3 border-t border-slate-100 bg-white space-y-1 animate-fadeIn">
+                    {isLoading ? (
+                        <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-indigo-500" /></div>
+                    ) : members.length === 0 ? (
+                        <p className="text-xs text-slate-400 text-center py-4 italic">No members in this department</p>
+                    ) : (
+                        members.map((m) => {
+                            const isCurrent = m.id === ld.assignedEmployeeId;
+                            return (
+                                <button
+                                    key={m.id}
+                                    disabled={mut.isPending}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        mut.mutate(m.id);
+                                    }}
+                                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all duration-200 hover:bg-slate-50 focus:outline-none ${
+                                        isCurrent ? "bg-indigo-50/60 ring-1 ring-indigo-200" : "text-slate-700"
+                                    } ${mut.isPending ? "opacity-50 cursor-wait" : ""}`}
+                                >
+                                    <Avatar user={m} size="xs" className="w-7 h-7 shrink-0" />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-bold truncate leading-snug">{m.name}</p>
+                                        <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">{m.role.toLowerCase()}</p>
+                                    </div>
+                                    {isCurrent && (
+                                        <span className="text-[9px] font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">Current</span>
+                                    )}
+                                </button>
+                            );
+                        })
+                    )}
+                </div>
             )}
         </div>
     );
