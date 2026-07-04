@@ -22,6 +22,7 @@ const ROLE_TOOLS = {
         "get_pipeline_summary",
         "get_revenue_stats",
         "get_top_leads_by_revenue",
+        "get_attendance_summary",
     ],
     SUPER_ADMIN: [
         "search_leads",
@@ -30,6 +31,7 @@ const ROLE_TOOLS = {
         "get_pipeline_summary",
         "get_revenue_stats",
         "get_top_leads_by_revenue",
+        "get_attendance_summary",
     ],
 };
 

@@ -1,11 +1,13 @@
-const leadTools    = require("./tools/leadTools");
-const taskTools    = require("./tools/taskTools");
-const revenueTools = require("./tools/revenueTools");
+const leadTools       = require("./tools/leadTools");
+const taskTools       = require("./tools/taskTools");
+const revenueTools    = require("./tools/revenueTools");
+const attendanceTools = require("./tools/attendanceTools");
 
 const ALL_TOOLS = {
     ...leadTools,
     ...taskTools,
     ...revenueTools,
+    ...attendanceTools,
 };
 
 const getToolDefinitions = (names) => {
