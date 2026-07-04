@@ -1087,6 +1087,23 @@ const getSLAAlerts = async (req, res, next) => {
     }
 };
 
+const getStats = async (req, res, next) => {
+    try {
+        const { userId, role } = req.user;
+        const where = {
+            mergedIntoId: null,
+            nextFollowUpAt: { lt: new Date() },
+        };
+        if (role === "EMPLOYEE") {
+            where.leadDepartments = { some: { assignedEmployeeId: userId } };
+        }
+        const followUp = await prisma.lead.count({ where });
+        res.json({ followUp });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 module.exports = {
     getLeads,
     getLead,
@@ -1104,4 +1121,5 @@ module.exports = {
     getLeadSuggestions,
     dismissLeadSuggestion,
     getSLAAlerts,
+    getStats,
 };

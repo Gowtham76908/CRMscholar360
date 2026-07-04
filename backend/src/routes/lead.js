@@ -1,4 +1,4 @@
-﻿const express = require("express");
+const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const leadController = require("../controllers/leadController");
@@ -27,6 +27,7 @@ router.use(authMiddleware);
 
 // Lead lists / alerts (department-scoped). Global status dashboards were retired
 // in favour of per-department analytics (/lead-departments/dashboard).
+router.get("/stats",             leadController.getStats);
 router.get("/overdue-followups", leadController.getOverdueFollowUps);
 router.get("/sla-alerts",        leadController.getSLAAlerts);
 router.get("/duplicates",  roleMiddleware(["SUPER_ADMIN", "ADMIN", "TEAM_LEADER"]), leadController.getDuplicates);
