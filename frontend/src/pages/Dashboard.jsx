@@ -47,12 +47,6 @@ const fmtINR = (n) => {
     return `₹${v.toLocaleString("en-IN")}`;
 };
 
-const daysOverdue = (date) => {
-    if (!date) return "—";
-    const d = Math.floor((Date.now() - new Date(date).getTime()) / 86_400_000);
-    return d <= 0 ? "Today" : d === 1 ? "1 day overdue" : `${d} days overdue`;
-};
-
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
@@ -265,56 +259,6 @@ function DealPipelineSection({ pipeline }) {
     );
 }
 
-// ─── Overdue Follow-ups Widget ────────────────────────────────────────────────
-
-function OverdueFollowUpsWidget({ leads }) {
-    if (!leads?.length) return null;
-
-    const daysOverdue = (date) => {
-        const d = Math.floor((Date.now() - new Date(date).getTime()) / 86_400_000);
-        return d <= 0 ? "Today" : d === 1 ? "1 day overdue" : `${d} days overdue`;
-    };
-
-    return (
-        <section>
-            <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                    <CalendarClock className="h-4 w-4 text-red-500" />
-                    <h2 className="text-sm font-semibold text-gray-900">Overdue Follow-ups</h2>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">
-                        {leads.length}
-                    </span>
-                </div>
-                <Link to="/leads?status=FOLLOW_UP" className="text-xs text-indigo-500 hover:text-indigo-700 font-medium">
-                    View all →
-                </Link>
-            </div>
-            <div className="bg-white border border-red-100 rounded-xl shadow-sm overflow-hidden divide-y divide-gray-50">
-                {leads.map(lead => (
-                    <Link
-                        key={lead.id}
-                        to={`/leads/${lead.id}`}
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-red-50/40 transition-colors"
-                    >
-                        <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center shrink-0 text-xs font-bold text-red-700">
-                            {lead.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">{lead.name}</p>
-                            <p className="text-xs text-gray-400 truncate">{lead.phone || lead.email || "No contact"}</p>
-                        </div>
-                        <div className="flex flex-col items-end gap-0.5 shrink-0">
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">
-                                {daysOverdue(lead.nextFollowUpAt)}
-                            </span>
-                        </div>
-                    </Link>
-                ))}
-            </div>
-        </section>
-    );
-}
-
 // ─── Finance Dashboard Panel ──────────────────────────────────────────────────
 
 const FINANCE_CAT_COLORS = [
@@ -464,14 +408,13 @@ const Dashboard = () => {
 
     const [searchParams, setSearchParams] = useSearchParams();
 
-    // ── Generate dynamic intakes for last 5 years ──────────────────────────────
+    // ── Generate dynamic intakes: previous 5 years through next 5 years ─────────
     const availableIntakes = useMemo(() => {
         const currentDate = new Date();
         const currentYear = currentDate.getFullYear();
-        const currentMonth = currentDate.getMonth() + 1; // 1-12
-        
+
         const intakes = [];
-        
+
         // Define season configurations
         // Spring: March-May, Summer: June-August, Fall: September-November, Winter: December-February
         const seasons = [
@@ -480,49 +423,47 @@ const Dashboard = () => {
             { name: "Fall", startMonth: 9, endMonth: 11, yearOffset: 0 },
             { name: "Winter", startMonth: 12, endMonth: 2, yearOffset: 1 } // Winter spans two years
         ];
-        
-        // Generate intakes for the last 5 years
-        for (let yearOffset = 0; yearOffset < 5; yearOffset++) {
-            const year = currentYear - yearOffset;
-            
+
+        // Generate intakes for the previous 5 years through the next 5 years.
+        for (let yearOffset = -5; yearOffset <= 5; yearOffset++) {
+            const year = currentYear + yearOffset;
+
             for (const season of seasons) {
                 const intakeYear = year;
                 const endYear = season.yearOffset ? year + 1 : year;
-                
+
                 // Format dates properly with leading zeros
                 const startMonth = String(season.startMonth).padStart(2, '0');
                 const endMonth = String(season.endMonth).padStart(2, '0');
-                
+
                 // Calculate last day of end month
                 const lastDay = new Date(endYear, season.endMonth, 0).getDate();
-                
+
                 const startDate = `${intakeYear}-${startMonth}-01`;
                 const endDate = `${endYear}-${endMonth}-${String(lastDay).padStart(2, '0')}`;
-                
-                // Only include intakes that are in the past or current
-                const intakeEndDate = new Date(endDate);
-                const shouldInclude = intakeEndDate <= currentDate || 
-                    (intakeYear === currentYear && season.startMonth <= currentMonth);
-                
-                if (shouldInclude) {
-                    intakes.push({
-                        label: `${season.name} ${intakeYear}`,
-                        value: `${season.name} ${intakeYear}`,
-                        startDate,
-                        endDate
-                    });
-                }
+
+                intakes.push({
+                    label: `${season.name} ${intakeYear}`,
+                    value: `${season.name} ${intakeYear}`,
+                    startDate,
+                    endDate
+                });
             }
         }
-        
+
         // Sort in descending order (most recent first)
         intakes.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
-        
+
         return intakes;
     }, []);
 
-    // Default to the most recent intake
-    const defaultIntake = availableIntakes[0]?.value || "All Intakes";
+    // Default to the current intake — the most recent one that has already
+    // started — rather than a far-future intake at the top of the list.
+    const now = new Date();
+    const defaultIntake =
+        availableIntakes.find(i => new Date(i.startDate) <= now)?.value ||
+        availableIntakes[0]?.value ||
+        "All Intakes";
 
     // 1. Read values from searchParams, fallback to defaults
     const paramStartDate = searchParams.get("startDate");
@@ -922,13 +863,6 @@ const Dashboard = () => {
         queryKey: ["dash-pipeline"],
         queryFn: () => api.get("/deals/pipeline").then(r => r.data),
         enabled: isManager(user?.role),
-        staleTime: 60_000,
-        retry: false,
-    });
-
-    const { data: overdueLeads = [] } = useQuery({
-        queryKey: ["overdue-followups"],
-        queryFn: () => api.get("/leads/overdue-followups").then(r => r.data),
         staleTime: 60_000,
         retry: false,
     });
@@ -1362,7 +1296,7 @@ const Dashboard = () => {
                     {department && <HistoricalActivity department={department} />}
 
                     {/* Bottom Widgets Row */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
                         {/* Widget 1: Lead Aging */}
                         <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
                             <div>
@@ -1400,52 +1334,7 @@ const Dashboard = () => {
                             </div>
                         </div>
 
-                        {/* Widget 2: Overdue Follow-ups */}
-                        <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
-                            <div>
-                                <div className="flex items-center justify-between mb-5">
-                                    <div className="flex items-center gap-2">
-                                        <CalendarClock className="h-5 w-5 text-red-500" />
-                                        <h3 className="text-base font-bold text-indigo-950">Overdue Follow-ups</h3>
-                                    </div>
-                                    {overdueLeads.length > 0 && (
-                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">
-                                            {overdueLeads.length}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="space-y-3 max-h-[175px] overflow-y-auto pr-1">
-                                    {overdueLeads.slice(0, 4).map(lead => (
-                                        <Link
-                                            key={lead.id}
-                                            to={`/leads/${lead.id}`}
-                                            className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-red-50/30 transition-colors border border-transparent hover:border-red-100/50"
-                                        >
-                                            <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center text-xs font-bold text-red-700 shrink-0">
-                                                {lead.name.charAt(0).toUpperCase()}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-xs font-bold text-gray-900 truncate">{lead.name}</p>
-                                                <p className="text-[10px] text-gray-400 truncate">{lead.phone || lead.email}</p>
-                                            </div>
-                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-500 shrink-0">
-                                                {daysOverdue(lead.nextFollowUpAt)}
-                                            </span>
-                                        </Link>
-                                    ))}
-                                    {overdueLeads.length === 0 && (
-                                        <p className="text-xs text-gray-400 text-center py-8">No overdue follow-ups!</p>
-                                    )}
-                                </div>
-                            </div>
-                            {overdueLeads.length > 0 && (
-                                <Link to="/leads?status=FOLLOW_UP" className="text-xs text-indigo-600 hover:underline font-bold text-center block mt-3">
-                                    View all follow-ups →
-                                </Link>
-                            )}
-                        </div>
-
-                        {/* Widget 3: Today's Attendance (Admin/Manager only) */}
+                        {/* Widget 2: Today's Attendance (Admin/Manager only) */}
                         {isManager(user?.role) ? (
                             <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
                                 <div>

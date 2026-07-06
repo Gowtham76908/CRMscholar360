@@ -191,10 +191,74 @@ function ActionItem({ lead, snoozed, onSnooze, preferDept }) {
     );
 }
 
+// ─── Comment & Close box ────────────────────────────────────────────────────────
+// Inline composer shown when closing a task / lead reminder from a tray. The
+// comment is posted to the lead's activity before the item is resolved, so it
+// stays visible on the Lead Detail timeline after it disappears from My Day.
+
+function CommentBox({ value, onChange, onSubmit, onCancel, pending, hint, scheduleAt, onScheduleChange, canSchedule }) {
+    return (
+        <div className="mt-2.5 pt-2.5 border-t border-gray-100 space-y-2" onClick={e => e.stopPropagation()}>
+            <textarea
+                autoFocus
+                rows={2}
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") onSubmit(); }}
+                placeholder="Add a comment before closing…"
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg outline-none bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 resize-none"
+            />
+            {canSchedule && (
+                <div>
+                    <label className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 uppercase mb-1">
+                        <Calendar className="h-3 w-3" /> Schedule next call <span className="text-gray-400 font-medium normal-case">(optional)</span>
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                        <input
+                            type="datetime-local"
+                            value={scheduleAt}
+                            onChange={e => onScheduleChange(e.target.value)}
+                            className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg outline-none bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                        />
+                        {scheduleAt && (
+                            <button type="button" onClick={() => onScheduleChange("")}
+                                title="Clear scheduled call"
+                                className="shrink-0 p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
+            {hint && <p className="text-[10px] text-gray-400">{hint}</p>}
+            <div className="flex justify-end gap-1.5">
+                <button type="button" onClick={onCancel}
+                    className="px-2.5 py-1 text-[10px] font-semibold text-gray-500 hover:bg-gray-100 rounded-md transition-colors">
+                    Cancel
+                </button>
+                <button type="button" onClick={onSubmit} disabled={pending || !value.trim()}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 rounded-md shadow-xs disabled:opacity-50 transition-colors">
+                    {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                    {scheduleAt ? "Comment, Schedule & Close" : "Comment & Close"}
+                </button>
+            </div>
+        </div>
+    );
+}
+
 // ─── Task Item ────────────────────────────────────────────────────────────────
 
-function TaskItem({ task, onComplete, preferDept }) {
+function TaskItem({ task, onComplete, completing, preferDept }) {
     const navigate = useNavigate();
+    const [commenting, setCommenting] = useState(false);
+    const [comment, setComment] = useState("");
+    const [scheduleAt, setScheduleAt] = useState("");
+
+    const submit = () => {
+        if (!comment.trim()) { toast.warning("Please add a comment before closing"); return; }
+        onComplete({ id: task.id, leadId: task.lead?.id ?? null, comment: comment.trim(), nextCallAt: scheduleAt || null });
+    };
+
     return (
         <div className="p-3 rounded-xl bg-white ring-1 ring-slate-200/70 border-l-[3px] border-l-amber-500 shadow-[0_1px_2px_rgb(0,0,0,0.04)] hover:shadow-[0_4px_16px_-6px_rgb(0,0,0,0.15)] hover:ring-amber-200 transition-all duration-200 group cursor-pointer"
             onClick={() => navigate(task.lead?.id ? `/leads/${task.lead.id}` : `/tasks/${task.id}`)}>
@@ -208,8 +272,12 @@ function TaskItem({ task, onComplete, preferDept }) {
                             {new Date(task.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
                         </span>
                     )}
-                    <button onClick={(e) => { e.stopPropagation(); onComplete(task.id); }}
-                        className="p-1 rounded-md text-gray-400 hover:text-emerald-600 hover:bg-emerald-55 transition-colors" title="Mark complete">
+                    <button onClick={(e) => { e.stopPropagation(); setCommenting(c => !c); }}
+                        className={cn(
+                            "p-1 rounded-md transition-colors",
+                            commenting ? "text-emerald-600 bg-emerald-50" : "text-gray-400 hover:text-emerald-600 hover:bg-emerald-50"
+                        )}
+                        title="Add comment & close">
                         <Check className="h-4 w-4" />
                     </button>
                 </div>
@@ -218,6 +286,19 @@ function TaskItem({ task, onComplete, preferDept }) {
                 <div className="mt-2 pl-0">
                     <LeadIdentity lead={task.lead} preferDept={preferDept} />
                 </div>
+            )}
+            {commenting && (
+                <CommentBox
+                    value={comment}
+                    onChange={setComment}
+                    onSubmit={submit}
+                    onCancel={() => { setCommenting(false); setComment(""); setScheduleAt(""); }}
+                    pending={completing}
+                    scheduleAt={scheduleAt}
+                    onScheduleChange={setScheduleAt}
+                    canSchedule={!!task.lead}
+                    hint={task.lead ? "Saved to the lead's activity, then the task is closed." : "Saved as a task comment, then the task is closed."}
+                />
             )}
         </div>
     );
@@ -228,6 +309,16 @@ function TaskItem({ task, onComplete, preferDept }) {
 function ReminderItem({ reminder, preferDept, onClear, clearing }) {
     const d = new Date(reminder.remindAt);
     const isToday = d.toDateString() === new Date().toDateString();
+    const [commenting, setCommenting] = useState(false);
+    const [comment, setComment] = useState("");
+    const [scheduleAt, setScheduleAt] = useState("");
+    const leadId = reminder.leadId ?? reminder.lead?.id ?? null;
+
+    const submit = () => {
+        if (!comment.trim()) { toast.warning("Please add a comment before closing"); return; }
+        onClear({ id: reminder.id, leadId, comment: comment.trim(), nextCallAt: scheduleAt || null });
+    };
+
     return (
         <div className="p-3 rounded-xl bg-white ring-1 ring-slate-200/70 border-l-[3px] border-l-violet-500 shadow-[0_1px_2px_rgb(0,0,0,0.04)] hover:shadow-[0_4px_16px_-6px_rgb(0,0,0,0.15)] hover:ring-violet-200 transition-all duration-200">
             <div className="flex items-start gap-3">
@@ -239,10 +330,13 @@ function ReminderItem({ reminder, preferDept, onClear, clearing }) {
                         : d.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
                 </span>
                 <button
-                    onClick={e => { e.stopPropagation(); onClear(reminder.id); }}
+                    onClick={e => { e.stopPropagation(); setCommenting(c => !c); }}
                     disabled={clearing}
-                    title="Mark successful"
-                    className="shrink-0 -mt-0.5 -mr-0.5 p-1 rounded-md text-violet-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                    title="Add comment & close"
+                    className={cn(
+                        "shrink-0 -mt-0.5 -mr-0.5 p-1 rounded-md transition-colors disabled:opacity-50",
+                        commenting ? "text-emerald-600 bg-emerald-50" : "text-violet-400 hover:text-emerald-600 hover:bg-emerald-50"
+                    )}
                 >
                     <Check className="h-3.5 w-3.5" />
                 </button>
@@ -251,6 +345,19 @@ function ReminderItem({ reminder, preferDept, onClear, clearing }) {
                 <Link to={`/leads/${reminder.lead.id}`} onClick={e => e.stopPropagation()} className="mt-2 pl-6 block">
                     <LeadIdentity lead={reminder.lead} preferDept={preferDept} />
                 </Link>
+            )}
+            {commenting && (
+                <CommentBox
+                    value={comment}
+                    onChange={setComment}
+                    onSubmit={submit}
+                    onCancel={() => { setCommenting(false); setComment(""); setScheduleAt(""); }}
+                    pending={clearing}
+                    scheduleAt={scheduleAt}
+                    onScheduleChange={setScheduleAt}
+                    canSchedule={!!leadId}
+                    hint="Saved to the lead's activity, then the reminder is closed."
+                />
             )}
         </div>
     );
@@ -598,22 +705,55 @@ const MyDay = () => {
         staleTime: 120_000,
     });
 
-    // Complete task mutation
+    // Complete task mutation — records the closing comment on the lead's activity
+    // (or, for lead-less tasks, as a task comment) before marking it complete.
     const completeTask = useMutation({
-        mutationFn: (id) => api.patch(`/tasks/${id}/status`, { status: "COMPLETED" }),
-        onSuccess: () => { 
-            queryClient.invalidateQueries({ queryKey: ["tasks"] }); 
-            toast.success("Task marked complete"); 
+        mutationFn: async ({ id, leadId, comment, nextCallAt }) => {
+            if (comment && leadId) {
+                await api.post(`/leads/${leadId}/notes`, { content: comment });
+            } else if (comment) {
+                await api.post(`/tasks/${id}/comments`, { content: comment });
+            }
+            if (nextCallAt && leadId) {
+                await api.post("/reminders", {
+                    leadId,
+                    message: comment || "Follow-up call",
+                    remindAt: new Date(nextCallAt).toISOString(),
+                });
+            }
+            return api.patch(`/tasks/${id}/status`, { status: "COMPLETED" });
+        },
+        onSuccess: (_data, { nextCallAt }) => {
+            queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            queryClient.invalidateQueries({ queryKey: ["reminders"] });
+            queryClient.invalidateQueries({ queryKey: ["lead-activities"] });
+            queryClient.invalidateQueries({ queryKey: ["lead-notes"] });
+            toast.success(nextCallAt ? "Task closed · next call scheduled" : "Comment added · task closed");
         },
         onError: (err) => toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to update task"),
     });
 
-    // A reminder is cleared by marking it successful (resolves & hides it).
+    // A lead reminder is closed by logging the comment on the lead, then marking
+    // it successful (resolves & hides it from Upcoming/Overdue).
     const dismissReminder = useMutation({
-        mutationFn: (id) => api.patch(`/reminders/${id}`, { outcome: "SUCCESSFUL" }),
-        onSuccess: () => {
+        mutationFn: async ({ id, leadId, comment, nextCallAt }) => {
+            if (comment && leadId) {
+                await api.post(`/leads/${leadId}/notes`, { content: comment });
+            }
+            if (nextCallAt && leadId) {
+                await api.post("/reminders", {
+                    leadId,
+                    message: comment || "Follow-up call",
+                    remindAt: new Date(nextCallAt).toISOString(),
+                });
+            }
+            return api.patch(`/reminders/${id}`, { outcome: "SUCCESSFUL" });
+        },
+        onSuccess: (_data, { nextCallAt }) => {
             queryClient.invalidateQueries({ queryKey: ["reminders"] });
-            toast.success("Reminder marked successful");
+            queryClient.invalidateQueries({ queryKey: ["lead-activities"] });
+            queryClient.invalidateQueries({ queryKey: ["lead-notes"] });
+            toast.success(nextCallAt ? "Reminder closed · next call scheduled" : "Comment added · reminder closed");
         },
         onError: (err) => toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to update reminder"),
     });
@@ -787,12 +927,12 @@ const MyDay = () => {
                         {upcomingItems.length > 0
                             ? upcomingItems.map(entry => (
                                 entry.kind === "task"
-                                    ? <TaskItem key={`task-${entry.item.id}`} task={entry.item} onComplete={(id) => completeTask.mutate(id)} preferDept={department} />
+                                    ? <TaskItem key={`task-${entry.item.id}`} task={entry.item} onComplete={(payload) => completeTask.mutate(payload)} completing={completeTask.isPending} preferDept={department} />
                                     : <ReminderItem
                                         key={`rem-${entry.item.id}`}
                                         reminder={entry.item}
                                         preferDept={department}
-                                        onClear={(id) => dismissReminder.mutate(id)}
+                                        onClear={(payload) => dismissReminder.mutate(payload)}
                                         clearing={dismissReminder.isPending}
                                     />
                             ))
@@ -811,12 +951,12 @@ const MyDay = () => {
                         {overdueItems.length > 0
                             ? overdueItems.map(entry => (
                                 entry.kind === "task"
-                                    ? <TaskItem key={`task-${entry.item.id}`} task={entry.item} onComplete={(id) => completeTask.mutate(id)} preferDept={department} />
+                                    ? <TaskItem key={`task-${entry.item.id}`} task={entry.item} onComplete={(payload) => completeTask.mutate(payload)} completing={completeTask.isPending} preferDept={department} />
                                     : <ReminderItem
                                         key={`rem-${entry.item.id}`}
                                         reminder={entry.item}
                                         preferDept={department}
-                                        onClear={(id) => dismissReminder.mutate(id)}
+                                        onClear={(payload) => dismissReminder.mutate(payload)}
                                         clearing={dismissReminder.isPending}
                                     />
                             ))

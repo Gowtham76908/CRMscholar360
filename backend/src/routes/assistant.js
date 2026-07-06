@@ -4,10 +4,9 @@ const authMiddleware = require("../middleware/authMiddleware");
 const rateLimiter    = require("../assistant/rateLimiter");
 const { chatHandler, transcribeHandler, isAssistantEnabled } = require("../assistant/assistantController");
 
-// Audio stays in memory (small clips) and is streamed straight to Whisper.
 const uploadAudio = multer({
     storage: multer.memoryStorage(),
-    limits:  { fileSize: 15 * 1024 * 1024 }, // 15MB — plenty for short voice clips
+    limits:  { fileSize: 15 * 1024 * 1024 }, 
 });
 
 router.get("/health", async (req, res) => {
