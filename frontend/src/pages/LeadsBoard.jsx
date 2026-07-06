@@ -160,19 +160,12 @@ export default function LeadsBoard({
     // screen, stays reachable for moving between columns (the board's own
     // horizontal scrollbar would otherwise sit far below the fold on tall boards).
     const boardScrollRef = useRef(null);   // the actual columns row (horizontal scroll)
-    const railRef = useRef(null);          // the sticky proxy scrollbar
-    const [scrollWidth, setScrollWidth] = useState(0);
-    const [hasHScroll, setHasHScroll] = useState(false);
     const [boardHeight, setBoardHeight] = useState(null);
-    const syncing = useRef(false);
 
     useLayoutEffect(() => {
         const el = boardScrollRef.current;
         if (!el) return;
         const update = () => {
-            setScrollWidth(el.scrollWidth);
-            setHasHScroll(el.scrollWidth > el.clientWidth + 1);
-            
             // Measure distance from top dynamically to size board to fit screen
             const top = el.getBoundingClientRect().top;
             setBoardHeight(Math.max(window.innerHeight - top - 24, 320));
@@ -183,22 +176,6 @@ export default function LeadsBoard({
         window.addEventListener("resize", update);
         return () => { ro.disconnect(); window.removeEventListener("resize", update); };
     }, [stages.length, department, isLoading, columns]);
-
-    // Keep the proxy rail and the board's horizontal scroll in lock-step.
-    const onBoardScroll = () => {
-        if (syncing.current) { syncing.current = false; return; }
-        if (railRef.current && boardScrollRef.current) {
-            syncing.current = true;
-            railRef.current.scrollLeft = boardScrollRef.current.scrollLeft;
-        }
-    };
-    const onRailScroll = () => {
-        if (syncing.current) { syncing.current = false; return; }
-        if (railRef.current && boardScrollRef.current) {
-            syncing.current = true;
-            boardScrollRef.current.scrollLeft = railRef.current.scrollLeft;
-        }
-    };
 
     if (workflowsLoading) {
         return <div className="py-20 text-center text-sm text-gray-400">Loading workflow…</div>;
@@ -250,9 +227,8 @@ export default function LeadsBoard({
                         sticky proxy bar at the bottom of the screen drives it instead. */}
                     <div
                         ref={boardScrollRef}
-                        onScroll={onBoardScroll}
                         style={boardHeight ? { height: `${boardHeight}px` } : undefined}
-                        className={`flex gap-5 overflow-x-auto overflow-y-hidden pt-2 items-stretch transition-opacity duration-150 select-none scrollbar-none ${boardHeight ? "" : "h-[calc(100vh-170px)]"} ${isFetching ? "opacity-60" : ""}`}
+                        className={`flex gap-5 overflow-x-auto overflow-y-hidden pt-2 pb-2 items-stretch transition-opacity duration-150 select-none scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent ${boardHeight ? "" : "h-[calc(100vh-170px)]"} ${isFetching ? "opacity-60" : ""}`}
                     >
                         {stages.map((stage) => (
                             <StageColumn
@@ -263,23 +239,11 @@ export default function LeadsBoard({
                                 totalInStage={columns[stage.code]?.total ?? 0}
                                 slaWarningDays={slaWarningDays}
                                 slaBreachDays={slaBreachDays}
-                                onPreviewTask={setPreviewTask}
+                                  onPreviewTask={setPreviewTask}
                                 onAssignClick={(lead) => setAssigningLead(lead)}
                             />
                         ))}
                     </div>
-
-                    {/* Separate common horizontal scrollbar — sticky at the bottom of
-                        the viewport so it's always reachable, however tall the board. */}
-                    {hasHScroll && (
-                        <div
-                            ref={railRef}
-                            onScroll={onRailScroll}
-                            className="sticky bottom-2 z-20 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent rounded-full bg-white/70 backdrop-blur-sm ring-1 ring-slate-200/70 shadow-sm"
-                        >
-                            <div style={{ width: scrollWidth, height: 1 }} />
-                        </div>
-                    )}
                 </>
             )}
 
