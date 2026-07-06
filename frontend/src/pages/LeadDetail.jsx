@@ -1639,6 +1639,23 @@ export default function LeadDetail() {
                                         {lead.category}
                                     </span>
                                 )}
+                                <button
+                                    onClick={() => setDepartmentsOpen(true)}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors cursor-pointer"
+                                    title="View & Reassign Consultants"
+                                >
+                                    <User className="h-3 w-3 text-indigo-500" />
+                                    <span>Assignee: {primaryDept?.assignedEmployee?.name || "Unassigned"}</span>
+                                    <ChevronDown className="h-3 w-3 text-indigo-400" />
+                                </button>
+                                <button
+                                    onClick={() => setDepartmentsOpen(true)}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors cursor-pointer"
+                                    title="Allocate Departments"
+                                >
+                                    <GitBranch className="h-3 w-3 text-slate-400" />
+                                    <span>Manage Departments</span>
+                                </button>
                                 {lead.score != null && (
                                     <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-br from-purple-50 to-indigo-50 text-purple-700 border border-purple-100">
                                         <span className="font-black">{lead.score}</span>
@@ -2251,21 +2268,7 @@ export default function LeadDetail() {
                         />
                     )}
 
-                    {/* ── Departments (multi-department services) ──────────────── */}
-                    <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
-                        <div className="flex items-center justify-between mb-0 cursor-pointer select-none" onClick={() => setDepartmentsOpen(!departmentsOpen)}>
-                            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5 py-1">
-                                {departmentsOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
-                                <GitBranch className="h-3.5 w-3.5 text-gray-400" />
-                                Departments
-                            </h3>
-                        </div>
-                        {departmentsOpen && (
-                            <div className="mt-3 pt-3 border-t border-gray-100">
-                                <LeadDepartmentsPanel leadId={id} />
-                            </div>
-                        )}
-                    </div>
+
 
                     {/* ── Custom Fields ───────────────────────────────────────── */}
                     <CustomFieldsPanel leadId={id} lead={lead} />
@@ -2435,6 +2438,14 @@ export default function LeadDetail() {
                         queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
                     }}
                 />
+            )}
+
+            {departmentsOpen && (
+                <Modal isOpen onClose={() => setDepartmentsOpen(false)} title="Manage Departments & Assignees">
+                    <div className="py-2">
+                        <LeadDepartmentsPanel leadId={id} />
+                    </div>
+                </Modal>
             )}
         </div>
     );
