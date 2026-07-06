@@ -193,27 +193,42 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
                 {/* History */}
                 {history.length > 0 && (
                     <div className="mt-4 pt-3 border-t border-gray-100">
-                        <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1 mb-2">
-                            <History className="h-3 w-3" /> History
+                        <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1 mb-3">
+                            <History className="h-3 w-3" /> Deposit History ({history.length})
                         </p>
-                        <ul className="space-y-2">
+                        <div className="space-y-2.5">
                             {history.map((h, i) => (
-                                <li key={i} className="flex items-start gap-2 text-[11px]">
-                                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-300 shrink-0" />
-                                    <div className="min-w-0">
-                                        <p className="font-semibold text-slate-700">
-                                            {h.deposit_amount || "—"} · {h.payment_mode || "—"} · {fmtDate(h.payment_date)}
-                                            {h.deposit_college && (
-                                                <span className="ml-1 text-indigo-500">· {h.deposit_college}</span>
-                                            )}
-                                        </p>
-                                        <p className="text-slate-400">
-                                            {fmtDateTime(h.recordedAt)}{h.recordedBy ? ` · ${h.recordedBy}` : ""}
-                                        </p>
+                                <div key={i} className="rounded-xl border border-slate-100 bg-slate-50/60 px-3.5 py-3 space-y-2">
+                                    {/* College badge */}
+                                    {h.deposit_college && (
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] font-bold text-indigo-600">
+                                                🏫 {h.deposit_college}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {/* Amount / Mode / Date row */}
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div>
+                                            <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide">Amount</p>
+                                            <p className="text-xs font-bold text-slate-800 break-words">{h.deposit_amount || "—"}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide">Mode</p>
+                                            <p className="text-xs font-bold text-slate-700">{h.payment_mode || "—"}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide">Date</p>
+                                            <p className="text-xs font-bold text-slate-700">{fmtDate(h.payment_date) || "—"}</p>
+                                        </div>
                                     </div>
-                                </li>
+                                    {/* Recorded metadata */}
+                                    <p className="text-[10px] text-slate-400">
+                                        Recorded {fmtDateTime(h.recordedAt)}{h.recordedBy ? ` · by ${h.recordedBy}` : ""}
+                                    </p>
+                                </div>
                             ))}
-                        </ul>
+                        </div>
                     </div>
                 )}
             </div>
