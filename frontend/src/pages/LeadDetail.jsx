@@ -1578,10 +1578,10 @@ export default function LeadDetail() {
                     <button
                         onClick={() => setShowDetails(v => !v)}
                         title={showDetails ? "Hide lead details" : "Show lead details"}
-                        className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border text-xs font-semibold transition-colors ${
+                        className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-lg border text-xs font-bold transition-all shadow-sm cursor-pointer ${
                             showDetails
-                                ? "border-indigo-200 bg-indigo-50 text-indigo-600"
-                                : "border-gray-200 bg-white text-gray-500 hover:border-indigo-300 hover:text-indigo-600"
+                                ? "bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600 shadow-indigo-100 ring-2 ring-indigo-500/20"
+                                : "bg-indigo-50/80 hover:bg-indigo-100 text-indigo-600 border-indigo-200 hover:border-indigo-300"
                         }`}
                     >
                         {showDetails ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
