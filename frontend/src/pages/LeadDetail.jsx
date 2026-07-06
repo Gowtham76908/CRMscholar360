@@ -1360,10 +1360,13 @@ export default function LeadDetail() {
 
     const handleNoteSubmit = (e) => {
         e.preventDefault();
-        if (showReminder && reminderAt) {
+        if (showReminder) {
+            // Reminder mode: a date & time is mandatory.
+            if (!reminderAt) { toast.warning("Please pick a date & time for the reminder"); return; }
             addReminder.mutate({ leadId: id, message: noteText.trim() || "Reminder", remindAt: reminderAt });
             return;
         }
+        // Note mode: text only.
         if (!noteText.trim()) return;
         addNote.mutate(noteText.trim());
     };
@@ -1977,6 +1980,28 @@ export default function LeadDetail() {
                         <div className="border-b border-gray-100 overflow-hidden">
                             <div className="p-4">
                                 <form onSubmit={handleNoteSubmit} className="space-y-3">
+                                    {/* Mode toggle — Note (text only) vs Reminder (message + required date/time) */}
+                                    <div className="inline-flex items-center gap-0.5 p-0.5 bg-gray-100 rounded-lg">
+                                        <button
+                                            type="button"
+                                            onClick={() => { setShowReminder(false); setReminderAt(""); }}
+                                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                                                !showReminder ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                                            }`}
+                                        >
+                                            <FileText className="h-3.5 w-3.5" /> Note
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowReminder(true)}
+                                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                                                showReminder ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                                            }`}
+                                        >
+                                            <Bell className="h-3.5 w-3.5" /> Reminder
+                                        </button>
+                                    </div>
+
                                     <div className="flex gap-2 items-end">
                                         <textarea
                                             ref={noteRef}
@@ -1989,7 +2014,7 @@ export default function LeadDetail() {
                                                 }
                                             }}
                                             placeholder={showReminder
-                                                ? "Reminder message… (optional)"
+                                                ? "What's this reminder about? (optional)"
                                                 : "Add a note… (Enter to save, Shift+Enter for new line)"}
                                             rows={2}
                                             className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400"
@@ -2015,65 +2040,51 @@ export default function LeadDetail() {
                                             )}
                                         </button>
                                         <button
-                                            type="button"
-                                            onClick={() => {
-                                                setShowReminder(v => {
-                                                    if (v) setReminderAt("");
-                                                    return !v;
-                                                });
-                                            }}
-                                            className={`flex-shrink-0 p-2 border rounded-lg transition-all cursor-pointer ${
-                                                showReminder
-                                                    ? "text-indigo-600 bg-indigo-50 border-indigo-300"
-                                                    : "text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 border-gray-200"
-                                            }`}
-                                            title={showReminder ? "Remove reminder" : "Set a reminder (optional)"}
-                                        >
-                                            <Calendar className="h-4 w-4" />
-                                        </button>
-                                        <button
                                             type="submit"
                                             disabled={
                                                 (addNote.isPending || addReminder.isPending) ||
                                                 (showReminder ? !reminderAt : !noteText.trim())
                                             }
-                                            className="flex-shrink-0 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-all cursor-pointer"
+                                            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-all cursor-pointer"
                                         >
                                             {(addNote.isPending || addReminder.isPending)
                                                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                : "Save"}
+                                                : showReminder ? <><Bell className="h-3.5 w-3.5" /> Set Reminder</> : "Save Note"}
                                         </button>
                                     </div>
 
-                                    {/* Optional reminder / calendar — toggled by the calendar icon above */}
+                                    {/* Reminder date/time — required in Reminder mode */}
                                     {showReminder && (
-                                        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-end">
+                                        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between rounded-lg bg-amber-50/60 border border-amber-100 px-3 py-2">
                                             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="flex items-center gap-1 text-xs font-semibold text-gray-500 whitespace-nowrap">
-                                                        <Calendar className="h-3.5 w-3.5 text-indigo-500" /> Remind me at:
-                                                    </span>
-                                                    <input
-                                                        type="datetime-local"
-                                                        value={reminderAt}
-                                                        onChange={e => setReminderAt(e.target.value)}
-                                                        className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white cursor-pointer"
-                                                    />
-                                                </div>
-                                                {gcalConnected && (
-                                                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={addToGcal}
-                                                            onChange={e => setAddToGcal(e.target.checked)}
-                                                            className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
-                                                        />
-                                                        <span className="flex items-center gap-1 text-xs text-gray-600 font-semibold">
-                                                            <Calendar className="h-3.5 w-3.5 text-blue-500" /> Add to GCal
-                                                        </span>
-                                                    </label>
-                                                )}
+                                                <span className="flex items-center gap-1 text-xs font-bold text-amber-700 whitespace-nowrap">
+                                                    <Calendar className="h-3.5 w-3.5" /> Remind me at
+                                                    <span className="text-red-500">*</span>
+                                                </span>
+                                                <input
+                                                    type="datetime-local"
+                                                    value={reminderAt}
+                                                    onChange={e => setReminderAt(e.target.value)}
+                                                    className={`text-xs border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 bg-white cursor-pointer ${
+                                                        reminderAt
+                                                            ? "border-gray-200 focus:border-indigo-400 focus:ring-indigo-100"
+                                                            : "border-red-300 focus:border-red-400 focus:ring-red-100"
+                                                    }`}
+                                                />
                                             </div>
+                                            {gcalConnected && (
+                                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={addToGcal}
+                                                        onChange={e => setAddToGcal(e.target.checked)}
+                                                        className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
+                                                    />
+                                                    <span className="flex items-center gap-1 text-xs text-gray-600 font-semibold">
+                                                        <Calendar className="h-3.5 w-3.5 text-blue-500" /> Add to GCal
+                                                    </span>
+                                                </label>
+                                            )}
                                         </div>
                                     )}
                                 </form>

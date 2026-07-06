@@ -67,7 +67,8 @@ function generateIntakeTerms(count = 6) {
     return terms;
 }
 
-const INTAKE_OPTIONS = generateIntakeTerms(6);
+// 10 terms ≈ 2.5 years of intakes (4 terms = one academic year).
+const INTAKE_OPTIONS = generateIntakeTerms(10);
 
 const LEAD_SOURCE_OPTIONS = [
     { label: "Walk-in",                       backendValue: "PHONE_CALL" },

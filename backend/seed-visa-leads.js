@@ -2,7 +2,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 async function main() {
-    console.log("Seeding leads in VISA_APPROVAL stage...");
+    console.log("Seeding leads in VISA_STATUS and VISA_APPROVAL stages...");
 
     // 1. Get first active user and their workspace
     const user = await prisma.user.findFirst({
@@ -14,20 +14,22 @@ async function main() {
     }
     const workspaceId = user.workspaceId;
 
-    // 2. Prepare 5 visa approval leads
+    // 2. Prepare 6 visa leads (3 for VISA_STATUS, 3 for VISA_APPROVAL)
     const visaLeads = [
-        { name: "Rohit Sharma", email: "rohit.sharma@example.com", phone: "+919876543001", country: "United Kingdom", course: "M.Sc. Data Science", university: "University of Greenwich" },
-        { name: "Anjali Nair", email: "anjali.nair@example.com", phone: "+919876543002", country: "Canada", course: "MBA", university: "York University" },
-        { name: "Deepak Verma", email: "deepak.verma@example.com", phone: "+919876543003", country: "United States", course: "M.S. Computer Science", university: "Northeastern University" },
-        { name: "Sneha Reddy", email: "sneha.reddy@example.com", phone: "+919876543004", country: "Australia", course: "Master of Professional Accounting", university: "University of Sydney" },
-        { name: "Vikram Malhotra", email: "vikram.malhotra@example.com", phone: "+919876543005", country: "Ireland", course: "M.Sc. Business Analytics", university: "Trinity College Dublin" }
+        { name: "Rohit Sharma", email: "rohit.sharma@example.com", phone: "+919876543001", country: "United Kingdom", course: "M.Sc. Data Science", university: "University of Greenwich", stage: "VISA_APPROVAL" },
+        { name: "Anjali Nair", email: "anjali.nair@example.com", phone: "+919876543002", country: "Canada", course: "MBA", university: "York University", stage: "VISA_APPROVAL" },
+        { name: "Deepak Verma", email: "deepak.verma@example.com", phone: "+919876543003", country: "United States", course: "M.S. Computer Science", university: "Northeastern University", stage: "VISA_APPROVAL" },
+        
+        { name: "Siddharth Sen", email: "siddharth.sen@example.com", phone: "+919876543006", country: "United Kingdom", course: "M.Sc. Finance", university: "King's College London", stage: "VISA_STATUS" },
+        { name: "Riya Kapoor", email: "riya.kapoor@example.com", phone: "+919876543007", country: "Germany", course: "M.S. Automotive Engineering", university: "TU Munich", stage: "VISA_STATUS" },
+        { name: "Kunal Singhal", email: "kunal.singhal@example.com", phone: "+919876543008", country: "Australia", course: "Master of Cyber Security", university: "Monash University", stage: "VISA_STATUS" }
     ];
 
     for (let i = 0; i < visaLeads.length; i++) {
         const vl = visaLeads[i];
         
         // Generate a unique leadId
-        const leadIdCode = `sch-26-visa${i + 1}`;
+        const leadIdCode = `sch-26-visa-st${i + 1}`;
 
         // Create Lead
         const lead = await prisma.lead.create({
@@ -38,7 +40,7 @@ async function main() {
                 phone: vl.phone,
                 source: "FACEBOOK",
                 category: "HOT",
-                score: 95,
+                score: 90,
                 workspaceId,
                 customFields: {
                     firstName: vl.name.split(" ")[0],
@@ -50,9 +52,9 @@ async function main() {
                     highestLevelOfEducation: "Bachelor's Degree",
                     // Visa fields
                     visa_manager_approved: true,
-                    visa_approved_date: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
-                    embassy_result: "Approved",
-                    flight_departure_date: new Date(Date.now() + 15 * 24 * 3600 * 1000).toISOString(),
+                    visa_approved_date: vl.stage === "VISA_APPROVAL" ? new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString() : null,
+                    embassy_result: vl.stage === "VISA_APPROVAL" ? "Approved" : "Pending",
+                    flight_departure_date: vl.stage === "VISA_APPROVAL" ? new Date(Date.now() + 15 * 24 * 3600 * 1000).toISOString() : null,
                     // Shortlist details
                     univ_country: vl.country,
                     univ_name: vl.university,
@@ -61,12 +63,12 @@ async function main() {
             }
         });
 
-        // Create LeadDepartment "SALES" with VISA_APPROVAL stage
+        // Create LeadDepartment "SALES" with target stage
         const leadDept = await prisma.leadDepartment.create({
             data: {
                 leadId: lead.id,
                 department: "SALES",
-                stage: "VISA_APPROVAL",
+                stage: vl.stage,
                 assignedEmployeeId: user.id,
                 assignedAt: new Date()
             }
@@ -80,13 +82,13 @@ async function main() {
                 action: "STAGE_CHANGED",
                 metadata: {
                     department: "SALES",
-                    from: "VISA_STATUS",
-                    to: "VISA_APPROVAL"
+                    from: "VISA_DOCUMENTATION",
+                    to: vl.stage
                 }
             }
         });
 
-        console.log(`Successfully seeded lead: ${vl.name} (LeadID: ${lead.leadId}) assigned to ${user.name}`);
+        console.log(`Successfully seeded lead: ${vl.name} (LeadID: ${lead.leadId}) in stage ${vl.stage} assigned to ${user.name}`);
     }
 
     console.log("Seeding completed successfully.");

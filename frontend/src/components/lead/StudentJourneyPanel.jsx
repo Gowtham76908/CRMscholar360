@@ -39,10 +39,10 @@ const studentProfileSchema = z.object({
     passportCountryOfBirth: z.string().min(1, "Country of Birth is required"),
     nationality: z.string().min(1, "Nationality is required"),
     citizenship: z.string().min(1, "Citizenship is required"),
-    emergencyName: z.string().min(1, "Emergency Name is required"),
-    emergencyPhone: z.string().min(1, "Emergency Phone is required"),
-    emergencyEmail: z.string().email("Invalid Emergency Email"),
-    emergencyRelation: z.string().min(1, "Emergency Relation is required"),
+    emergencyName: z.string().optional(),
+    emergencyPhone: z.string().optional(),
+    emergencyEmail: z.union([z.string().email("Invalid Emergency Email"), z.literal("")]).optional(),
+    emergencyRelation: z.string().optional(),
 
     // Step 2
     countryOfEducation: z.string().min(1, "Country of Education is required"),
@@ -1757,9 +1757,9 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                                     <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Emergency Contacts</h4>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                    {renderField("emergencyName", "Name", "text", true)}
+                                                    {renderField("emergencyName", "Name", "text", false)}
                                                     <div className="space-y-1">
-                                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Mobile Number*</label>
+                                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wide">Mobile Number</label>
                                                         <div className="flex gap-1.5">
                                                             <select value={formValues.emergencyPhoneCountryCode || "+91"} onChange={e => setFormValues(prev => ({...prev, emergencyPhoneCountryCode: e.target.value}))} className="px-2.5 py-2 text-xs border border-slate-200 rounded-xl bg-white outline-none font-semibold focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500">
                                                                 <option value="+91">+91</option>
@@ -1772,8 +1772,8 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                                     </div>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                    {renderField("emergencyEmail", "Email", "email", true)}
-                                                    {renderField("emergencyRelation", "Relation with Applicant", "text", true)}
+                                                    {renderField("emergencyEmail", "Email", "email", false)}
+                                                    {renderField("emergencyRelation", "Relation with Applicant", "text", false)}
                                                 </div>
                                             </div>
                                         </div>
