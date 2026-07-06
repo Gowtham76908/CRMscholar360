@@ -115,10 +115,16 @@ const saveLeadCustomFields = async (req, res, next) => {
             "x10Country", "x10State", "x10Level", "x10Board", "x10Degree", "x10Institution", "x10City", "x10Grading", "x10Score", "x10Language", "x10StartDate", "x10EndDate", "x10University",
             "hasWorkExperience", "workOrgAddress", "workPosition", "workJobProfile", "workSalaryMode", "workFrom", "workUpto", "workCurrent", "workExperiences",
             "testScores", "documents",
+            // Legacy / Sync Keys
+            "ielts_toefl_score", "academic_gpa", "backlogs",
+            // Shortlisting / Application Stage Keys
+            "shortlisted_universities", "sop_status", "lor_status", "transcripts_status", "univ_country", "univ_name", "univ_course", "univ_link",
             // Deposit / payment stage keys
             "deposit_amount", "payment_mode", "payment_date", "deposit_history",
-            // Visa approval keys
-            "visa_approved_date"
+            // Visa / Documentation Stage Keys
+            "financial_proof_docs", "cas_form_number", "visa_manager_approved", "visa_appointment_date", "visa_approved_date", "mock_interview_scorecard", "embassy_result", "approved_visa_passport", "flight_departure_date",
+            // Commission Invoicing Stage Keys
+            "first_year_tuition", "commission_percentage"
         ]);
         const invalidKeys = Object.keys(fields).filter(k => !validKeys.has(k));
         if (invalidKeys.length > 0) {
