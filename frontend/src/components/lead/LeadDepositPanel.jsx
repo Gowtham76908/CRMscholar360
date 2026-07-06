@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
     Wallet, Pencil, X, Loader2, CreditCard, CalendarDays, History, Plus,
+    FileText, Eye, Upload, Trash2,
 } from "lucide-react";
 import api from "../../api/axios";
 import { useAuth } from "../../context/AuthContext";
-import { cn } from "../../lib/utils";
+import { fileUrl } from "../../utils/fileUrl";
+
+const RECEIPT_DOC_NAME = "Deposit Receipt";
 
 const BUILT_IN_MODES = ["Bank Transfer", "Credit Card", "Debit Card", "UPI", "Cash", "Cheque"];
 const CUSTOM_SENTINEL = "__custom__";
@@ -26,12 +29,54 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
         deposit_amount: cf.deposit_amount || "",
         payment_mode: cf.payment_mode || "",
         payment_date: cf.payment_date || "",
+        deposit_college: cf.deposit_college || "",
     };
     const history = Array.isArray(cf.deposit_history) ? cf.deposit_history : [];
     const hasDeposit = !!(current.deposit_amount || current.payment_mode || current.payment_date);
 
     const [open, setOpen] = useState(false);
     const [draft, setDraft] = useState(current);
+
+    // Deposit receipt — stored as a document named "Deposit Receipt" in
+    // customFields.documents (same store & signing as the Documents section).
+    const receiptDoc = (Array.isArray(cf.documents) ? cf.documents : [])
+        .find(d => d.name?.toLowerCase() === RECEIPT_DOC_NAME.toLowerCase());
+    const receiptInputRef = useRef(null);
+    const [uploadingReceipt, setUploadingReceipt] = useState(false);
+
+    const handleReceiptUpload = async (file) => {
+        if (!file) return;
+        if (file.type !== "application/pdf") { toast.error("Please upload a PDF file"); return; }
+        if (file.size > 10 * 1024 * 1024) { toast.error("File size exceeds 10MB limit"); return; }
+        const formData = new FormData();
+        formData.append("document", file);
+        formData.append("documentName", RECEIPT_DOC_NAME);
+        setUploadingReceipt(true);
+        try {
+            await api.post(`/upload/document/${leadId}`, formData, { headers: { "Content-Type": "multipart/form-data" } });
+            queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+            queryClient.invalidateQueries({ queryKey: ["lead-activities", leadId] });
+            toast.success("Deposit receipt uploaded");
+        } catch (err) {
+            toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to upload receipt");
+        } finally {
+            setUploadingReceipt(false);
+        }
+    };
+
+    const handleReceiptDelete = async () => {
+        const nextDocs = (cf.documents || []).filter(d => d.name?.toLowerCase() !== RECEIPT_DOC_NAME.toLowerCase());
+        setUploadingReceipt(true);
+        try {
+            await api.patch(`/leads/${leadId}/custom-fields`, { fields: { documents: nextDocs } });
+            queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+            toast.success("Deposit receipt removed");
+        } catch (err) {
+            toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to remove receipt");
+        } finally {
+            setUploadingReceipt(false);
+        }
+    };
     // If the stored payment_mode is not a built-in, track the custom value separately
     const [customMode, setCustomMode] = useState(() => {
         const stored = current.payment_mode || "";
@@ -102,26 +147,47 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
 
             <div className="px-5 py-4">
                 {hasDeposit ? (
-                    <div className="grid grid-cols-3 gap-4">
-                        <div>
-                            <p className={labelCls}>Amount</p>
-                            <p className="text-sm font-bold text-slate-800 break-words">{current.deposit_amount || "—"}</p>
-                        </div>
-                        <div>
-                            <p className={labelCls}>Mode</p>
-                            <p className="text-sm font-bold text-slate-800 flex items-center gap-1">
-                                <CreditCard className="h-3.5 w-3.5 text-slate-400" /> {current.payment_mode || "—"}
-                            </p>
-                        </div>
-                        <div>
-                            <p className={labelCls}>Date</p>
-                            <p className="text-sm font-bold text-slate-800 flex items-center gap-1">
-                                <CalendarDays className="h-3.5 w-3.5 text-slate-400" /> {fmtDate(current.payment_date)}
-                            </p>
+                    <div className="space-y-3">
+                        {/* College badge if set */}
+                        {current.deposit_college && (
+                            <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-1.5">
+                                <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-wide">College</span>
+                                <span className="ml-1 text-xs font-bold text-indigo-700 truncate">{current.deposit_college}</span>
+                            </div>
+                        )}
+                        <div className="grid grid-cols-3 gap-4">
+                            <div>
+                                <p className={labelCls}>Amount</p>
+                                <p className="text-sm font-bold text-slate-800 break-words">{current.deposit_amount || "—"}</p>
+                            </div>
+                            <div>
+                                <p className={labelCls}>Mode</p>
+                                <p className="text-sm font-bold text-slate-800 flex items-center gap-1">
+                                    <CreditCard className="h-3.5 w-3.5 text-slate-400" /> {current.payment_mode || "—"}
+                                </p>
+                            </div>
+                            <div>
+                                <p className={labelCls}>Date</p>
+                                <p className="text-sm font-bold text-slate-800 flex items-center gap-1">
+                                    <CalendarDays className="h-3.5 w-3.5 text-slate-400" /> {fmtDate(current.payment_date)}
+                                </p>
+                            </div>
                         </div>
                     </div>
                 ) : (
                     <p className="text-xs text-slate-400">No deposit recorded yet.</p>
+                )}
+
+                {/* Deposit receipt link */}
+                {receiptDoc?.url && (
+                    <a
+                        href={fileUrl(receiptDoc.url)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50/60 border border-indigo-100 rounded-lg px-2.5 py-1.5 transition-colors"
+                    >
+                        <FileText className="h-3.5 w-3.5" /> View Deposit Receipt <Eye className="h-3.5 w-3.5" />
+                    </a>
                 )}
 
                 {/* History */}
@@ -137,6 +203,9 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
                                     <div className="min-w-0">
                                         <p className="font-semibold text-slate-700">
                                             {h.deposit_amount || "—"} · {h.payment_mode || "—"} · {fmtDate(h.payment_date)}
+                                            {h.deposit_college && (
+                                                <span className="ml-1 text-indigo-500">· {h.deposit_college}</span>
+                                            )}
                                         </p>
                                         <p className="text-slate-400">
                                             {fmtDateTime(h.recordedAt)}{h.recordedBy ? ` · ${h.recordedBy}` : ""}
@@ -212,6 +281,52 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
                             <div className="space-y-1">
                                 <label className={labelCls}>Date of Payment</label>
                                 <input type="date" className={inputCls} value={draft.payment_date || ""} onChange={e => setDraft(d => ({ ...d, payment_date: e.target.value }))} />
+                            </div>
+
+                            {/* Deposit Receipt — PDF attachment */}
+                            <div className="space-y-1.5">
+                                <label className={labelCls}>Deposit Receipt <span className="text-slate-400 font-medium normal-case">(PDF)</span></label>
+                                <input
+                                    type="file"
+                                    ref={receiptInputRef}
+                                    accept="application/pdf"
+                                    className="hidden"
+                                    onChange={e => { handleReceiptUpload(e.target.files?.[0]); e.target.value = ""; }}
+                                />
+                                {receiptDoc?.url ? (
+                                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
+                                        <div className="h-8 w-8 rounded-lg bg-rose-50 flex items-center justify-center shrink-0">
+                                            <FileText className="h-4 w-4 text-rose-500" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-bold text-slate-700 truncate">{receiptDoc.fileName || "Deposit Receipt.pdf"}</p>
+                                            {receiptDoc.uploadedAt && (
+                                                <p className="text-[10px] text-slate-400">Uploaded {fmtDate(receiptDoc.uploadedAt)}</p>
+                                            )}
+                                        </div>
+                                        <a href={fileUrl(receiptDoc.url)} target="_blank" rel="noreferrer" title="View receipt"
+                                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+                                            <Eye className="h-3.5 w-3.5" />
+                                        </a>
+                                        <button type="button" onClick={() => receiptInputRef.current?.click()} disabled={uploadingReceipt} title="Replace"
+                                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50">
+                                            {uploadingReceipt ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                                        </button>
+                                        <button type="button" onClick={handleReceiptDelete} disabled={uploadingReceipt} title="Remove"
+                                            className="p-1.5 rounded-lg text-rose-400 hover:text-rose-700 hover:bg-rose-50 transition-colors disabled:opacity-50">
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => receiptInputRef.current?.click()}
+                                        disabled={uploadingReceipt}
+                                        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-bold text-slate-500 border border-dashed border-slate-300 rounded-lg hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/40 transition-colors disabled:opacity-50"
+                                    >
+                                        {uploadingReceipt ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</> : <><Upload className="h-4 w-4" /> Attach PDF receipt</>}
+                                    </button>
+                                )}
                             </div>
                         </div>
 
