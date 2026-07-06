@@ -265,6 +265,8 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
     const [actionModal, setActionModal] = useState(null); // 'enquiry', 'follow_up', 'prospect', etc.
     const [loading, setLoading] = useState(false);
     const [formValues, setFormValues] = useState({});
+    const [customPaymentMode, setCustomPaymentMode] = useState("");
+    const DEPOSIT_BUILT_IN_MODES = ["Bank Transfer", "Credit Card", "Debit Card", "UPI", "Cash", "Cheque"];
     const [prospectStep, setProspectStep] = useState(1);
     const [activeTests, setActiveTests] = useState([]);
     const [uploadingProof, setUploadingProof] = useState(false);
@@ -970,15 +972,19 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             }
             else if (currentStage === "DEPOSIT_STATUS") {
                 const prevHistory = Array.isArray(customFields.deposit_history) ? customFields.deposit_history : [];
+                // Resolve custom sentinel to the actual typed value
+                const resolvedPaymentMode = formValues.payment_mode === "__custom__"
+                    ? customPaymentMode.trim()
+                    : (formValues.payment_mode || "");
                 const historyEntry = {
                     deposit_amount: formValues.deposit_amount || "",
-                    payment_mode: formValues.payment_mode || "",
+                    payment_mode: resolvedPaymentMode,
                     payment_date: formValues.payment_date || "",
                     recordedAt: new Date().toISOString(),
                 };
                 await saveCustomFieldsMut.mutateAsync({
                     deposit_amount: formValues.deposit_amount || "",
-                    payment_mode: formValues.payment_mode || "",
+                    payment_mode: resolvedPaymentMode,
                     payment_date: formValues.payment_date || "",
                     deposit_history: [historyEntry, ...prevHistory]
                 });
@@ -987,7 +993,7 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                     ? new Date(formValues.payment_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
                     : "—";
                 await api.post(`/leads/${lead.id}/notes`, {
-                    content: `💰 Deposit recorded — Amount: ${formValues.deposit_amount || "—"} · Mode: ${formValues.payment_mode || "—"} · Date: ${paidOn}`
+                    content: `💰 Deposit recorded — Amount: ${formValues.deposit_amount || "—"} · Mode: ${resolvedPaymentMode || "—"} · Date: ${paidOn}`
                 });
                 // Stage progression is manual — save the deposit details but do NOT
                 // auto-advance to Visa Documentation. The user moves it forward
@@ -2663,19 +2669,41 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                         <label className="text-xs font-semibold text-slate-500 uppercase">Mode of Payment</label>
                                         <select
                                             required
-                                            value={formValues.payment_mode || ""}
-                                            onChange={e => setFormValues({ ...formValues, payment_mode: e.target.value })}
+                                            value={
+                                                DEPOSIT_BUILT_IN_MODES.includes(formValues.payment_mode)
+                                                    ? formValues.payment_mode
+                                                    : formValues.payment_mode
+                                                        ? "__custom__"
+                                                        : ""
+                                            }
+                                            onChange={e => {
+                                                const val = e.target.value;
+                                                if (val === "__custom__") {
+                                                    setFormValues({ ...formValues, payment_mode: "__custom__" });
+                                                } else {
+                                                    setCustomPaymentMode("");
+                                                    setFormValues({ ...formValues, payment_mode: val });
+                                                }
+                                            }}
                                             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white"
                                         >
                                             <option value="">— Select —</option>
-                                            <option value="Bank Transfer">Bank Transfer</option>
-                                            <option value="Credit Card">Credit Card</option>
-                                            <option value="Debit Card">Debit Card</option>
-                                            <option value="UPI">UPI</option>
-                                            <option value="Cash">Cash</option>
-                                            <option value="Cheque">Cheque</option>
-                                            <option value="Other">Other</option>
+                                            {DEPOSIT_BUILT_IN_MODES.map(m => <option key={m} value={m}>{m}</option>)}
+                                            <option value="__custom__">➕ Add Custom...</option>
                                         </select>
+                                        {(formValues.payment_mode === "__custom__" || (!DEPOSIT_BUILT_IN_MODES.includes(formValues.payment_mode) && formValues.payment_mode)) && (
+                                            <input
+                                                autoFocus
+                                                type="text"
+                                                placeholder="Type custom payment mode..."
+                                                value={customPaymentMode}
+                                                onChange={e => {
+                                                    setCustomPaymentMode(e.target.value);
+                                                    setFormValues({ ...formValues, payment_mode: e.target.value || "__custom__" });
+                                                }}
+                                                className="w-full px-3 py-2 text-sm border border-indigo-300 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 mt-1"
+                                            />
+                                        )}
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 uppercase">Date of Payment</label>
