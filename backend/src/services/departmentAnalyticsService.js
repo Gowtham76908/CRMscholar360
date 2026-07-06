@@ -7,6 +7,7 @@ const {
     isWonStage,
     isLostStage,
     getTerminalStages,
+    getOffPipelineStages,
 } = require("../config/departmentWorkflows");
 const { isMemberOfDepartment } = require("./leadDepartmentService");
 
@@ -74,6 +75,13 @@ async function buildScope(department, actor, assignedEmployeeId, startDate, endD
 async function getDepartmentDashboard({ department, actor, assignedEmployeeId, startDate, endDate, source }) {
     const where = await buildScope(department, actor, assignedEmployeeId, startDate, endDate, source);
 
+    // Exclude off-pipeline stages (Archived / Future Prospect) from every count,
+    // the funnel, and aging — they are parked/closed and not part of the pipeline.
+    const offPipeline = getOffPipelineStages(department);
+    if (offPipeline.length) {
+        where.stage = { notIn: offPipeline };
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -81,7 +89,9 @@ async function getDepartmentDashboard({ department, actor, assignedEmployeeId, s
     const now = Date.now();
     const warnCut = new Date(now - 3 * 86_400_000);
     const staleCut = new Date(now - 7 * 86_400_000);
-    const terminal = getTerminalStages(department);
+    // Aging excludes terminal AND off-pipeline stages (base `where.stage` gets
+    // overridden by the spread below, so fold both sets in here).
+    const agingExclude = [...new Set([...getTerminalStages(department), ...offPipeline])];
 
     const [grouped, total, newToday, unassigned, agingWarn, agingStale] = await prisma.$transaction([
         prisma.leadDepartment.groupBy({ by: ["stage"], where, _count: { _all: true } }),
@@ -89,23 +99,26 @@ async function getDepartmentDashboard({ department, actor, assignedEmployeeId, s
         prisma.leadDepartment.count({ where: { ...where, createdAt: { gte: today } } }),
         prisma.leadDepartment.count({ where: { ...where, assignedEmployeeId: null } }),
         prisma.leadDepartment.count({
-            where: { ...where, stage: { notIn: terminal }, updatedAt: { lt: warnCut, gte: staleCut } },
+            where: { ...where, stage: { notIn: agingExclude }, updatedAt: { lt: warnCut, gte: staleCut } },
         }),
         prisma.leadDepartment.count({
-            where: { ...where, stage: { notIn: terminal }, updatedAt: { lt: staleCut } },
+            where: { ...where, stage: { notIn: agingExclude }, updatedAt: { lt: staleCut } },
         }),
     ]);
 
     const countByStage = Object.fromEntries(grouped.map(g => [g.stage, g._count._all]));
 
-    // Funnel in canonical workflow order, with display labels.
-    const funnel = getStages(department).map(code => ({
-        code,
-        label: getStageLabel(code),
-        count: countByStage[code] || 0,
-        won: isWonStage(department, code),
-        lost: isLostStage(department, code),
-    }));
+    // Funnel in canonical workflow order, with display labels. Off-pipeline
+    // stages (Archived / Future Prospect) are omitted from the funnel entirely.
+    const funnel = getStages(department)
+        .filter(code => !offPipeline.includes(code))
+        .map(code => ({
+            code,
+            label: getStageLabel(code),
+            count: countByStage[code] || 0,
+            won: isWonStage(department, code),
+            lost: isLostStage(department, code),
+        }));
 
     let won = 0, lost = 0;
     for (const g of grouped) {

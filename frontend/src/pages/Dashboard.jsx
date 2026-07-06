@@ -474,15 +474,8 @@ const Dashboard = () => {
     const paramConsultant = searchParams.get("consultantId");
     const paramSource = searchParams.get("source");
 
-    const defaultStartDate = useMemo(() => {
-        const d = new Date();
-        d.setDate(d.getDate() - 30);
-        return d.toISOString().split("T")[0]; // default: 30 days ago
-    }, []);
-
-    const defaultEndDate = useMemo(() => {
-        return new Date().toISOString().split("T")[0]; // default: today
-    }, []);
+    const defaultStartDate = "";
+    const defaultEndDate = "";
 
     // Filter states (applied values that trigger query fetching)
     const startDate = paramStartDate !== null ? paramStartDate : defaultStartDate;

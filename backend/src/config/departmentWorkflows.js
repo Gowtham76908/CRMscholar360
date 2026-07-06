@@ -120,6 +120,26 @@ function getTerminalStages(department) {
 }
 
 /**
+ * "Off-pipeline" stages — parked or closed-out services (Archived, Future
+ * Prospect) that are still valid stages but should NOT count toward dashboard
+ * totals, the funnel, active/aging metrics, or conversion. Excluded from all
+ * department analytics.
+ */
+const OFF_PIPELINE_STAGES = {
+    SALES: ["ARCHIVE", "FUTURE_PROSPECT"],
+    APPLICATION_VISA: [],
+    LOAN: [],
+    ACCOMMODATION_TICKETS: [],
+    FOREX: [],
+    MISCELLANEOUS: [],
+};
+
+/** Stages excluded from analytics (archived / future prospect) for a department. */
+function getOffPipelineStages(department) {
+    return OFF_PIPELINE_STAGES[department] || [];
+}
+
+/**
  * Prisma `OR` clause builders for filtering LeadDepartment rows by outcome across
  * all departments — each entry is { department, stage: { in: [...] } }. Use as
  * `where: { OR: wonStageFilter() }`. Departments with no such stages are omitted.
@@ -218,6 +238,8 @@ module.exports = {
     isWonStage,
     isLostStage,
     getTerminalStages,
+    OFF_PIPELINE_STAGES,
+    getOffPipelineStages,
     wonStageFilter,
     lostStageFilter,
     terminalStageFilter,
