@@ -64,6 +64,15 @@ export function getModeFromPath(pathname, search = "") {
     if (pathname === "/leads" && search.includes("view=kanban")) {
         return "workload";
     }
+    // A lead detail page (/leads/:id, /leads/:id/journey) inherits the mode of
+    // the leads view it was opened from — so a lead opened from the Board View
+    // keeps the Board (workload) panel instead of jumping to CRM / All Leads.
+    if (pathname.startsWith("/leads/")) {
+        const last = typeof localStorage !== "undefined" ? localStorage.getItem("last-leads-path") : null;
+        if (last && last.startsWith("/leads") && last.includes("view=kanban")) {
+            return "workload";
+        }
+    }
     for (const mode of MODES) {
         if (mode.paths.some(p => pathname === p || pathname.startsWith(p + "/"))) {
             return mode.id;

@@ -163,6 +163,7 @@ export default function LeadsBoard({
     const railRef = useRef(null);          // the sticky proxy scrollbar
     const [scrollWidth, setScrollWidth] = useState(0);
     const [hasHScroll, setHasHScroll] = useState(false);
+    const [boardHeight, setBoardHeight] = useState(null);
     const syncing = useRef(false);
 
     useLayoutEffect(() => {
@@ -171,6 +172,10 @@ export default function LeadsBoard({
         const update = () => {
             setScrollWidth(el.scrollWidth);
             setHasHScroll(el.scrollWidth > el.clientWidth + 1);
+            
+            // Measure distance from top dynamically to size board to fit screen
+            const top = el.getBoundingClientRect().top;
+            setBoardHeight(Math.max(window.innerHeight - top - 24, 320));
         };
         update();
         const ro = new ResizeObserver(update);
@@ -246,7 +251,8 @@ export default function LeadsBoard({
                     <div
                         ref={boardScrollRef}
                         onScroll={onBoardScroll}
-                        className={`flex gap-5 overflow-x-auto pt-2 items-start transition-opacity duration-150 select-none scrollbar-none ${isFetching ? "opacity-60" : ""}`}
+                        style={boardHeight ? { height: `${boardHeight}px` } : undefined}
+                        className={`flex gap-5 overflow-x-auto overflow-y-hidden pt-2 items-stretch transition-opacity duration-150 select-none scrollbar-none ${boardHeight ? "" : "h-[calc(100vh-170px)]"} ${isFetching ? "opacity-60" : ""}`}
                     >
                         {stages.map((stage) => (
                             <StageColumn
@@ -309,7 +315,7 @@ function StageColumn({ stage, department, rows, totalInStage, slaWarningDays, sl
     const theme = STAGE_THEME[stage.code] || { border: "border-t-indigo-500" };
 
     return (
-        <div className={`w-[390px] min-w-[390px] flex-shrink-0 flex flex-col self-start bg-slate-50/60 backdrop-blur-md rounded-2xl border border-slate-200/50 shadow-sm hover:shadow-md hover:border-slate-300/60 transition-all duration-300 border-t-4 ${theme.border}`}>
+        <div className={`w-[390px] min-w-[390px] flex-shrink-0 flex flex-col h-full bg-slate-50/60 backdrop-blur-md rounded-2xl border border-slate-200/50 shadow-sm hover:shadow-md hover:border-slate-300/60 transition-all duration-300 border-t-4 ${theme.border}`}>
             {/* Column Header — sticks to the top of the viewport while the page scrolls */}
             <div className="px-4 py-3.5 flex items-center justify-between border-b border-slate-200/40 bg-white/95 backdrop-blur-md rounded-t-xl sticky top-0 z-10">
                 <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border whitespace-nowrap shadow-sm ${stageColor(stage.code)}`}>
@@ -319,8 +325,8 @@ function StageColumn({ stage, department, rows, totalInStage, slaWarningDays, sl
                     {totalInStage}
                 </span>
             </div>
-            {/* Column card container — grows to fit every card; the page scrolls. */}
-            <div className="p-3.5 space-y-3.5">
+            {/* Column card container — scrolls internally when columns stretch to h-full */}
+            <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                 {rows.map((row) => (
                     <LeadCard key={row.id} row={row} department={department} slaWarningDays={slaWarningDays} slaBreachDays={slaBreachDays} onPreviewTask={onPreviewTask} onAssignClick={onAssignClick} />
                 ))}

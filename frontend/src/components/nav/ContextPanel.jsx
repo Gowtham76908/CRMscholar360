@@ -19,9 +19,21 @@ const SIBLING_FILTER_KEYS = ["mine", "score_min", "view", "filter", "status"];
 
 function isLinkActive(location, to) {
     const [toPath, toQuery] = to.split("?");
-    const onPath = location.pathname === toPath || location.pathname.startsWith(toPath + "/");
+    // On a lead detail page (/leads/:id), mirror the leads view the user came
+    // from so the correct sub-view (Board View, All Leads, My Leads…) stays
+    // highlighted instead of defaulting to All Leads.
+    let { pathname, search: searchStr } = location;
+    if (/^\/leads\/[^/]+/.test(pathname)) {
+        const last = typeof localStorage !== "undefined" ? localStorage.getItem("last-leads-path") : null;
+        if (last && last.startsWith("/leads")) {
+            const qIdx = last.indexOf("?");
+            pathname = qIdx === -1 ? last : last.slice(0, qIdx);
+            searchStr = qIdx === -1 ? "" : last.slice(qIdx);
+        }
+    }
+    const onPath = pathname === toPath || pathname.startsWith(toPath + "/");
     if (!onPath) return false;
-    const search = new URLSearchParams(location.search);
+    const search = new URLSearchParams(searchStr);
     if (toQuery) {
         // Filtered view: active only when all of its query params match the URL.
         const want = new URLSearchParams(toQuery);

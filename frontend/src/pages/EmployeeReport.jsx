@@ -155,7 +155,9 @@ const EmployeeReport = () => {
 
     const { data: activities = [] } = useQuery({
         queryKey: ["er-activities", employeeId, period],
-        queryFn:  () => api.get(`/employee-report/${employeeId}/activities`, { params: pq }).then(r => r.data),
+        // Lead-focused report: drop task-related activity entries.
+        queryFn:  () => api.get(`/employee-report/${employeeId}/activities`, { params: pq })
+            .then(r => (r.data || []).filter(a => !String(a.action || "").toUpperCase().includes("TASK"))),
         staleTime: 30_000,
     });
 
