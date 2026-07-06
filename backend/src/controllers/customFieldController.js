@@ -120,7 +120,7 @@ const saveLeadCustomFields = async (req, res, next) => {
             // Shortlisting / Application Stage Keys
             "shortlisted_universities", "sop_status", "lor_status", "transcripts_status", "univ_country", "univ_name", "univ_course", "univ_link",
             // Deposit / payment stage keys
-            "deposit_amount", "payment_mode", "payment_date", "deposit_history",
+            "deposit_amount", "payment_mode", "payment_date", "deposit_history", "deposit_college",
             // Visa / Documentation Stage Keys
             "financial_proof_docs", "cas_form_number", "visa_manager_approved", "visa_appointment_date", "visa_approved_date", "mock_interview_scorecard", "embassy_result", "approved_visa_passport", "flight_departure_date",
             // Commission Invoicing Stage Keys
