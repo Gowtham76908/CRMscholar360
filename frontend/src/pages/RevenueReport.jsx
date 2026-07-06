@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
@@ -61,6 +61,11 @@ const RevenueReport = () => {
     const [collTrendMode, setCollTrendMode] = useState("daily");
     const [revSortBy,    setRevSortBy]    = useState("revenueGenerated");
     const [revSortDir,   setRevSortDir]   = useState("desc");
+    
+    // Employee table local filter states
+    const [empSearch,          setEmpSearch]          = useState("");
+    const [selectedDept,       setSelectedDept]       = useState("");
+    const [selectedConsultant, setSelectedConsultant] = useState("");
 
     if (!["SUPER_ADMIN", "ADMIN"].includes(user?.role)) {
         return (
@@ -119,7 +124,31 @@ const RevenueReport = () => {
         staleTime: 30_000,
     });
 
-    const sortedRevEmp = [...revEmployees].sort((a, b) => {
+    const filteredEmployees = revEmployees.filter(emp => {
+        // Search filter (name or email)
+        if (empSearch) {
+            const term = empSearch.toLowerCase();
+            const matchesName = emp.name?.toLowerCase().includes(term);
+            const matchesEmail = emp.email?.toLowerCase().includes(term);
+            if (!matchesName && !matchesEmail) return false;
+        }
+
+        // Department filter
+        if (selectedDept) {
+            const userDepts = (emp.userDepartments || []).map(ud => ud.department);
+            const isMember = userDepts.includes(selectedDept) || emp.department === selectedDept;
+            if (!isMember) return false;
+        }
+
+        // Consultant filter
+        if (selectedConsultant) {
+            if (emp.id !== selectedConsultant) return false;
+        }
+
+        return true;
+    });
+
+    const sortedRevEmp = [...filteredEmployees].sort((a, b) => {
         const va = a[revSortBy] ?? 0;
         const vb = b[revSortBy] ?? 0;
         const cmp = typeof va === "string" ? va.localeCompare(vb) : va - vb;
@@ -355,8 +384,61 @@ const RevenueReport = () => {
 
             {/* Team Revenue Performance Table */}
             <div className="bg-white rounded-2xl border border-[#E4E4E7] overflow-hidden shadow-sm">
-                <div className="px-5 py-4 border-b border-[#E4E4E7]">
+                <div className="px-5 py-4 border-b border-[#E4E4E7] flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <h3 className="font-semibold text-[#18181B] text-sm">Team Revenue Performance</h3>
+                    
+                    {/* Filters */}
+                    <div className="flex flex-wrap items-center gap-3">
+                        {/* Search Input */}
+                        <input
+                            type="text"
+                            placeholder="Search employee..."
+                            value={empSearch}
+                            onChange={(e) => setEmpSearch(e.target.value)}
+                            className="px-3 py-1.5 border border-[#E4E4E7] rounded-xl text-xs bg-white text-[#18181B] focus:outline-none focus:ring-1 focus:ring-emerald-500 w-44 shadow-sm"
+                        />
+
+                        {/* Department Dropdown */}
+                        <select
+                            value={selectedDept}
+                            onChange={(e) => {
+                                setSelectedDept(e.target.value);
+                                setSelectedConsultant("");
+                            }}
+                            className="border border-[#E4E4E7] rounded-xl px-2.5 py-1.5 text-xs bg-white text-[#18181B] focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer shadow-sm"
+                        >
+                            <option value="">All Departments</option>
+                            <option value="SALES">Sales</option>
+                            <option value="APPLICATION_VISA">Application & Visa</option>
+                            <option value="LOAN">Loan</option>
+                            <option value="ACCOMMODATION_TICKETS">Accommodation & Tickets</option>
+                            <option value="FOREX">Forex</option>
+                            <option value="MISCELLANEOUS">Miscellaneous</option>
+                        </select>
+
+                        {/* Consultant/Employee Selector Dropdown */}
+                        <select
+                            value={selectedConsultant}
+                            onChange={(e) => setSelectedConsultant(e.target.value)}
+                            className="border border-[#E4E4E7] rounded-xl px-2.5 py-1.5 text-xs bg-white text-[#18181B] focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer shadow-sm max-w-[160px]"
+                        >
+                            <option value="">All Consultants</option>
+                            {Array.from(new Set(
+                                revEmployees
+                                    .filter(e => {
+                                        if (!selectedDept) return true;
+                                        const depts = (e.userDepartments || []).map(ud => ud.department);
+                                        return depts.includes(selectedDept) || e.department === selectedDept;
+                                    })
+                                    .map(e => JSON.stringify({ id: e.id, name: e.name }))
+                            ))
+                            .map(str => JSON.parse(str))
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
                 {revEmpLoading ? (
                     <div className="p-10 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-emerald-500" /></div>

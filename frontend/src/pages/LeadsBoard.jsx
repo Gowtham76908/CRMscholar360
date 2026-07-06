@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useLayoutEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -155,6 +155,30 @@ export default function LeadsBoard({
 
     const stages = department ? getStages(department) : [];
 
+    // The board sits below variable-height page chrome (search, filter chips,
+    // tabs that expand/collapse). Rather than guess a fixed offset, measure the
+    // board's real distance from the top of the viewport and size it to fill
+    // exactly to the bottom — so the horizontal slider is always reachable and
+    // each column gets full height for its own vertical scroll.
+    const boardRef = useRef(null);
+    const [boardHeight, setBoardHeight] = useState(null);
+    useLayoutEffect(() => {
+        const el = boardRef.current;
+        if (!el) return;
+        const compute = () => {
+            const top = el.getBoundingClientRect().top;
+            setBoardHeight(Math.max(window.innerHeight - top - 16, 320));
+        };
+        compute();
+        window.addEventListener("resize", compute);
+        // Recompute after layout settles (fonts, images, async chrome).
+        const raf = requestAnimationFrame(compute);
+        return () => {
+            window.removeEventListener("resize", compute);
+            cancelAnimationFrame(raf);
+        };
+    }, [boardControlsExpanded, stages.length, isLoading, department]);
+
     if (workflowsLoading) {
         return <div className="py-20 text-center text-sm text-gray-400">Loading workflow…</div>;
     }
@@ -203,7 +227,9 @@ export default function LeadsBoard({
                     {/* Board fills the viewport down to the bottom; each column's card
                         area scrolls internally so there's no dead gap below the board. */}
                     <div
-                        className={`flex gap-5 overflow-x-auto pb-4 pt-2 items-stretch transition-opacity duration-150 select-none scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent h-[calc(100vh-85px)] ${isFetching ? "opacity-60" : ""}`}
+                        ref={boardRef}
+                        style={boardHeight ? { height: `${boardHeight}px` } : undefined}
+                        className={`flex gap-5 overflow-x-auto pb-4 pt-2 items-stretch transition-opacity duration-150 select-none scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent ${boardHeight ? "" : "h-[calc(100vh-85px)]"} ${isFetching ? "opacity-60" : ""}`}
                     >
                         {stages.map((stage) => (
                             <StageColumn

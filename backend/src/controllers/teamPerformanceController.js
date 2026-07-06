@@ -824,7 +824,7 @@ const getRevenueEmployeeTable = async (req, res, next) => {
         const dr = dateRange(period, from, to);
 
         const [employees, periodDeals, wonDeals, periodInvoices, wonInvoices, payments, unpaidInvoices] = await Promise.all([
-            prisma.user.findMany({ where: { id: { in: teamIds } }, select: { id: true, name: true, email: true, profilePhoto: true } }),
+            prisma.user.findMany({ where: { id: { in: teamIds } }, select: { id: true, name: true, email: true, profilePhoto: true, department: true, userDepartments: { select: { department: true } } } }),
             prisma.deal.findMany({ where: { createdById: { in: teamIds }, deletedAt: null, createdAt: dr }, select: { amount: true, stage: true, createdById: true } }),
             prisma.deal.findMany({ where: { createdById: { in: teamIds }, deletedAt: null, stage: "WON", closedAt: dr }, select: { amount: true, createdById: true } }),
             prisma.invoice.findMany({
@@ -922,6 +922,8 @@ const getRevenueEmployeeTable = async (req, res, next) => {
             const contrib   = totalRevenue > 0 ? Math.round((revenue / totalRevenue) * 100) : 0;
             return {
                 id: e.id, name: e.name, email: e.email, profilePhoto: e.profilePhoto,
+                department:        e.department,
+                userDepartments:   e.userDepartments,
                 dealsWon:          wonCount,
                 revenueGenerated:  parseFloat(revenue.toFixed(2)),
                 collectedRevenue:  parseFloat((collByEmp[e.id] || 0).toFixed(2)),
