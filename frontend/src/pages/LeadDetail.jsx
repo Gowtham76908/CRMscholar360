@@ -1653,14 +1653,40 @@ export default function LeadDetail() {
                                             [&>*]:inline-flex [&>*]:items-center
                                             [&>*:not(:last-child)]:after:content-[''] [&>*:not(:last-child)]:after:mx-4 [&>*:not(:last-child)]:after:h-3.5 [&>*:not(:last-child)]:after:w-px [&>*:not(:last-child)]:after:bg-gray-200">
                                 {lead.phone && (
-                                    <a href={`tel:${lead.phone}`} className="gap-1.5 font-semibold text-gray-700 hover:text-green-700 transition-colors">
-                                        <Phone className="h-3.5 w-3.5 text-green-500" /> {lead.phone}
-                                    </a>
+                                    <span className="inline-flex items-center gap-1">
+                                        <a href={`tel:${lead.phone}`} className="gap-1.5 font-bold text-gray-900 hover:text-green-700 transition-colors">
+                                            <Phone className="h-3.5 w-3.5 text-green-500" /> {lead.phone}
+                                        </a>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigator.clipboard.writeText(lead.phone);
+                                                toast.success("Phone number copied!");
+                                            }}
+                                            title="Copy Phone Number"
+                                            className="hover:text-green-700 text-gray-400 hover:bg-gray-100 p-1 rounded transition-colors cursor-pointer"
+                                        >
+                                            <Copy className="h-3 w-3" />
+                                        </button>
+                                    </span>
                                 )}
                                 {lead.email && (
-                                    <a href={`mailto:${lead.email}`} className="gap-1.5 font-medium hover:text-blue-700 transition-colors max-w-[22rem]">
-                                        <Mail className="h-3.5 w-3.5 text-blue-500 shrink-0" /> <span className="truncate">{lead.email}</span>
-                                    </a>
+                                    <span className="inline-flex items-center gap-1">
+                                        <a href={`mailto:${lead.email}`} className="gap-1.5 font-bold text-gray-900 hover:text-blue-700 transition-colors max-w-[22rem]">
+                                            <Mail className="h-3.5 w-3.5 text-blue-500 shrink-0" /> <span className="truncate">{lead.email}</span>
+                                        </a>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigator.clipboard.writeText(lead.email);
+                                                toast.success("Email ID copied!");
+                                            }}
+                                            title="Copy Email ID"
+                                            className="hover:text-blue-700 text-gray-400 hover:bg-gray-100 p-1 rounded transition-colors cursor-pointer"
+                                        >
+                                            <Copy className="h-3 w-3" />
+                                        </button>
+                                    </span>
                                 )}
                                 {(lead.company || lead.jobTitle) && (
                                     <span className="gap-1.5 min-w-0">
