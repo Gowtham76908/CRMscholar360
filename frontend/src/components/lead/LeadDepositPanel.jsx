@@ -2,13 +2,15 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-    Wallet, Pencil, X, Loader2, CreditCard, CalendarDays, History,
+    Wallet, Pencil, X, Loader2, CreditCard, CalendarDays, History, Plus,
 } from "lucide-react";
 import api from "../../api/axios";
 import { useAuth } from "../../context/AuthContext";
 import { cn } from "../../lib/utils";
 
-const PAYMENT_MODES = ["Bank Transfer", "Credit Card", "Debit Card", "UPI", "Cash", "Cheque", "Other"];
+const BUILT_IN_MODES = ["Bank Transfer", "Credit Card", "Debit Card", "UPI", "Cash", "Cheque"];
+const CUSTOM_SENTINEL = "__custom__";
+
 
 const fmtDate = (d) =>
     d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
@@ -30,6 +32,11 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
 
     const [open, setOpen] = useState(false);
     const [draft, setDraft] = useState(current);
+    // If the stored payment_mode is not a built-in, track the custom value separately
+    const [customMode, setCustomMode] = useState(() => {
+        const stored = current.payment_mode || "";
+        return BUILT_IN_MODES.includes(stored) ? "" : stored;
+    });
 
     // As a standalone card, only surface once a deposit exists. When embedded in the
     // Activity tabs, always render so the user can add one.
@@ -48,21 +55,29 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
 
     const openEdit = () => {
         setDraft(current);
+        // Pre-populate custom mode input if the stored value isn't built-in
+        const stored = current.payment_mode || "";
+        setCustomMode(BUILT_IN_MODES.includes(stored) ? "" : stored);
         setOpen(true);
     };
+
+    // The "effective" payment mode: if user picked the custom sentinel, use customMode text
+    const effectiveMode = (draft.payment_mode === CUSTOM_SENTINEL)
+        ? customMode.trim()
+        : (draft.payment_mode || "");
 
     const handleSave = () => {
         // Append the new values as a history entry (most recent first).
         const entry = {
             deposit_amount: draft.deposit_amount || "",
-            payment_mode: draft.payment_mode || "",
+            payment_mode: effectiveMode,
             payment_date: draft.payment_date || "",
             recordedAt: new Date().toISOString(),
             recordedBy: user?.name || "",
         };
         saveMut.mutate({
             deposit_amount: draft.deposit_amount || "",
-            payment_mode: draft.payment_mode || "",
+            payment_mode: effectiveMode,
             payment_date: draft.payment_date || "",
             deposit_history: [entry, ...history],
         });
@@ -70,6 +85,7 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
 
     const inputCls = "w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none font-semibold focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white";
     const labelCls = "text-[10px] font-extrabold text-slate-500 uppercase tracking-wide";
+
 
     return (
         <div className={embedded ? "" : "bg-white border border-gray-200/70 rounded-2xl shadow-sm overflow-hidden"}>
@@ -152,12 +168,46 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
                                 <label className={labelCls}>Deposit Amount</label>
                                 <input className={inputCls} placeholder="e.g. $5,000 CAD / £3,000" value={draft.deposit_amount || ""} onChange={e => setDraft(d => ({ ...d, deposit_amount: e.target.value }))} />
                             </div>
-                            <div className="space-y-1">
+                            <div className="space-y-1.5">
                                 <label className={labelCls}>Mode of Payment</label>
-                                <select className={inputCls} value={draft.payment_mode || ""} onChange={e => setDraft(d => ({ ...d, payment_mode: e.target.value }))}>
+                                <select
+                                    className={inputCls}
+                                    value={
+                                        // If current draft mode is not built-in, show the sentinel
+                                        BUILT_IN_MODES.includes(draft.payment_mode)
+                                            ? draft.payment_mode
+                                            : draft.payment_mode
+                                                ? CUSTOM_SENTINEL
+                                                : ""
+                                    }
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        if (val === CUSTOM_SENTINEL) {
+                                            setDraft(d => ({ ...d, payment_mode: CUSTOM_SENTINEL }));
+                                        } else {
+                                            setCustomMode("");
+                                            setDraft(d => ({ ...d, payment_mode: val }));
+                                        }
+                                    }}
+                                >
                                     <option value="">— Select —</option>
-                                    {PAYMENT_MODES.map(m => <option key={m} value={m}>{m}</option>)}
+                                    {BUILT_IN_MODES.map(m => <option key={m} value={m}>{m}</option>)}
+                                    <option value={CUSTOM_SENTINEL}>➕ Add Custom...</option>
                                 </select>
+
+                                {/* Custom mode input — only visible when "Add Custom..." is selected */}
+                                {(draft.payment_mode === CUSTOM_SENTINEL || (!BUILT_IN_MODES.includes(draft.payment_mode) && draft.payment_mode)) && (
+                                    <div className="flex items-center gap-2 mt-1.5">
+                                        <Plus className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                                        <input
+                                            autoFocus
+                                            className={inputCls}
+                                            placeholder="Type custom payment mode..."
+                                            value={customMode}
+                                            onChange={e => setCustomMode(e.target.value)}
+                                        />
+                                    </div>
+                                )}
                             </div>
                             <div className="space-y-1">
                                 <label className={labelCls}>Date of Payment</label>
