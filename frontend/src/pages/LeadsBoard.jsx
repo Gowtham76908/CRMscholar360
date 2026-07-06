@@ -155,29 +155,45 @@ export default function LeadsBoard({
 
     const stages = department ? getStages(department) : [];
 
-    // The board sits below variable-height page chrome (search, filter chips,
-    // tabs that expand/collapse). Rather than guess a fixed offset, measure the
-    // board's real distance from the top of the viewport and size it to fill
-    // exactly to the bottom — so the horizontal slider is always reachable and
-    // each column gets full height for its own vertical scroll.
-    const boardRef = useRef(null);
-    const [boardHeight, setBoardHeight] = useState(null);
+    // Columns grow to fit all their cards; the page scrolls vertically to reach
+    // the end. A separate horizontal scrollbar, pinned to the bottom of the
+    // screen, stays reachable for moving between columns (the board's own
+    // horizontal scrollbar would otherwise sit far below the fold on tall boards).
+    const boardScrollRef = useRef(null);   // the actual columns row (horizontal scroll)
+    const railRef = useRef(null);          // the sticky proxy scrollbar
+    const [scrollWidth, setScrollWidth] = useState(0);
+    const [hasHScroll, setHasHScroll] = useState(false);
+    const syncing = useRef(false);
+
     useLayoutEffect(() => {
-        const el = boardRef.current;
+        const el = boardScrollRef.current;
         if (!el) return;
-        const compute = () => {
-            const top = el.getBoundingClientRect().top;
-            setBoardHeight(Math.max(window.innerHeight - top - 16, 320));
+        const update = () => {
+            setScrollWidth(el.scrollWidth);
+            setHasHScroll(el.scrollWidth > el.clientWidth + 1);
         };
-        compute();
-        window.addEventListener("resize", compute);
-        // Recompute after layout settles (fonts, images, async chrome).
-        const raf = requestAnimationFrame(compute);
-        return () => {
-            window.removeEventListener("resize", compute);
-            cancelAnimationFrame(raf);
-        };
-    }, [boardControlsExpanded, stages.length, isLoading, department]);
+        update();
+        const ro = new ResizeObserver(update);
+        ro.observe(el);
+        window.addEventListener("resize", update);
+        return () => { ro.disconnect(); window.removeEventListener("resize", update); };
+    }, [stages.length, department, isLoading, columns]);
+
+    // Keep the proxy rail and the board's horizontal scroll in lock-step.
+    const onBoardScroll = () => {
+        if (syncing.current) { syncing.current = false; return; }
+        if (railRef.current && boardScrollRef.current) {
+            syncing.current = true;
+            railRef.current.scrollLeft = boardScrollRef.current.scrollLeft;
+        }
+    };
+    const onRailScroll = () => {
+        if (syncing.current) { syncing.current = false; return; }
+        if (railRef.current && boardScrollRef.current) {
+            syncing.current = true;
+            boardScrollRef.current.scrollLeft = railRef.current.scrollLeft;
+        }
+    };
 
     if (workflowsLoading) {
         return <div className="py-20 text-center text-sm text-gray-400">Loading workflow…</div>;
@@ -224,12 +240,13 @@ export default function LeadsBoard({
                 <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-indigo-500" /></div>
             ) : (
                 <>
-                    {/* Board fills the viewport down to the bottom; each column's card
-                        area scrolls internally so there's no dead gap below the board. */}
+                    {/* Columns grow to fit every card; the page scrolls vertically to
+                        the end. The board's native horizontal scrollbar is hidden — a
+                        sticky proxy bar at the bottom of the screen drives it instead. */}
                     <div
-                        ref={boardRef}
-                        style={boardHeight ? { height: `${boardHeight}px` } : undefined}
-                        className={`flex gap-5 overflow-x-auto pb-4 pt-2 items-stretch transition-opacity duration-150 select-none scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent ${boardHeight ? "" : "h-[calc(100vh-85px)]"} ${isFetching ? "opacity-60" : ""}`}
+                        ref={boardScrollRef}
+                        onScroll={onBoardScroll}
+                        className={`flex gap-5 overflow-x-auto pt-2 items-start transition-opacity duration-150 select-none scrollbar-none ${isFetching ? "opacity-60" : ""}`}
                     >
                         {stages.map((stage) => (
                             <StageColumn
@@ -245,6 +262,18 @@ export default function LeadsBoard({
                             />
                         ))}
                     </div>
+
+                    {/* Separate common horizontal scrollbar — sticky at the bottom of
+                        the viewport so it's always reachable, however tall the board. */}
+                    {hasHScroll && (
+                        <div
+                            ref={railRef}
+                            onScroll={onRailScroll}
+                            className="sticky bottom-2 z-20 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent rounded-full bg-white/70 backdrop-blur-sm ring-1 ring-slate-200/70 shadow-sm"
+                        >
+                            <div style={{ width: scrollWidth, height: 1 }} />
+                        </div>
+                    )}
                 </>
             )}
 
@@ -280,9 +309,9 @@ function StageColumn({ stage, department, rows, totalInStage, slaWarningDays, sl
     const theme = STAGE_THEME[stage.code] || { border: "border-t-indigo-500" };
 
     return (
-        <div className={`w-[390px] min-w-[390px] flex-shrink-0 flex flex-col bg-slate-50/60 backdrop-blur-md rounded-2xl border border-slate-200/50 overflow-hidden shadow-sm hover:shadow-md hover:border-slate-300/60 transition-all duration-300 border-t-4 ${theme.border} h-full`}>
-            {/* Column Header */}
-            <div className="px-4 py-3.5 flex items-center justify-between border-b border-slate-200/40 bg-white/95 backdrop-blur-md sticky top-0 z-10">
+        <div className={`w-[390px] min-w-[390px] flex-shrink-0 flex flex-col self-start bg-slate-50/60 backdrop-blur-md rounded-2xl border border-slate-200/50 shadow-sm hover:shadow-md hover:border-slate-300/60 transition-all duration-300 border-t-4 ${theme.border}`}>
+            {/* Column Header — sticks to the top of the viewport while the page scrolls */}
+            <div className="px-4 py-3.5 flex items-center justify-between border-b border-slate-200/40 bg-white/95 backdrop-blur-md rounded-t-xl sticky top-0 z-10">
                 <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border whitespace-nowrap shadow-sm ${stageColor(stage.code)}`}>
                     {stage.label}
                 </span>
@@ -290,8 +319,8 @@ function StageColumn({ stage, department, rows, totalInStage, slaWarningDays, sl
                     {totalInStage}
                 </span>
             </div>
-            {/* Column Card Container with dynamic height limits */}
-            <div className="p-3.5 space-y-3.5 overflow-y-auto flex-1 min-h-0 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+            {/* Column card container — grows to fit every card; the page scrolls. */}
+            <div className="p-3.5 space-y-3.5">
                 {rows.map((row) => (
                     <LeadCard key={row.id} row={row} department={department} slaWarningDays={slaWarningDays} slaBreachDays={slaBreachDays} onPreviewTask={onPreviewTask} onAssignClick={onAssignClick} />
                 ))}

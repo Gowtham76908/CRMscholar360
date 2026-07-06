@@ -681,9 +681,9 @@ const MyDay = () => {
     // Filters
     const [consultant, setConsultant] = useState(null);
     const [department, setDepartment] = useState(null);
-    const [range, setRange] = useState({ mode: "all" });
-    const hasFilters = consultant || department || range.mode !== "all";
-    const clearFilters = () => { setConsultant(null); setDepartment(null); setRange({ mode: "all" }); };
+    const [range, setRange] = useState({ mode: "today" });
+    const hasFilters = consultant || department || range.mode !== "today";
+    const clearFilters = () => { setConsultant(null); setDepartment(null); setRange({ mode: "today" }); };
 
     // Personal Reminder Form State
     const [showAddReminder, setShowAddReminder] = useState(false);

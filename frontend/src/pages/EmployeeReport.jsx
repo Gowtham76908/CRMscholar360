@@ -153,12 +153,6 @@ const EmployeeReport = () => {
         staleTime: 30_000,
     });
 
-    const { data: tasks } = useQuery({
-        queryKey: ["er-tasks", employeeId, period, from, to],
-        queryFn:  () => api.get(`/employee-report/${employeeId}/tasks`, { params: pq }).then(r => r.data),
-        staleTime: 30_000,
-    });
-
     const { data: activities = [] } = useQuery({
         queryKey: ["er-activities", employeeId, period],
         queryFn:  () => api.get(`/employee-report/${employeeId}/activities`, { params: pq }).then(r => r.data),
@@ -403,8 +397,8 @@ const EmployeeReport = () => {
                 <ProductivitySection employeeId={employeeId} period={period} from={from} to={to} />
             </div>
 
-            {/* Lead Analytics chart */}
-            <Section icon={TrendingUp} title="Lead Analytics">
+            {/* Lead trend chart */}
+            <Section icon={TrendingUp} title="Lead Trend">
                 <div className="flex justify-end mb-2">
                     <select value={chartMode} onChange={e => setChartMode(e.target.value)}
                         className="text-xs border border-[#E4E4E7] rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-[#F97316]">
@@ -432,14 +426,14 @@ const EmployeeReport = () => {
                 )}
             </Section>
 
-            {/* Task Analytics */}
-            <Section icon={CheckSquare} title="Task Analytics">
+            {/* Lead Analytics */}
+            <Section icon={Users} title="Lead Analytics">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                        { label: "Assigned",        value: tasks?.total         ?? 0 },
-                        { label: "Completed",       value: tasks?.completed     ?? 0 },
-                        { label: "Pending",         value: tasks?.pending       ?? 0 },
-                        { label: "Completion Rate", value: `${tasks?.completionRate ?? 0}%` },
+                        { label: "Assigned",        value: kpis?.assignedLeads   ?? 0 },
+                        { label: "Contacted",       value: kpis?.contactedLeads  ?? 0 },
+                        { label: "Converted",       value: kpis?.convertedLeads  ?? 0 },
+                        { label: "Conversion Rate", value: `${kpis?.conversionRate ?? 0}%` },
                     ].map(m => (
                         <div key={m.label} className="bg-[#FAFAFA] rounded-xl p-3 border border-[#E4E4E7] text-center">
                             <p className="text-2xl font-bold text-[#18181B]">{m.value}</p>
