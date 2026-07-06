@@ -75,6 +75,12 @@ app.use("/uploads/recordings", uploadAccess, express.static("uploads/recordings"
 app.use("/uploads/tasks", uploadAccess, express.static("uploads/tasks"));
 app.use("/uploads", uploadAccess, express.static("uploads")); // catch-all: gate anything new by default
 
+// Also mount under /api/uploads to support proxies that rewrite /api to the backend
+app.use("/api/uploads/profiles", express.static("uploads/profiles"));
+app.use("/api/uploads/recordings", uploadAccess, express.static("uploads/recordings"));
+app.use("/api/uploads/tasks", uploadAccess, express.static("uploads/tasks"));
+app.use("/api/uploads", uploadAccess, express.static("uploads"));
+
 // Auth rate limit — 20 attempts per 15 minutes (login, etc.)
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,

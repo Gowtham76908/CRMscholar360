@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
     Building2, Loader2, Mail, Phone, Globe, Tag, Calendar,
-    ClipboardList, X, ChevronDown, UserPlus, User, Users,
+    ClipboardList, X, ChevronDown, UserPlus, User, Users, Hash,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useWorkflows, useDepartmentBoard, useDepartmentMembers } from "../hooks/useDepartments";
@@ -344,13 +344,8 @@ function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTas
         >
             {/* Row 1 — name + SLA badge */}
             <div className="flex items-start justify-between gap-2.5">
-                <span className="font-extrabold text-sm text-slate-800 truncate group-hover:text-indigo-650 transition-colors flex items-center gap-1.5 flex-wrap">
+                <span className="font-extrabold text-sm text-slate-800 truncate group-hover:text-indigo-650 transition-colors min-w-0">
                     {lead.name}
-                    {lead.leadId && (
-                        <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded border border-slate-200 select-all">
-                            {lead.leadId}
-                        </span>
-                    )}
                 </span>
                 {sla && (
                     <span className={`flex-shrink-0 text-[9px] font-extrabold px-2 py-0.5 rounded-full border shadow-sm ${
@@ -362,6 +357,17 @@ function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTas
                     </span>
                 )}
             </div>
+
+            {/* Lead ID pill */}
+            {lead.leadId && (
+                <span
+                    onClick={(e) => e.preventDefault()}
+                    className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-mono font-bold uppercase tracking-tight text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-md pl-1 pr-1.5 py-0.5 select-all group-hover:bg-indigo-100/70 group-hover:border-indigo-200 transition-colors"
+                >
+                    <Hash className="h-2.5 w-2.5 text-indigo-400" />
+                    {lead.leadId}
+                </span>
+            )}
 
             {/* Row 2 — contact (phone + email, both when available) */}
             <div className="mt-2.5 space-y-1">

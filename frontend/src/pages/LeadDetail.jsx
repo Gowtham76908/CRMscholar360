@@ -14,6 +14,7 @@ import {
     Zap, Users, Save, SlidersHorizontal, Eye, MousePointerClick, GitBranch,
     TrendingUp, IndianRupee, Pencil, Paperclip, ArrowRight,
     PanelRightOpen, PanelRightClose, Archive, MoreVertical, RefreshCw, RotateCcw, Copy, Trash2,
+    Globe, Download, CheckCheck, Check,
 } from "lucide-react";
 import { Modal } from "../components/Modal";
 import SlidePanel from "../components/SlidePanel";
@@ -43,16 +44,16 @@ const SOURCE_LABEL = {
 };
 
 const FILTER_PILLS = [
-    { id: "all",         label: "All" },
-    { id: "note",        label: "Notes" },
-    { id: "call",        label: "Calls" },
-    { id: "whatsapp",    label: "WhatsApp" },
-    { id: "email",       label: "Email" },
-    { id: "activity",    label: "Activity" },
-    { id: "task",        label: "Tasks" },
-    { id: "attachment",  label: "Attachments" },
-    { id: "document",    label: "Documents" },
-    { id: "visa",        label: "Visa Details" },
+    { id: "all",         label: "All", icon: SlidersHorizontal },
+    { id: "note",        label: "Notes", icon: Pencil },
+    { id: "call",        label: "Calls", icon: PhoneCall },
+    { id: "whatsapp",    label: "WhatsApp", icon: MessageSquare },
+    { id: "email",       label: "Email", icon: Mail },
+    { id: "activity",    label: "Activity", icon: Activity },
+    { id: "task",        label: "Tasks", icon: CheckCircle },
+    { id: "attachment",  label: "Attachments", icon: Paperclip },
+    { id: "document",    label: "Documents", icon: FileText },
+    { id: "visa",        label: "Visa Details", icon: Globe },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -93,28 +94,40 @@ function TimelineItem({ item }) {
 
     const renderDetail = () => {
         if (item.action === "RESUME_UPLOADED" && meta.resumeUrl) {
+            const ext = meta.resumeName ? meta.resumeName.split('.').pop().toUpperCase() : 'PDF';
+            const isPdf = ext === 'PDF';
+            const isDoc = ['DOC', 'DOCX'].includes(ext);
+            const badgeBg = isPdf ? 'bg-red-50 border border-red-100 text-red-600' : isDoc ? 'bg-blue-50 border border-blue-100 text-blue-600' : 'bg-indigo-50 border border-indigo-100 text-indigo-600';
+            const iconColor = isPdf ? 'text-red-500' : isDoc ? 'text-blue-500' : 'text-indigo-500';
+
             return (
-                <div className="mt-1.5 bg-indigo-50 border border-indigo-150 rounded-xl p-3 flex items-center justify-between gap-3 max-w-md shadow-sm">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="h-9 w-9 rounded-xl bg-white border border-indigo-150 flex items-center justify-center text-indigo-650 shadow-inner flex-shrink-0">
-                            <FileText className="h-5 w-5" />
+                <div className="mt-2 bg-gradient-to-br from-indigo-50/40 to-white hover:to-indigo-50/10 border border-indigo-100/80 hover:border-indigo-300 rounded-2xl p-4 flex items-center justify-between gap-4 max-w-lg shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                        <div className={`h-11 w-11 rounded-xl bg-white border flex items-center justify-center shadow-inner flex-shrink-0 relative group-hover:scale-105 transition-transform duration-200 ${badgeBg}`}>
+                            <FileText className={`h-5 w-5 ${iconColor}`} />
                         </div>
                         <div className="min-w-0">
-                            <p className="text-xs font-bold text-slate-800 truncate" title={meta.resumeName || "Resume"}>
-                                {meta.resumeName || "Resume"}
+                            <p className="text-sm font-bold text-gray-800 truncate" title={meta.resumeName || "Attachment"}>
+                                {meta.resumeName || "Attachment"}
                             </p>
-                            <p className="text-[10px] font-semibold text-slate-450 mt-0.5">
-                                Uploaded by {meta.uploadedBy || "User"}
-                            </p>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wider ${badgeBg}`}>
+                                    {ext}
+                                </span>
+                                <span className="text-[10px] font-medium text-gray-400">
+                                    by {meta.uploadedBy || "User"}
+                                </span>
+                            </div>
                         </div>
                     </div>
                     <a
                         href={fileUrl(meta.resumeUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center px-3.5 py-1.5 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 text-xs font-bold rounded-lg shadow-sm transition-all flex-shrink-0 cursor-pointer"
+                        className="inline-flex items-center gap-1.5 justify-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md hover:shadow-indigo-100/50 transition-all flex-shrink-0 cursor-pointer"
                     >
-                        View Resume
+                        <Download className="h-3.5 w-3.5" />
+                        Download
                     </a>
                 </div>
             );
@@ -385,11 +398,16 @@ function TimelineItem({ item }) {
         }
         if (item.action === "REMINDER_SET" && meta.remindAt) {
             return (
-                <div className="mt-1.5 bg-amber-50 border border-amber-100 rounded-lg p-2.5 space-y-1">
-                    {meta.message && <p className="text-xs font-semibold text-amber-900">{meta.message}</p>}
-                    <p className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
-                        ⏰ Due {new Date(meta.remindAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                    </p>
+                <div className="mt-1.5 flex items-start gap-2.5 bg-amber-50 border border-amber-100 rounded-lg p-2.5">
+                    <div className="h-6 w-6 rounded-md bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <Clock className="h-3.5 w-3.5 text-amber-600" />
+                    </div>
+                    <div className="min-w-0 space-y-0.5">
+                        {meta.message && <p className="text-xs font-semibold text-amber-900">{meta.message}</p>}
+                        <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">
+                            Due {new Date(meta.remindAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                    </div>
                 </div>
             );
         }
@@ -536,7 +554,7 @@ function CallItem({ call, leadId }) {
                 <div className="px-4 pb-4 pt-1 border-t border-gray-100 bg-gray-50 space-y-3">
                     {call.recordingUrl && (
                         <div className="flex items-center gap-3 flex-wrap">
-                            <a href={call.recordingUrl} target="_blank" rel="noopener noreferrer"
+                            <a href={fileUrl(call.recordingUrl)} target="_blank" rel="noopener noreferrer"
                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
                                 <Play className="h-3 w-3" /> Play Recording
                             </a>
@@ -1575,151 +1593,103 @@ export default function LeadDetail() {
                     </div>
                 )}
 
-                {/* Hero row: avatar + name + status + score */}
-                <div className="p-6">
-                    <div className="flex items-start gap-5">
-                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-md ring-4 ring-indigo-50">
-                            <span className="text-xl font-black text-white">{initials(lead.name)}</span>
+                {/* Compact identity + contact — condensed to two lines */}
+                <div className="p-4">
+                    <div className="flex items-start gap-3">
+                        <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-sm ring-2 ring-indigo-50">
+                            <span className="text-base font-black text-white">{initials(lead.name)}</span>
                         </div>
 
                         <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-3 flex-wrap">
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2.5 flex-wrap mb-1">
-                                        <h1 className="text-2xl font-black text-gray-900 truncate leading-tight">{lead.name}</h1>
-                                        {lead.leadId && (
-                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 select-all">
-                                                <span>{lead.leadId}</span>
-                                                <button
-                                                    onClick={() => {
-                                                        navigator.clipboard.writeText(lead.leadId);
-                                                        toast.success("Lead ID copied!");
-                                                    }}
-                                                    title="Copy Lead ID"
-                                                    className="hover:text-indigo-900 transition-colors p-0.5 cursor-pointer"
-                                                >
-                                                    <Copy className="h-3 w-3" />
-                                                </button>
-                                            </span>
-                                        )}
-                                        {primaryDept?.stage && (
-                                            <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide ${
-                                                primaryDept.stage === "ARCHIVE" 
-                                                    ? "bg-gray-100 text-gray-700 border border-gray-200"
-                                                    : primaryDept.stage === "FUTURE_PROSPECT"
-                                                    ? "bg-blue-100 text-blue-700 border border-blue-200"
-                                                    : primaryDept.stage === "COMMISSION_INVOICING"
-                                                    ? "bg-green-100 text-green-700 border border-green-200"
-                                                    : primaryDept.stage === "ENQUIRY"
-                                                    ? "bg-amber-100 text-amber-700 border border-amber-200"
-                                                    : "bg-indigo-100 text-indigo-700 border border-indigo-200"
-                                            }`}>
-                                                {stageLabel(primaryDept.department, primaryDept.stage)}
-                                            </span>
-                                        )}
-                                    </div>
-                                    {(lead.company || lead.jobTitle) && (
-                                        <p className="text-sm text-gray-600 truncate">
-                                            {lead.company && <span className="font-semibold text-gray-700">{lead.company}</span>}
-                                            {lead.company && lead.jobTitle && <span className="text-gray-300 mx-1.5">·</span>}
-                                            {lead.jobTitle && <span>{lead.jobTitle}</span>}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {lead.score != null && (
-                                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-100 flex-shrink-0">
-                                        <div className="text-right">
-                                            <p className="text-[10px] font-bold text-purple-600 uppercase tracking-wider leading-none">Score</p>
-                                            <p className="text-xl font-black text-purple-700 leading-tight">{lead.score}</p>
-                                        </div>
-                                        <div className="w-1 h-8 rounded-full bg-purple-200" />
-                                        <p className="text-xs font-bold text-purple-700">
-                                            {getScoreLabel(lead.score)}
-                                        </p>
-                                    </div>
+                            {/* Line 1 — name, id, stage, category */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <h1 className="text-xl font-black text-gray-900 truncate leading-tight">{lead.name}</h1>
+                                {lead.leadId && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 select-all">
+                                        <span>{lead.leadId}</span>
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(lead.leadId);
+                                                toast.success("Lead ID copied!");
+                                            }}
+                                            title="Copy Lead ID"
+                                            className="hover:text-indigo-900 transition-colors cursor-pointer"
+                                        >
+                                            <Copy className="h-3 w-3" />
+                                        </button>
+                                    </span>
                                 )}
-                            </div>
-
-                            {/* Source / Enquiry / Category chips */}
-                            <div className="flex flex-wrap items-center gap-1.5 mt-3">
-                                {primaryDept && (
-                                    <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                                {primaryDept?.stage && (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide ${
+                                        primaryDept.stage === "ARCHIVE"
+                                            ? "bg-gray-100 text-gray-700 border border-gray-200"
+                                            : primaryDept.stage === "FUTURE_PROSPECT"
+                                            ? "bg-blue-100 text-blue-700 border border-blue-200"
+                                            : primaryDept.stage === "COMMISSION_INVOICING"
+                                            ? "bg-green-100 text-green-700 border border-green-200"
+                                            : primaryDept.stage === "ENQUIRY"
+                                            ? "bg-amber-100 text-amber-700 border border-amber-200"
+                                            : "bg-indigo-100 text-indigo-700 border border-indigo-200"
+                                    }`}>
                                         {stageLabel(primaryDept.department, primaryDept.stage)}
                                     </span>
                                 )}
-                                <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">
-                                    {SOURCE_LABEL[lead.source] ?? lead.source}
-                                </span>
-                                {lead.enquiryType && (
-                                    <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">
-                                        {lead.enquiryType}
+                                {lead.category && (
+                                    <span className="inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-100 uppercase tracking-wide">
+                                        {lead.category}
                                     </span>
                                 )}
-                                {lead.category && (
-                                    <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-100 uppercase tracking-wide">
-                                        {lead.category}
+                                {lead.score != null && (
+                                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-br from-purple-50 to-indigo-50 text-purple-700 border border-purple-100">
+                                        <span className="font-black">{lead.score}</span>
+                                        <span className="text-purple-400">·</span>
+                                        {getScoreLabel(lead.score)}
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Line 2 — phone · email · company · services · source · enquiry */}
+                            <div className="flex items-center gap-y-1.5 flex-wrap mt-2 text-xs text-gray-500 min-w-0
+                                            [&>*]:inline-flex [&>*]:items-center
+                                            [&>*:not(:last-child)]:after:content-[''] [&>*:not(:last-child)]:after:mx-4 [&>*:not(:last-child)]:after:h-3.5 [&>*:not(:last-child)]:after:w-px [&>*:not(:last-child)]:after:bg-gray-200">
+                                {lead.phone && (
+                                    <a href={`tel:${lead.phone}`} className="gap-1.5 font-semibold text-gray-700 hover:text-green-700 transition-colors">
+                                        <Phone className="h-3.5 w-3.5 text-green-500" /> {lead.phone}
+                                    </a>
+                                )}
+                                {lead.email && (
+                                    <a href={`mailto:${lead.email}`} className="gap-1.5 font-medium hover:text-blue-700 transition-colors max-w-[22rem]">
+                                        <Mail className="h-3.5 w-3.5 text-blue-500 shrink-0" /> <span className="truncate">{lead.email}</span>
+                                    </a>
+                                )}
+                                {(lead.company || lead.jobTitle) && (
+                                    <span className="gap-1.5 min-w-0">
+                                        {lead.company && <span className="font-semibold text-gray-700 truncate">{lead.company}</span>}
+                                        {lead.company && lead.jobTitle && <span className="text-gray-300">·</span>}
+                                        {lead.jobTitle && <span className="truncate">{lead.jobTitle}</span>}
+                                    </span>
+                                )}
+                                {lead.leadDepartments?.length > 0 && (
+                                    <span className="gap-1.5">
+                                        <Users className="h-3.5 w-3.5 text-indigo-500" /> {lead.leadDepartments.length} dept{lead.leadDepartments.length === 1 ? "" : "s"}
+                                    </span>
+                                )}
+                                <span className="gap-1.5">
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Source</span>
+                                    <span className="font-semibold text-gray-700">{SOURCE_LABEL[lead.source] ?? lead.source}</span>
+                                </span>
+                                {lead.enquiryType && (
+                                    <span className="gap-1.5">
+                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Type</span>
+                                        <span className="font-semibold text-gray-700">{lead.enquiryType}</span>
                                     </span>
                                 )}
                             </div>
                         </div>
                     </div>
 
-                    {/* Contact strip — phone / email / services */}
-                    <div className="mt-5 pt-5 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        {lead.phone ? (
-                            <a href={`tel:${lead.phone}`} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
-                                <div className="h-9 w-9 rounded-lg bg-green-50 flex items-center justify-center flex-shrink-0 group-hover:bg-green-100 transition-colors">
-                                    <Phone className="h-4 w-4 text-green-600" />
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none">Phone</p>
-                                    <p className="text-sm font-semibold text-gray-900 truncate group-hover:text-green-700 transition-colors">{lead.phone}</p>
-                                </div>
-                            </a>
-                        ) : <div className="flex items-center gap-3 px-3 py-2 text-gray-300">
-                                <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center"><Phone className="h-4 w-4" /></div>
-                                <p className="text-xs">No phone</p>
-                            </div>}
-
-                        {lead.email ? (
-                            <a href={`mailto:${lead.email}`} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors group min-w-0">
-                                <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-100 transition-colors">
-                                    <Mail className="h-4 w-4 text-blue-600" />
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none">Email</p>
-                                    <p className="text-sm font-semibold text-gray-900 truncate group-hover:text-blue-700 transition-colors">{lead.email}</p>
-                                </div>
-                            </a>
-                        ) : <div className="flex items-center gap-3 px-3 py-2 text-gray-300">
-                                <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center"><Mail className="h-4 w-4" /></div>
-                                <p className="text-xs">No email</p>
-                            </div>}
-
-                        {lead.leadDepartments?.length ? (
-                            <div className="flex items-center gap-3 px-3 py-2 min-w-0">
-                                <div className="h-9 w-9 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                                    <Users className="h-4 w-4 text-indigo-700" />
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none">Services</p>
-                                    <p className="text-sm font-semibold text-gray-900 truncate">
-                                        {lead.leadDepartments.length} department{lead.leadDepartments.length === 1 ? "" : "s"}
-                                    </p>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-3 px-3 py-2 text-gray-300">
-                                <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center"><Users className="h-4 w-4" /></div>
-                                <p className="text-xs">No services</p>
-                            </div>
-                        )}
-                    </div>
-
                     {/* Action bar — primary on left, secondary on right */}
-                    <div className="mt-5 pt-5 border-t border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-2 flex-wrap">
                             <button
                                 onClick={() => initiateCall.mutate()}
@@ -1978,7 +1948,7 @@ export default function LeadDetail() {
                                             type="button"
                                             onClick={() => fileInputRef.current?.click()}
                                             disabled={uploadingFile}
-                                            className="flex-shrink-0 p-2 text-gray-500 hover:text-indigo-650 hover:bg-indigo-50 border border-gray-250 rounded-lg transition-all cursor-pointer"
+                                            className="flex-shrink-0 p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 border border-gray-200 rounded-lg transition-all cursor-pointer"
                                             title="Upload Resume"
                                         >
                                             {uploadingFile ? (
@@ -1986,6 +1956,23 @@ export default function LeadDetail() {
                                             ) : (
                                                 <Paperclip className="h-4 w-4" />
                                             )}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setShowReminder(v => {
+                                                    if (v) setReminderAt("");
+                                                    return !v;
+                                                });
+                                            }}
+                                            className={`flex-shrink-0 p-2 border rounded-lg transition-all cursor-pointer ${
+                                                showReminder
+                                                    ? "text-indigo-600 bg-indigo-50 border-indigo-300"
+                                                    : "text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 border-gray-200"
+                                            }`}
+                                            title={showReminder ? "Remove reminder" : "Set a reminder (optional)"}
+                                        >
+                                            <Calendar className="h-4 w-4" />
                                         </button>
                                         <button
                                             type="submit"
@@ -2001,27 +1988,14 @@ export default function LeadDetail() {
                                         </button>
                                     </div>
 
-                                    {/* Optional reminder / calendar */}
-                                    <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-                                        <label className="flex items-center gap-2 cursor-pointer select-none">
-                                            <input
-                                                type="checkbox"
-                                                checked={showReminder}
-                                                onChange={e => {
-                                                    setShowReminder(e.target.checked);
-                                                    if (!e.target.checked) setReminderAt("");
-                                                }}
-                                                className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
-                                            />
-                                            <span className="flex items-center gap-1 text-xs text-gray-600 font-semibold">
-                                                <Calendar className="h-3.5 w-3.5 text-indigo-500" /> Set reminder
-                                            </span>
-                                        </label>
-
-                                        {showReminder && (
+                                    {/* Optional reminder / calendar — toggled by the calendar icon above */}
+                                    {showReminder && (
+                                        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-end">
                                             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">Remind me at:</span>
+                                                    <span className="flex items-center gap-1 text-xs font-semibold text-gray-500 whitespace-nowrap">
+                                                        <Calendar className="h-3.5 w-3.5 text-indigo-500" /> Remind me at:
+                                                    </span>
                                                     <input
                                                         type="datetime-local"
                                                         value={reminderAt}
@@ -2043,27 +2017,34 @@ export default function LeadDetail() {
                                                     </label>
                                                 )}
                                             </div>
-                                        )}
-                                    </div>
+                                        </div>
+                                    )}
                                 </form>
                             </div>
                         </div>
 
                         {/* Filter pills */}
-                        <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-1.5 flex-wrap">
-                            {FILTER_PILLS.map(f => (
-                                <button
-                                    key={f.id}
-                                    onClick={() => setTimelineFilter(f.id)}
-                                    className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-all ${
-                                        timelineFilter === f.id
-                                            ? "bg-indigo-600 text-white shadow-sm"
-                                            : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                                    }`}
-                                >
-                                    {f.label}
-                                </button>
-                            ))}
+                        <div className="px-4 py-3 bg-slate-50/60 border-b border-gray-100/80 overflow-x-auto scrollbar-none flex items-center gap-2 -mx-px">
+                            <div className="flex gap-2 px-1">
+                                {FILTER_PILLS.map(f => {
+                                    const IconComponent = f.icon;
+                                    const isActive = timelineFilter === f.id;
+                                    return (
+                                        <button
+                                            key={f.id}
+                                            onClick={() => setTimelineFilter(f.id)}
+                                            className={`text-xs font-semibold px-3.5 py-1.5 rounded-full flex items-center gap-1.5 transition-all duration-200 shrink-0 transform active:scale-95 ${
+                                                isActive
+                                                    ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm shadow-indigo-100 border border-indigo-600"
+                                                    : "bg-white border border-gray-200/80 text-gray-500 hover:text-gray-850 hover:bg-gray-50/80 hover:border-gray-300"
+                                            }`}
+                                        >
+                                            {IconComponent && <IconComponent className={`h-3.5 w-3.5 ${isActive ? "text-white" : "text-gray-400"}`} />}
+                                            {f.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         {/* Timeline content */}
@@ -2132,52 +2113,74 @@ export default function LeadDetail() {
                                                     ) : item._type === "whatsapp" ? (
                                                         <div key={item.id} className="flex items-start gap-3">
                                                             <div className="relative flex-shrink-0 mt-0.5">
-                                                                {!item.user ? (
-                                                                    <div className="w-8 h-8 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-xs">
-                                                                        💬
+                                                                {item.direction === "INBOUND" ? (
+                                                                    <div className="w-8 h-8 rounded-full bg-emerald-500 border border-emerald-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                                                                        {initials(lead?.name) || "C"}
                                                                     </div>
                                                                 ) : (
                                                                     <>
                                                                         <Avatar user={item.user} size="sm" />
-                                                                        <span className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full border border-white flex items-center justify-center text-[9px] shadow-sm bg-emerald-50 text-emerald-505">
-                                                                            💬
+                                                                        <span className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full border border-white flex items-center justify-center text-[9px] shadow-sm bg-emerald-500 text-white font-bold">
+                                                                            wa
                                                                         </span>
                                                                     </>
                                                                 )}
                                                             </div>
-                                                            <div className="flex-1 pb-3 border-b border-gray-100 last:border-0">
-                                                                <div className="flex items-start justify-between mb-1">
-                                                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                                                        <p className="text-sm font-semibold text-gray-800">
-                                                                            {item.direction === "INBOUND" ? "← Received" : "→ Sent"}
-                                                                        </p>
+                                                            <div className="flex-1 pb-4 border-b border-gray-100 last:border-0">
+                                                                {/* Header */}
+                                                                <div className="flex items-center justify-between mb-1.5 gap-2">
+                                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                                        <span className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                                                                            <MessageSquare className="h-3 w-3 text-emerald-500 shrink-0" />
+                                                                            {item.direction === "INBOUND" ? "Inbound WhatsApp" : "WhatsApp Outbound"}
+                                                                        </span>
                                                                         {item.direction === "OUTBOUND" && item.user?.name && (
                                                                             <span className="text-xs text-gray-400">by {item.user.name}</span>
                                                                         )}
-                                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                                                                            item.status === "READ"      ? "bg-blue-50 text-blue-600" :
-                                                                            item.status === "DELIVERED" ? "bg-emerald-50 text-emerald-600" :
-                                                                            item.status === "REPLIED"   ? "bg-violet-50 text-violet-600" :
-                                                                            item.status === "FAILED"    ? "bg-red-50 text-red-600" :
-                                                                            "bg-gray-50 text-gray-500"
+                                                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full tracking-wider border ${
+                                                                            item.status === "READ"      ? "bg-blue-50 border-blue-100 text-blue-600" :
+                                                                            item.status === "DELIVERED" ? "bg-emerald-50 border-emerald-100 text-emerald-600" :
+                                                                            item.status === "REPLIED"   ? "bg-violet-50 border-violet-100 text-violet-600" :
+                                                                            item.status === "FAILED"    ? "bg-red-50 border-red-100 text-red-600" :
+                                                                            "bg-gray-50 border-gray-100 text-gray-500"
                                                                         }`}>
                                                                             {item.status}
                                                                         </span>
                                                                     </div>
-                                                                    <span className="text-[11px] text-gray-400 flex-shrink-0 ml-2">{relTime(item.createdAt)}</span>
+                                                                    <span className="text-[11px] text-gray-400 flex-shrink-0 whitespace-nowrap">{relTime(item.createdAt)}</span>
                                                                 </div>
-                                                                <div className={`inline-block max-w-[85%] text-sm px-3 py-2 rounded-2xl ${
+
+                                                                {/* Message Bubble Card */}
+                                                                <div className={`inline-block max-w-[85%] text-sm px-3.5 py-2.5 rounded-2xl border shadow-3xs ${
                                                                     item.direction === "INBOUND"
-                                                                        ? "bg-gray-100 text-gray-800 rounded-tl-sm"
-                                                                        : "bg-emerald-500 text-white rounded-tr-sm"
+                                                                        ? "bg-slate-50 border-gray-200 text-slate-800 rounded-tl-none"
+                                                                        : "bg-emerald-50/70 border-emerald-150/80 text-emerald-950 rounded-tr-none"
                                                                 }`}>
-                                                                    {item.messageBody}
+                                                                    {/* Quoted Message (reply to) */}
+                                                                    {item.replyText && item.direction === "OUTBOUND" && (
+                                                                        <div className="mb-2 bg-emerald-100/40 border-l-4 border-emerald-500 px-2 py-1 rounded text-[11px] text-emerald-800">
+                                                                            <p className="font-bold text-[9px] uppercase tracking-wider text-emerald-600 mb-0.5">Inbound message</p>
+                                                                            <p className="line-clamp-2 italic">"{item.replyText}"</p>
+                                                                        </div>
+                                                                    )}
+                                                                    
+                                                                    <p className="whitespace-pre-wrap leading-relaxed">{item.messageBody}</p>
+                                                                    
+                                                                    {/* Read receipt / status checkmarks for outbound */}
+                                                                    {item.direction === "OUTBOUND" && (
+                                                                        <div className="flex justify-end items-center mt-1 -mr-1">
+                                                                            {item.status === "READ" ? (
+                                                                                <CheckCheck className="h-3.5 w-3.5 text-blue-500" />
+                                                                            ) : item.status === "DELIVERED" || item.status === "REPLIED" ? (
+                                                                                <CheckCheck className="h-3.5 w-3.5 text-gray-400" />
+                                                                            ) : item.status === "FAILED" ? (
+                                                                                <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                                                                            ) : (
+                                                                                <Check className="h-3.5 w-3.5 text-gray-400" />
+                                                                            )}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
-                                                                {item.replyText && item.direction === "OUTBOUND" && (
-                                                                    <div className="mt-1.5 inline-block max-w-[85%] text-sm px-3 py-2 rounded-2xl bg-gray-100 text-gray-800 rounded-tl-sm">
-                                                                        ← {item.replyText}
-                                                                    </div>
-                                                                )}
                                                             </div>
                                                         </div>
                                                     ) : (
@@ -2481,90 +2484,109 @@ function DocumentSection({ lead, onChanged }) {
     };
 
     return (
-        <div className="space-y-4 p-4 border border-slate-100 bg-slate-50 rounded-2xl text-left">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Documents & Credentials</label>
-            
-            <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                        <tr className="border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                            <th className="py-2 pr-2">Document List</th>
-                            <th className="py-2 pr-2">Uploaded On</th>
-                            <th className="py-2 pr-2">QC Status</th>
-                            <th className="py-2 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {renderedDocs.map(name => {
-                            const docInfo = docList.find(d => d.name.toLowerCase() === name.toLowerCase());
-                            const isUploading = uploadingName === name;
-                            
-                            return (
-                                <tr key={name} className="hover:bg-slate-100/50">
-                                    <td className="py-2.5 pr-2 font-semibold text-slate-700">
-                                        {name}
-                                        {docInfo && <span className="ml-1.5 text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1 rounded">Uploaded</span>}
-                                    </td>
-                                    <td className="py-2.5 pr-2 text-slate-500">
-                                        {docInfo?.uploadedAt 
-                                            ? new Date(docInfo.uploadedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-                                            : "--"}
-                                    </td>
-                                    <td className="py-2.5 pr-2">
-                                        {docInfo ? (
-                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                                                docInfo.qcStatus === "Approved" 
-                                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
-                                                    : "bg-amber-50 text-amber-700 border border-amber-100"
-                                            }`}>
-                                                {docInfo.qcStatus || "Under Review"}
-                                            </span>
-                                        ) : "--"}
-                                    </td>
-                                    <td className="py-2.5 text-right">
-                                        <div className="flex items-center justify-end gap-2">
-                                            {docInfo?.url && (
-                                                <a 
-                                                    href={docInfo.url} 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer"
-                                                    className="px-2.5 py-1 bg-white border border-slate-200 text-[10px] font-bold text-slate-600 rounded-lg hover:bg-slate-50 shadow-3xs cursor-pointer inline-block"
-                                                >
-                                                    View
-                                                </a>
-                                            )}
-                                            
-                                            <label className="px-2.5 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-700 cursor-pointer shadow-3xs hover:scale-[1.02] active:scale-[0.98] transition-all inline-flex items-center gap-1">
-                                                {isUploading ? (
-                                                    <>
-                                                        <Loader2 className="h-3 w-3 animate-spin" /> Uploading...
-                                                    </>
-                                                ) : "Upload"}
-                                                <input 
-                                                    type="file" 
-                                                    className="hidden" 
-                                                    onChange={(e) => handleUpload(name, e.target.files?.[0])}
-                                                    disabled={isUploading}
-                                                />
-                                            </label>
+        <div className="space-y-3 p-4 border border-slate-200/70 bg-white rounded-2xl text-left shadow-sm">
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                        <FileText className="h-4 w-4 text-indigo-600" />
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-800">Documents &amp; Credentials</h3>
+                </div>
+                <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full tabular-nums shrink-0">
+                    {docList.filter(d => d.url).length}/{renderedDocs.length} uploaded
+                </span>
+            </div>
 
-                                            {docInfo?.url && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleDelete(name)}
-                                                    className="p-1 rounded-lg hover:bg-rose-50 text-rose-500 hover:text-rose-700 transition-colors cursor-pointer"
-                                                    title="Delete document"
-                                                >
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
+            <div className="space-y-1.5">
+                {renderedDocs.map(name => {
+                    const docInfo = docList.find(d => d.name.toLowerCase() === name.toLowerCase());
+                    const isUploading = uploadingName === name;
+                    const uploaded = Boolean(docInfo?.url);
+                    const approved = docInfo?.qcStatus === "Approved";
+
+                    return (
+                        <div
+                            key={name}
+                            className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors ${
+                                uploaded
+                                    ? "border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/20"
+                                    : "border-dashed border-slate-200 bg-slate-50/60"
+                            }`}
+                        >
+                            <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
+                                uploaded ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"
+                            }`}>
+                                {uploaded ? <CheckCircle className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="text-xs font-bold text-slate-700 truncate">{name}</p>
+                                    {uploaded && (
+                                        <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                                            approved
+                                                ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                                                : "bg-amber-50 text-amber-700 border border-amber-100"
+                                        }`}>
+                                            {docInfo.qcStatus || "Under Review"}
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-0.5">
+                                    {uploaded
+                                        ? `Uploaded ${docInfo.uploadedAt ? new Date(docInfo.uploadedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""}`
+                                        : "Not uploaded yet"}
+                                </p>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                                {uploaded && (
+                                    <a
+                                        href={fileUrl(docInfo.url)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title="View document"
+                                        className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
+                                    >
+                                        <Eye className="h-3.5 w-3.5" />
+                                    </a>
+                                )}
+                                <label
+                                    title={uploaded ? "Replace document" : "Upload document"}
+                                    className={`inline-flex items-center gap-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${
+                                        uploaded
+                                            ? "px-2 py-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
+                                            : "px-2.5 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
+                                    }`}
+                                >
+                                    {isUploading ? (
+                                        <><Loader2 className="h-3 w-3 animate-spin" /> …</>
+                                    ) : uploaded ? (
+                                        <><RefreshCw className="h-3 w-3" /> Replace</>
+                                    ) : (
+                                        <><Download className="h-3 w-3 rotate-180" /> Upload</>
+                                    )}
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        onChange={(e) => handleUpload(name, e.target.files?.[0])}
+                                        disabled={isUploading}
+                                    />
+                                </label>
+                                {uploaded && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleDelete(name)}
+                                        className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-400 hover:text-rose-700 transition-colors cursor-pointer"
+                                        title="Delete document"
+                                    >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
 
             <div className="border-t border-slate-200/60 pt-3 mt-2">
@@ -2660,7 +2682,7 @@ function VisaDetailsSection({ lead, onChanged }) {
                     <button
                         type="button"
                         onClick={() => setEditing(true)}
-                        className="text-[10px] font-bold text-indigo-650 hover:text-indigo-850 transition-all bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl shadow-3xs cursor-pointer"
+                        className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-all bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl shadow-3xs cursor-pointer"
                     >
                         Edit Details
                     </button>

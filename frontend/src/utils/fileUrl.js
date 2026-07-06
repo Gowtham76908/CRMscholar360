@@ -11,5 +11,17 @@ const API_ORIGIN = (import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "")
 export function fileUrl(url) {
     if (!url) return url;
     if (/^https?:\/\//i.test(url)) return url;
-    return `${API_ORIGIN}${url.startsWith("/") ? "" : "/"}${url}`;
+    if (API_ORIGIN) {
+        return `${API_ORIGIN}${url.startsWith("/") ? "" : "/"}${url}`;
+    }
+    // Fallback for deployed version when VITE_API_URL is relative/empty.
+    // If the frontend proxies /api to the backend, files should be requested via /api/uploads/...
+    // instead of /uploads/... to be correctly routed.
+    if (url.startsWith("/uploads")) {
+        return `/api${url}`;
+    }
+    if (url.startsWith("uploads")) {
+        return `/api/${url}`;
+    }
+    return url;
 }

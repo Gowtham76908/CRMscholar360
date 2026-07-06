@@ -73,8 +73,8 @@ function PanelSection({ title, children }) {
 function WorkloadPanel() {
     return (
         <PanelSection title="Today">
-            <PanelLink to="/my-day" icon={LayoutDashboard} label="My Day" />
             <PanelLink to="/dashboard" icon={BarChart} label="Dashboard" />
+            <PanelLink to="/my-day" icon={LayoutDashboard} label="My Day" />
             <PanelLink to="/leads?view=kanban" icon={KanbanSquare} label="Board View" />
         </PanelSection>
     );
@@ -131,11 +131,11 @@ function CommunicatePanel() {
     const campaigns = Array.isArray(campaignData) ? campaignData : [];
 
     const CAMP_STATUS_COLOR = {
-        RUNNING:   "text-emerald-600 bg-emerald-50",
-        DRAFT:     "text-gray-500 bg-gray-100",
+        RUNNING: "text-emerald-600 bg-emerald-50",
+        DRAFT: "text-gray-500 bg-gray-100",
         COMPLETED: "text-blue-600 bg-blue-50",
-        PAUSED:    "text-amber-600 bg-amber-50",
-        FAILED:    "text-red-600 bg-red-50",
+        PAUSED: "text-amber-600 bg-amber-50",
+        FAILED: "text-red-600 bg-red-50",
     };
 
     return (
@@ -187,7 +187,7 @@ function AutomatePanel() {
     });
 
     const activeCount = Array.isArray(automations) ? automations.filter(a => a.active).length : 0;
-    const totalCount  = Array.isArray(automations) ? automations.length : 0;
+    const totalCount = Array.isArray(automations) ? automations.length : 0;
 
     return (
         <>
@@ -206,11 +206,11 @@ function AutomatePanel() {
 function AnalyticsPanel() {
     return (
         <PanelSection title="Analytics">
-            <PanelLink to="/team-performance"  icon={TrendingUp}   label="Team Performance" />
-            <PanelLink to="/revenue-report"    icon={IndianRupee}  label="Revenue Report" />
-            <PanelLink to="/leaderboard"       icon={Trophy}       label="Leaderboard" />
-            <PanelLink to="/reports"           icon={BarChart}     label="Reports" />
-            <PanelLink to="/ai-usage"          icon={Sparkles}     label="AI Usage" />
+            <PanelLink to="/team-performance" icon={TrendingUp} label="Team Performance" />
+            <PanelLink to="/revenue-report" icon={IndianRupee} label="Revenue Report" />
+            <PanelLink to="/leaderboard" icon={Trophy} label="Leaderboard" />
+            <PanelLink to="/reports" icon={BarChart} label="Reports" />
+            <PanelLink to="/ai-usage" icon={Sparkles} label="AI Usage" />
         </PanelSection>
     );
 }
@@ -223,11 +223,11 @@ function AdminPanel() {
     return (
         <>
             <PanelSection title="People">
-                <PanelLink to="/team"        icon={UserCog}    label="Team" />
+                <PanelLink to="/team" icon={UserCog} label="Team" />
                 {isSuperAdmin && <PanelLink to="/department-staffing" icon={Building} label="Dept. Staffing" />}
-                <PanelLink to="/attendance"  icon={Clock}      label="Attendance" />
+                <PanelLink to="/attendance" icon={Clock} label="Attendance" />
                 {isManager && <PanelLink to="/team-attendance" icon={Users} label="Team Attendance" />}
-                <PanelLink to="/leave"       icon={Calendar}   label="Leave" />
+                <PanelLink to="/leave" icon={Calendar} label="Leave" />
             </PanelSection>
 
             <PanelSection title="Billing">
@@ -251,21 +251,21 @@ function AdminPanel() {
 // ─── Panel registry ───────────────────────────────────────────────────────────
 
 const PANEL_TITLES = {
-    workload:    "Workload",
-    crm:         "CRM",
+    workload: "Workload",
+    crm: "CRM",
     communicate: "Communicate",
-    automate:    "Automate",
-    analytics:   "Analytics",
-    admin:       "Admin",
+    automate: "Automate",
+    analytics: "Analytics",
+    admin: "Admin",
 };
 
 const PANEL_COMPONENTS = {
-    workload:    WorkloadPanel,
-    crm:         CRMPanel,
+    workload: WorkloadPanel,
+    crm: CRMPanel,
     communicate: CommunicatePanel,
-    automate:    AutomatePanel,
-    analytics:   AnalyticsPanel,
-    admin:       AdminPanel,
+    automate: AutomatePanel,
+    analytics: AnalyticsPanel,
+    admin: AdminPanel,
 };
 
 // ─── ContextPanel (Zone 2) ────────────────────────────────────────────────────
@@ -287,9 +287,12 @@ export default function ContextPanel({ activeMode, open, pinned = false, onClose
                     open ? "translate-x-0" : "-translate-x-full"
                 )}
             >
-                <div className="flex flex-col items-start justify-center gap-0.5 px-4 py-3 border-b border-gray-100">
+                <div className="flex flex-col items-start justify-center gap-0.5 px-4  border-b border-gray-100">
                     <Scholar360Logo size="xl" showText={false} />
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ">
+                        Study Abroad Consultancy
+                    </span>
+                    <p className="text-[9px] font-extrabold text-indigo-600 uppercase tracking-widest mt-2 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100/30">
                         {title}
                     </p>
                 </div>

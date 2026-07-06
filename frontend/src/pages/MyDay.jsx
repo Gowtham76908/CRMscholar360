@@ -9,7 +9,7 @@ import {
     CheckCircle, Circle, Bell, Phone, MessageSquare, X,
     ClipboardList, Calendar, Search, ChevronDown, Check, Users, Loader2,
     Building2, GraduationCap, FileCheck, Landmark, Home, Banknote, Briefcase,
-    UserCircle2, History, ArrowRight, SlidersHorizontal, Plus,
+    UserCircle2, History, ArrowRight, Plus, Hash,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../lib/utils";
@@ -63,6 +63,15 @@ function LeadIdentity({ lead, preferDept }) {
                     {lead.name?.charAt(0).toUpperCase()}
                 </span>
                 <span className="text-sm font-semibold text-gray-900 truncate">{lead.name}</span>
+                {lead.leadId && (
+                    <span
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 shrink-0 text-[10px] font-mono font-bold uppercase tracking-tight text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-md pl-1 pr-1.5 py-0.5 select-all"
+                    >
+                        <Hash className="h-2.5 w-2.5 text-indigo-400" />
+                        {lead.leadId}
+                    </span>
+                )}
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                 {lead.phone && (
@@ -196,7 +205,8 @@ function ActionItem({ lead, snoozed, onSnooze, preferDept }) {
 // comment is posted to the lead's activity before the item is resolved, so it
 // stays visible on the Lead Detail timeline after it disappears from My Day.
 
-function CommentBox({ value, onChange, onSubmit, onCancel, pending, hint, scheduleAt, onScheduleChange, canSchedule }) {
+function CommentBox({ value, onChange, onSubmit, onCancel, pending, hint, scheduleAt, onScheduleChange, canSchedule, requireSchedule }) {
+    const scheduleMissing = requireSchedule && canSchedule && !scheduleAt;
     return (
         <div className="mt-2.5 pt-2.5 border-t border-gray-100 space-y-2" onClick={e => e.stopPropagation()}>
             <textarea
@@ -211,16 +221,24 @@ function CommentBox({ value, onChange, onSubmit, onCancel, pending, hint, schedu
             {canSchedule && (
                 <div>
                     <label className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 uppercase mb-1">
-                        <Calendar className="h-3 w-3" /> Schedule next call <span className="text-gray-400 font-medium normal-case">(optional)</span>
+                        <Calendar className="h-3 w-3" /> Schedule next call{" "}
+                        {requireSchedule
+                            ? <span className="text-red-500 font-bold normal-case">(required)</span>
+                            : <span className="text-gray-400 font-medium normal-case">(optional)</span>}
                     </label>
                     <div className="flex items-center gap-1.5">
                         <input
                             type="datetime-local"
                             value={scheduleAt}
                             onChange={e => onScheduleChange(e.target.value)}
-                            className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg outline-none bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                            className={cn(
+                                "flex-1 px-2.5 py-1.5 text-xs border rounded-lg outline-none bg-white focus:ring-2",
+                                scheduleMissing
+                                    ? "border-red-300 focus:border-red-400 focus:ring-red-100"
+                                    : "border-gray-200 focus:border-indigo-400 focus:ring-indigo-100"
+                            )}
                         />
-                        {scheduleAt && (
+                        {scheduleAt && !requireSchedule && (
                             <button type="button" onClick={() => onScheduleChange("")}
                                 title="Clear scheduled call"
                                 className="shrink-0 p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
@@ -228,6 +246,9 @@ function CommentBox({ value, onChange, onSubmit, onCancel, pending, hint, schedu
                             </button>
                         )}
                     </div>
+                    {scheduleMissing && (
+                        <p className="mt-1 text-[10px] font-medium text-red-500">Pick a date &amp; time for the next call to close this task.</p>
+                    )}
                 </div>
             )}
             {hint && <p className="text-[10px] text-gray-400">{hint}</p>}
@@ -236,7 +257,7 @@ function CommentBox({ value, onChange, onSubmit, onCancel, pending, hint, schedu
                     className="px-2.5 py-1 text-[10px] font-semibold text-gray-500 hover:bg-gray-100 rounded-md transition-colors">
                     Cancel
                 </button>
-                <button type="button" onClick={onSubmit} disabled={pending || !value.trim()}
+                <button type="button" onClick={onSubmit} disabled={pending || !value.trim() || scheduleMissing}
                     className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 rounded-md shadow-xs disabled:opacity-50 transition-colors">
                     {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                     {scheduleAt ? "Comment, Schedule & Close" : "Comment & Close"}
@@ -256,6 +277,7 @@ function TaskItem({ task, onComplete, completing, preferDept }) {
 
     const submit = () => {
         if (!comment.trim()) { toast.warning("Please add a comment before closing"); return; }
+        if (task.lead && !scheduleAt) { toast.warning("Please schedule the next call before closing"); return; }
         onComplete({ id: task.id, leadId: task.lead?.id ?? null, comment: comment.trim(), nextCallAt: scheduleAt || null });
     };
 
@@ -297,6 +319,7 @@ function TaskItem({ task, onComplete, completing, preferDept }) {
                     scheduleAt={scheduleAt}
                     onScheduleChange={setScheduleAt}
                     canSchedule={!!task.lead}
+                    requireSchedule={!!task.lead}
                     hint={task.lead ? "Saved to the lead's activity, then the task is closed." : "Saved as a task comment, then the task is closed."}
                 />
             )}
@@ -849,60 +872,44 @@ const MyDay = () => {
 
     return (
         <div className="space-y-5">
-            {/* Header */}
-            <header className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-sm">
-                        <Calendar className="h-6 w-6 text-white" />
-                    </div>
+            {/* Unified toolbar — title, stats & filters on one line */}
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-2xl bg-white px-4 py-3 ring-1 ring-slate-200/80 shadow-[0_1px_3px_rgb(0,0,0,0.04)]">
+                {/* My Day title (in place of the old "Filters" label) */}
+                <div className="flex items-center gap-3 shrink-0">
+                    <span className="h-10 w-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-sm shrink-0">
+                        <Calendar className="h-5 w-5 text-white" />
+                    </span>
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-black tracking-tight text-indigo-950">My Day</h1>
-                        <p className="text-sm text-slate-500 mt-0.5">{today} · your tasks &amp; follow-ups</p>
+                        <h1 className="text-lg md:text-xl font-black tracking-tight text-indigo-950 leading-none">My Day</h1>
+                        <p className="text-[11px] text-slate-500 mt-1 leading-none">{today}</p>
                     </div>
                 </div>
-                
-                {/* Stats & Actions in Top Right */}
-                <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-                    <div className="flex flex-wrap items-center gap-2.5">
-                        {[
-                            { label: "Upcoming", value: upcomingItems.length, icon: CheckCircle, ic: "bg-amber-50 text-amber-600 ring-amber-100/80" },
-                            { label: "Overdue", value: overdueItems.length, icon: Bell, ic: "bg-rose-50 text-rose-600 ring-rose-100/80" },
-                        ].map(({ label, value, icon: Icon, ic }) => (
-                            <div key={label} className="flex items-center gap-2.5 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-200/80 shadow-[0_1px_2px_rgb(0,0,0,0.04)]">
-                                <span className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ring-1", ic)}>
-                                    <Icon className="h-4 w-4" />
-                                </span>
-                                <div className="text-left">
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none">{label}</p>
-                                    <div className="flex items-baseline gap-1 mt-1">
-                                        <CountUp value={value} className="text-sm font-black text-slate-900 leading-none tabular-nums" />
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    <Link
-                        to="/dashboard"
-                        className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl px-3.5 py-2 ring-1 ring-slate-200/80 bg-white hover:ring-indigo-200 transition-colors shadow-[0_1px_2px_rgb(0,0,0,0.04)] h-[42px]"
-                    >
-                        Dashboard <ArrowRight className="h-4 w-4" />
-                    </Link>
-                </div>
-            </header>
 
-            {/* Filter toolbar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 ring-1 ring-slate-200/80 shadow-[0_1px_3px_rgb(0,0,0,0.04)]">
-                <div className="flex items-center gap-2 text-slate-500">
-                    <SlidersHorizontal className="h-4 w-4 text-slate-400" />
-                    <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Filters</span>
+                {/* Stats + filters + actions */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                    {[
+                        { label: "Overdue", value: overdueItems.length, icon: Bell, ic: "bg-rose-50 text-rose-600 ring-rose-100/80" },
+                        { label: "Upcoming", value: upcomingItems.length, icon: CheckCircle, ic: "bg-amber-50 text-amber-600 ring-amber-100/80" },
+                    ].map(({ label, value, icon: Icon, ic }) => (
+                        <div key={label} className="flex items-center gap-2 rounded-xl bg-slate-50/70 px-2.5 py-1.5 ring-1 ring-slate-200/80">
+                            <span className={cn("h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ring-1", ic)}>
+                                <Icon className="h-3.5 w-3.5" />
+                            </span>
+                            <div className="text-left">
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none">{label}</p>
+                                <CountUp value={value} className="text-sm font-black text-slate-900 leading-none tabular-nums" />
+                            </div>
+                        </div>
+                    ))}
+
+                    <span className="hidden sm:block h-6 w-px bg-slate-200" />
+
                     {hasFilters && (
                         <button onClick={clearFilters}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 ring-1 ring-slate-200 rounded-full pl-2.5 pr-2 py-1 transition-colors">
-                            Clear all <X className="h-3 w-3" />
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 ring-1 ring-slate-200 rounded-full pl-2.5 pr-2 py-1.5 transition-colors">
+                            Clear <X className="h-3 w-3" />
                         </button>
                     )}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
                     <DateRangeFilter range={range} onChange={setRange} />
                     <DepartmentFilter selected={department} onSelect={setDepartment} />
                     <ConsultantFilter consultants={consultants} selected={consultant} onSelect={setConsultant} />
@@ -912,6 +919,30 @@ const MyDay = () => {
             {/* Trays */}
             <div className="relative">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                    {/* Overdue — passed their time, never marked successful */}
+                    <TrayColumn
+                        theme="rose"
+                        icon={Bell}
+                        title="Overdue"
+                        subtitle="Unsuccessful — past due"
+                        action={<Badge variant="error" size="sm">{overdueItems.length}</Badge>}
+                    >
+                        {overdueItems.length > 0
+                            ? overdueItems.map(entry => (
+                                entry.kind === "task"
+                                    ? <TaskItem key={`task-${entry.item.id}`} task={entry.item} onComplete={(payload) => completeTask.mutate(payload)} completing={completeTask.isPending} preferDept={department} />
+                                    : <ReminderItem
+                                        key={`rem-${entry.item.id}`}
+                                        reminder={entry.item}
+                                        preferDept={department}
+                                        onClear={(payload) => dismissReminder.mutate(payload)}
+                                        clearing={dismissReminder.isPending}
+                                    />
+                            ))
+                            : <EmptyState icon={Bell} tint="bg-rose-50 text-rose-300" text="No overdue items" />
+                        }
+                    </TrayColumn>
+
                     {/* Upcoming — tasks & reminders not yet due */}
                     <TrayColumn
                         theme="amber"
@@ -937,30 +968,6 @@ const MyDay = () => {
                                     />
                             ))
                             : <EmptyState icon={CheckCircle} tint="bg-emerald-50 text-emerald-400" text="Nothing upcoming 🎉" />
-                        }
-                    </TrayColumn>
-
-                    {/* Overdue — passed their time, never marked successful */}
-                    <TrayColumn
-                        theme="rose"
-                        icon={Bell}
-                        title="Overdue"
-                        subtitle="Unsuccessful — past due"
-                        action={<Badge variant="error" size="sm">{overdueItems.length}</Badge>}
-                    >
-                        {overdueItems.length > 0
-                            ? overdueItems.map(entry => (
-                                entry.kind === "task"
-                                    ? <TaskItem key={`task-${entry.item.id}`} task={entry.item} onComplete={(payload) => completeTask.mutate(payload)} completing={completeTask.isPending} preferDept={department} />
-                                    : <ReminderItem
-                                        key={`rem-${entry.item.id}`}
-                                        reminder={entry.item}
-                                        preferDept={department}
-                                        onClear={(payload) => dismissReminder.mutate(payload)}
-                                        clearing={dismissReminder.isPending}
-                                    />
-                            ))
-                            : <EmptyState icon={Bell} tint="bg-rose-50 text-rose-300" text="No overdue items" />
                         }
                     </TrayColumn>
 
