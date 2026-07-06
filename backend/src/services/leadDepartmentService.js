@@ -1128,10 +1128,9 @@ async function validateSalesStageMove(leadDept, currentStage, targetStage, txOrP
 
     if (currentStage === "VISA_STATUS") {
         const hasDate = cf.visa_appointment_date !== undefined && cf.visa_appointment_date !== null && String(cf.visa_appointment_date).trim() !== "";
-        const hasScorecard = cf.mock_interview_scorecard !== undefined && cf.mock_interview_scorecard !== null && String(cf.mock_interview_scorecard).trim() !== "";
         const isApproved = cf.embassy_result === "Approved";
-        if (!hasDate || !hasScorecard) {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Visa Status stage: Visa Appointment Date and Mock Interview Scorecard must be filled.");
+        if (!hasDate) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Visa Status stage: Visa Appointment Date must be filled.");
         }
         if (isApproved) {
             const hasPassport = cf.approved_visa_passport !== undefined && cf.approved_visa_passport !== null && String(cf.approved_visa_passport).trim() !== "";

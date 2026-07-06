@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -261,7 +260,6 @@ const SYSTEM_KEYS = new Set([
 
 export default function StudentJourneyPanel({ lead, onChanged }) {
     const qc = useQueryClient();
-    const navigate = useNavigate();
     const [actionModal, setActionModal] = useState(null); // 'enquiry', 'follow_up', 'prospect', etc.
     const [loading, setLoading] = useState(false);
     const [formValues, setFormValues] = useState({});
@@ -270,6 +268,7 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
     const [prospectStep, setProspectStep] = useState(1);
     const [activeTests, setActiveTests] = useState([]);
     const [uploadingProof, setUploadingProof] = useState(false);
+    const [uploadingDepositReceipt, setUploadingDepositReceipt] = useState(false);
     const [validationErrors, setValidationErrors] = useState({});
     const [showCloseConfirm, setShowCloseConfirm] = useState(false);
     // Per-university inline deposit form state
@@ -644,15 +643,15 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             color: "text-cyan-600 bg-cyan-50 border-cyan-200",
             icon: ShieldCheck,
             buttonText: "Verify Visa File",
-            requiredFields: ["Financial Proof Documents", "CAS/I-20 Form Number", "Manager Approval"],
-            instruction: "Financial files must be verified and manager approval checkbox ticked."
+            requiredFields: ["CAS/I-20 Form Number", "Manager Approval"],
+            instruction: "Visa file must be verified and manager approval checkbox ticked."
         },
         VISA_STATUS: {
             title: "Visa Status",
             color: "text-orange-600 bg-orange-50 border-orange-200",
             icon: Award,
             buttonText: "Update Embassy Result",
-            requiredFields: ["Visa Appointment Date", "Mock Interview Scorecard", "Copy of Approved Visa Passport Page", "Flight Departure Date"],
+            requiredFields: ["Visa Appointment Date", "Copy of Approved Visa Passport Page", "Flight Departure Date"],
             instruction: "Set embassy response: Approved (advances to Visa Approval) or Refused (archives)."
         },
         VISA_APPROVAL: {
@@ -809,6 +808,28 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to upload proof");
         } finally {
             setUploadingProof(false);
+        }
+    };
+
+    // Uploads the deposit receipt (DEPOSIT_STATUS stage); it then appears in the
+    // lead's Documents list and marks the receipt status as uploaded.
+    const handleDepositReceiptUpload = async (file) => {
+        if (!file) return;
+        if (file.type !== "application/pdf") { toast.error("Please upload a PDF file"); return; }
+        if (file.size > 10 * 1024 * 1024) { toast.error("File size exceeds 10MB limit"); return; }
+        const fd = new FormData();
+        fd.append("document", file);
+        fd.append("documentName", "Deposit Receipt");
+        setUploadingDepositReceipt(true);
+        try {
+            await api.post(`/upload/document/${lead.id}`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+            setFormValues(prev => ({ ...prev, deposit_receipt_uploaded: true }));
+            toast.success("Deposit receipt uploaded");
+            onChanged();
+        } catch (err) {
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to upload receipt");
+        } finally {
+            setUploadingDepositReceipt(false);
         }
     };
 
@@ -1010,7 +1031,6 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             }
             else if (currentStage === "VISA_DOCUMENTATION") {
                 await saveCustomFieldsMut.mutateAsync({
-                    financial_proof_docs: formValues.financial_proof_docs || "",
                     cas_form_number: formValues.cas_form_number || "",
                     visa_manager_approved: !!formValues.visa_manager_approved,
                     visa_appointment_date: formValues.visa_appointment_date || null
@@ -1022,7 +1042,6 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             else if (currentStage === "VISA_STATUS") {
                 await saveCustomFieldsMut.mutateAsync({
                     visa_appointment_date: formValues.visa_appointment_date || null,
-                    mock_interview_scorecard: formValues.mock_interview_scorecard || "",
                     embassy_result: formValues.embassy_result,
                     visa_approved_date: formValues.visa_approved_date || null,
                     approved_visa_passport: formValues.approved_visa_passport || "",
@@ -1275,7 +1294,6 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
         }
         else if (currentStage === "VISA_DOCUMENTATION") {
             setFormValues({
-                financial_proof_docs: customFields.financial_proof_docs || "",
                 cas_form_number: customFields.cas_form_number || "",
                 visa_manager_approved: customFields.visa_manager_approved === true || customFields.visa_manager_approved === "true",
                 visa_appointment_date: customFields.visa_appointment_date ? new Date(customFields.visa_appointment_date).toISOString().split("T")[0] : ""
@@ -1284,7 +1302,6 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
         else if (currentStage === "VISA_STATUS") {
             setFormValues({
                 visa_appointment_date: customFields.visa_appointment_date ? new Date(customFields.visa_appointment_date).toISOString().split("T")[0] : "",
-                mock_interview_scorecard: customFields.mock_interview_scorecard || "",
                 embassy_result: customFields.embassy_result || "Approved",
                 visa_approved_date: customFields.visa_approved_date ? new Date(customFields.visa_approved_date).toISOString().split("T")[0] : "",
                 approved_visa_passport: customFields.approved_visa_passport || "",
@@ -1403,13 +1420,8 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                         </button>
                     ))
                     : currentStage === "VISA_APPROVAL" ? (
-                        <button
-                            onClick={() => navigate(`/invoices?leadId=${lead.id}`)}
-                            className="w-full inline-flex items-center justify-center gap-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl py-2.5 transition-all shadow-sm shadow-indigo-100 hover:scale-[1.01] cursor-pointer"
-                        >
-                            {config.buttonText}
-                            <ArrowRight className="h-3.5 w-3.5" />
-                        </button>
+                        // Auto-advances to Commission Invoicing once fully paid — no manual action.
+                        null
                     ) : (
                         <button
                             onClick={() => initModal("standard")}
@@ -2864,6 +2876,37 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
                                         />
                                     </div>
+                                    {/* Deposit Receipt — PDF attachment */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-semibold text-slate-500 uppercase">Deposit Receipt <span className="text-slate-400 normal-case">(PDF)</span></label>
+                                        {(() => {
+                                            const receipt = (Array.isArray(customFields.documents) ? customFields.documents : [])
+                                                .find(d => d.name?.toLowerCase() === "deposit receipt");
+                                            return receipt?.url ? (
+                                                <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2">
+                                                    <FileText className="h-4 w-4 text-emerald-600 shrink-0" />
+                                                    <span className="text-xs font-bold text-emerald-700 truncate flex-1">{receipt.fileName || "Deposit Receipt.pdf"}</span>
+                                                    <label className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer">
+                                                        {uploadingDepositReceipt ? "Uploading…" : "Replace"}
+                                                        <input type="file" accept="application/pdf" className="hidden" disabled={uploadingDepositReceipt}
+                                                            onChange={e => { handleDepositReceiptUpload(e.target.files?.[0]); e.target.value = ""; }} />
+                                                    </label>
+                                                </div>
+                                            ) : (
+                                                <label className={cn(
+                                                    "flex items-center justify-center gap-2 w-full px-3 py-2.5 text-xs font-bold border border-dashed rounded-xl cursor-pointer transition-colors",
+                                                    uploadingDepositReceipt ? "border-slate-200 text-slate-400" : "border-indigo-300 text-indigo-650 hover:bg-indigo-50/50"
+                                                )}>
+                                                    {uploadingDepositReceipt
+                                                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</>
+                                                        : <><UploadCloud className="h-4 w-4" /> Upload deposit receipt (PDF)</>}
+                                                    <input type="file" accept="application/pdf" className="hidden" disabled={uploadingDepositReceipt}
+                                                        onChange={e => { handleDepositReceiptUpload(e.target.files?.[0]); e.target.value = ""; }} />
+                                                </label>
+                                            );
+                                        })()}
+                                        <p className="text-[10px] text-slate-400">Appears in the lead's Documents list once uploaded.</p>
+                                    </div>
                                     <p className="text-[11px] text-blue-600 bg-blue-50 border border-blue-100 p-2.5 rounded-lg leading-relaxed font-semibold mt-3">
                                         ℹ️ System Action: Accommodation department will be activated instantly on submit.
                                     </p>
@@ -2874,17 +2917,6 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                             {/* VISA_DOCUMENTATION Verification */}
                             {currentStage === "VISA_DOCUMENTATION" && !isProfileMode && (
                                 <div className="space-y-4">
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Financial Proof Documents Details</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            placeholder="e.g. Education loan sanction letter / Bank statement"
-                                            value={formValues.financial_proof_docs || ""}
-                                            onChange={e => setFormValues({ ...formValues, financial_proof_docs: e.target.value })}
-                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                                        />
-                                    </div>
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 uppercase">CAS / I-20 Form Number</label>
                                         <input
@@ -2930,17 +2962,6 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                             required
                                             value={formValues.visa_appointment_date || ""}
                                             onChange={e => setFormValues({ ...formValues, visa_appointment_date: e.target.value })}
-                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Mock Interview Scorecard</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            placeholder="e.g. Passed 9/10 / Excellent mock"
-                                            value={formValues.mock_interview_scorecard || ""}
-                                            onChange={e => setFormValues({ ...formValues, mock_interview_scorecard: e.target.value })}
                                             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
                                         />
                                     </div>

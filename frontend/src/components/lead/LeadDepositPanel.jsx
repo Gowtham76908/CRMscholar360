@@ -3,89 +3,75 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
     Wallet, Pencil, X, Loader2, CreditCard, CalendarDays, History, Plus,
-    FileText, Eye, Upload, Trash2,
+    FileText, Eye, Upload, Trash2, ChevronDown, Building2,
 } from "lucide-react";
 import api from "../../api/axios";
 import { useAuth } from "../../context/AuthContext";
 import { fileUrl } from "../../utils/fileUrl";
-
-const RECEIPT_DOC_NAME = "Deposit Receipt";
+import { cn } from "../../lib/utils";
 
 const BUILT_IN_MODES = ["Bank Transfer", "Credit Card", "Debit Card", "UPI", "Cash", "Cheque"];
 const CUSTOM_SENTINEL = "__custom__";
-
+const UNSPECIFIED = "Unspecified";
 
 const fmtDate = (d) =>
     d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
 const fmtDateTime = (d) =>
     d ? new Date(d).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
 
+// Receipt is a document named per college so each college keeps its own PDF.
+const receiptNameFor = (college) =>
+    college && college !== UNSPECIFIED ? `Deposit Receipt — ${college}` : "Deposit Receipt";
+
+const emptyDraft = { deposit_college: "", deposit_amount: "", payment_mode: "", payment_date: "" };
+
 export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const cf = lead?.customFields || {};
 
-    const current = {
-        deposit_amount: cf.deposit_amount || "",
-        payment_mode: cf.payment_mode || "",
-        payment_date: cf.payment_date || "",
-        deposit_college: cf.deposit_college || "",
-    };
     const history = Array.isArray(cf.deposit_history) ? cf.deposit_history : [];
-    const hasDeposit = !!(current.deposit_amount || current.payment_mode || current.payment_date);
+    const docs = Array.isArray(cf.documents) ? cf.documents : [];
+    const shortlist = Array.isArray(cf.shortlisted_universities) ? cf.shortlisted_universities : [];
+    const hasLegacyTop = !!(cf.deposit_amount || cf.payment_mode || cf.payment_date);
+
+    // Build per-college groups from the (newest-first) history. Legacy entries with
+    // no college fall under the old top-level college, else "Unspecified".
+    const groupsMap = new Map();
+    history.forEach(h => {
+        const key = h.deposit_college || cf.deposit_college || UNSPECIFIED;
+        if (!groupsMap.has(key)) groupsMap.set(key, []);
+        groupsMap.get(key).push(h);
+    });
+    // Legacy: a top-level deposit with no history at all → synthesize one entry.
+    if (history.length === 0 && hasLegacyTop) {
+        groupsMap.set(cf.deposit_college || UNSPECIFIED, [{
+            deposit_amount: cf.deposit_amount || "",
+            payment_mode: cf.payment_mode || "",
+            payment_date: cf.payment_date || "",
+            recordedAt: null,
+        }]);
+    }
+    const collegeGroups = [...groupsMap.entries()];
+    const hasAnyDeposit = collegeGroups.length > 0;
+
+    const receiptFor = (college) => {
+        const primary = docs.find(d => d.name?.toLowerCase() === receiptNameFor(college).toLowerCase());
+        if (primary) return primary;
+        // Legacy single "Deposit Receipt" belongs to the unspecified/top-level college.
+        if (college === (cf.deposit_college || UNSPECIFIED)) {
+            return docs.find(d => d.name?.toLowerCase() === "deposit receipt");
+        }
+        return undefined;
+    };
 
     const [open, setOpen] = useState(false);
-    const [draft, setDraft] = useState(current);
-
-    // Deposit receipt — stored as a document named "Deposit Receipt" in
-    // customFields.documents (same store & signing as the Documents section).
-    const receiptDoc = (Array.isArray(cf.documents) ? cf.documents : [])
-        .find(d => d.name?.toLowerCase() === RECEIPT_DOC_NAME.toLowerCase());
+    const [draft, setDraft] = useState(emptyDraft);
+    const [customMode, setCustomMode] = useState("");
+    const [expanded, setExpanded] = useState(new Set());
     const receiptInputRef = useRef(null);
-    const [uploadingReceipt, setUploadingReceipt] = useState(false);
-
-    const handleReceiptUpload = async (file) => {
-        if (!file) return;
-        if (file.type !== "application/pdf") { toast.error("Please upload a PDF file"); return; }
-        if (file.size > 10 * 1024 * 1024) { toast.error("File size exceeds 10MB limit"); return; }
-        const formData = new FormData();
-        formData.append("document", file);
-        formData.append("documentName", RECEIPT_DOC_NAME);
-        setUploadingReceipt(true);
-        try {
-            await api.post(`/upload/document/${leadId}`, formData, { headers: { "Content-Type": "multipart/form-data" } });
-            queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
-            queryClient.invalidateQueries({ queryKey: ["lead-activities", leadId] });
-            toast.success("Deposit receipt uploaded");
-        } catch (err) {
-            toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to upload receipt");
-        } finally {
-            setUploadingReceipt(false);
-        }
-    };
-
-    const handleReceiptDelete = async () => {
-        const nextDocs = (cf.documents || []).filter(d => d.name?.toLowerCase() !== RECEIPT_DOC_NAME.toLowerCase());
-        setUploadingReceipt(true);
-        try {
-            await api.patch(`/leads/${leadId}/custom-fields`, { fields: { documents: nextDocs } });
-            queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
-            toast.success("Deposit receipt removed");
-        } catch (err) {
-            toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to remove receipt");
-        } finally {
-            setUploadingReceipt(false);
-        }
-    };
-    // If the stored payment_mode is not a built-in, track the custom value separately
-    const [customMode, setCustomMode] = useState(() => {
-        const stored = current.payment_mode || "";
-        return BUILT_IN_MODES.includes(stored) ? "" : stored;
-    });
-
-    // As a standalone card, only surface once a deposit exists. When embedded in the
-    // Activity tabs, always render so the user can add one.
-    if (!embedded && !hasDeposit && history.length === 0) return null;
+    const uploadCollegeRef = useRef(null);
+    const [uploadingCollege, setUploadingCollege] = useState(null); // college currently uploading/removing
 
     const saveMut = useMutation({
         mutationFn: (fields) => api.patch(`/leads/${leadId}/custom-fields`, { fields }),
@@ -98,22 +84,23 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
         onError: (err) => toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to update deposit details"),
     });
 
-    const openEdit = () => {
-        setDraft(current);
-        // Pre-populate custom mode input if the stored value isn't built-in
-        const stored = current.payment_mode || "";
-        setCustomMode(BUILT_IN_MODES.includes(stored) ? "" : stored);
+    // As a standalone card, only surface once a deposit exists. When embedded in the
+    // Activity tabs, always render so the user can add one. (After all hooks.)
+    if (!embedded && !hasAnyDeposit) return null;
+
+    const openAdd = (college = "") => {
+        setDraft({ ...emptyDraft, deposit_college: college });
+        setCustomMode("");
         setOpen(true);
     };
 
-    // The "effective" payment mode: if user picked the custom sentinel, use customMode text
-    const effectiveMode = (draft.payment_mode === CUSTOM_SENTINEL)
-        ? customMode.trim()
-        : (draft.payment_mode || "");
+    const effectiveMode = draft.payment_mode === CUSTOM_SENTINEL ? customMode.trim() : (draft.payment_mode || "");
 
     const handleSave = () => {
-        // Append the new values as a history entry (most recent first).
+        if (!draft.deposit_college) { toast.warning("Please select the college this deposit is for"); return; }
+        if (!draft.deposit_amount?.trim()) { toast.warning("Please enter the deposit amount"); return; }
         const entry = {
+            deposit_college: draft.deposit_college,
             deposit_amount: draft.deposit_amount || "",
             payment_mode: effectiveMode,
             payment_date: draft.payment_date || "",
@@ -121,16 +108,70 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
             recordedBy: user?.name || "",
         };
         saveMut.mutate({
+            // Top-level mirrors the latest deposit overall (backward compatibility).
             deposit_amount: draft.deposit_amount || "",
             payment_mode: effectiveMode,
             payment_date: draft.payment_date || "",
+            deposit_college: draft.deposit_college,
             deposit_history: [entry, ...history],
         });
+    };
+
+    // ── Per-college receipt upload / remove ──────────────────────────────────
+    const triggerReceiptUpload = (college) => { uploadCollegeRef.current = college; receiptInputRef.current?.click(); };
+
+    const handleReceiptFile = async (file) => {
+        const college = uploadCollegeRef.current;
+        if (!file || !college) return;
+        if (file.type !== "application/pdf") { toast.error("Please upload a PDF file"); return; }
+        if (file.size > 10 * 1024 * 1024) { toast.error("File size exceeds 10MB limit"); return; }
+        const formData = new FormData();
+        formData.append("document", file);
+        formData.append("documentName", receiptNameFor(college));
+        setUploadingCollege(college);
+        try {
+            await api.post(`/upload/document/${leadId}`, formData, { headers: { "Content-Type": "multipart/form-data" } });
+            queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+            queryClient.invalidateQueries({ queryKey: ["lead-activities", leadId] });
+            toast.success("Deposit receipt uploaded");
+        } catch (err) {
+            toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to upload receipt");
+        } finally {
+            setUploadingCollege(null);
+        }
+    };
+
+    const handleReceiptDelete = async (college) => {
+        const doc = receiptFor(college);
+        if (!doc) return;
+        const nextDocs = docs.filter(d => d.name?.toLowerCase() !== doc.name?.toLowerCase());
+        setUploadingCollege(college);
+        try {
+            await api.patch(`/leads/${leadId}/custom-fields`, { fields: { documents: nextDocs } });
+            queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+            toast.success("Deposit receipt removed");
+        } catch (err) {
+            toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || "Failed to remove receipt");
+        } finally {
+            setUploadingCollege(null);
+        }
     };
 
     const inputCls = "w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none font-semibold focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white";
     const labelCls = "text-[10px] font-extrabold text-slate-500 uppercase tracking-wide";
 
+    // College options for the modal: shortlisted universities + any colleges that
+    // already have deposits, de-duplicated.
+    const collegeOptions = [...new Set([
+        ...shortlist.map(u => u.univ_name).filter(Boolean),
+        ...collegeGroups.map(([c]) => c).filter(c => c && c !== UNSPECIFIED),
+    ])];
+
+    const AddButton = (
+        <button onClick={() => openAdd()} className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
+            <Plus className="h-3.5 w-3.5" /> Add Deposit
+        </button>
+    );
 
     return (
         <div className={embedded ? "" : "bg-white border border-gray-200/70 rounded-2xl shadow-sm overflow-hidden"}>
@@ -139,120 +180,138 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
                 <div className="flex items-center gap-2">
                     <Wallet className="h-4 w-4 text-emerald-500" />
                     <h2 className="text-sm font-bold text-gray-800">Deposit</h2>
+                    {collegeGroups.length > 0 && (
+                        <span className="text-xs text-gray-400 font-medium">· {collegeGroups.length} college{collegeGroups.length === 1 ? "" : "s"}</span>
+                    )}
                 </div>
-                <button onClick={openEdit} className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
-                    <Pencil className="h-3.5 w-3.5" /> {hasDeposit ? "Edit" : "Add"}
-                </button>
+                {AddButton}
             </div>
 
-            <div className="px-5 py-4">
-                {hasDeposit ? (
-                    <div className="space-y-3">
-                        {/* College badge if set */}
-                        {current.deposit_college && (
-                            <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-1.5">
-                                <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-wide">College</span>
-                                <span className="ml-1 text-xs font-bold text-indigo-700 truncate">{current.deposit_college}</span>
-                            </div>
-                        )}
-                        <div className="grid grid-cols-3 gap-4">
-                            <div>
-                                <p className={labelCls}>Amount</p>
-                                <p className="text-sm font-bold text-slate-800 break-words">{current.deposit_amount || "—"}</p>
-                            </div>
-                            <div>
-                                <p className={labelCls}>Mode</p>
-                                <p className="text-sm font-bold text-slate-800 flex items-center gap-1">
-                                    <CreditCard className="h-3.5 w-3.5 text-slate-400" /> {current.payment_mode || "—"}
-                                </p>
-                            </div>
-                            <div>
-                                <p className={labelCls}>Date</p>
-                                <p className="text-sm font-bold text-slate-800 flex items-center gap-1">
-                                    <CalendarDays className="h-3.5 w-3.5 text-slate-400" /> {fmtDate(current.payment_date)}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                ) : (
+            {/* Hidden receipt file input (shared; target college tracked in a ref) */}
+            <input type="file" ref={receiptInputRef} accept="application/pdf" className="hidden"
+                onChange={e => { handleReceiptFile(e.target.files?.[0]); e.target.value = ""; }} />
+
+            <div className="px-5 py-4 space-y-3">
+                {!hasAnyDeposit && (
                     <p className="text-xs text-slate-400">No deposit recorded yet.</p>
                 )}
 
-                {/* Deposit receipt link */}
-                {receiptDoc?.url && (
-                    <a
-                        href={fileUrl(receiptDoc.url)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50/60 border border-indigo-100 rounded-lg px-2.5 py-1.5 transition-colors"
-                    >
-                        <FileText className="h-3.5 w-3.5" /> View Deposit Receipt <Eye className="h-3.5 w-3.5" />
-                    </a>
-                )}
-
-                {/* History — grouped by college as separate columns */}
-                {history.length > 0 && (() => {
-                    // Group entries by college name
-                    const groups = {};
-                    history.forEach(h => {
-                        const key = h.deposit_college || "—";
-                        if (!groups[key]) groups[key] = [];
-                        groups[key].push(h);
-                    });
-                    const groupEntries = Object.entries(groups);
+                {collegeGroups.map(([college, entries]) => {
+                    const latest = entries[0];
+                    const receipt = receiptFor(college);
+                    const busy = uploadingCollege === college;
+                    const isOpen = expanded.has(college);
                     return (
-                        <div className="mt-4 pt-3 border-t border-gray-100">
-                            <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1 mb-3">
-                                <History className="h-3 w-3" /> Deposits by College ({groupEntries.length})
-                            </p>
-                            {/* Scrollable horizontal column layout */}
-                            <div className="flex gap-3 overflow-x-auto pb-1">
-                                {groupEntries.map(([collegeName, entries]) => (
-                                    <div
-                                        key={collegeName}
-                                        className="flex-none w-52 rounded-2xl border border-indigo-100 bg-indigo-50/30 overflow-hidden"
-                                    >
-                                        {/* College header */}
-                                        <div className="px-3 py-2 bg-indigo-50 border-b border-indigo-100 flex items-center gap-1.5">
-                                            <span className="text-sm">🏫</span>
-                                            <p className="text-[10px] font-extrabold text-indigo-700 uppercase tracking-wide truncate">
-                                                {collegeName}
-                                            </p>
-                                        </div>
-                                        {/* Deposit entries for this college */}
-                                        <div className="divide-y divide-indigo-100/60">
-                                            {entries.map((h, i) => (
-                                                <div key={i} className="px-3 py-2.5 space-y-1.5">
-                                                    <div className="flex items-baseline justify-between gap-1">
-                                                        <span className="text-sm font-extrabold text-slate-800">{h.deposit_amount || "—"}</span>
-                                                        <span className="text-[10px] font-semibold text-slate-400">{fmtDate(h.payment_date)}</span>
-                                                    </div>
-                                                    <div className="inline-flex items-center gap-1 bg-white border border-slate-200 rounded-full px-2 py-0.5">
-                                                        <CreditCard className="h-2.5 w-2.5 text-slate-400" />
-                                                        <span className="text-[10px] font-semibold text-slate-600">{h.payment_mode || "—"}</span>
-                                                    </div>
-                                                    <p className="text-[9px] text-slate-400">
-                                                        {fmtDateTime(h.recordedAt)}{h.recordedBy ? ` · ${h.recordedBy}` : ""}
-                                                    </p>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
+                        <div key={college} className="rounded-2xl border border-slate-200 overflow-hidden">
+                            {/* College header */}
+                            <div className="px-4 py-2.5 bg-indigo-50/60 border-b border-indigo-100 flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                    <Building2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                                    <span className="text-xs font-extrabold text-indigo-700 truncate">{college}</span>
+                                    <span className="text-[10px] font-bold text-indigo-400 bg-white/70 border border-indigo-100 rounded-full px-1.5 py-0.5 shrink-0">
+                                        {entries.length}
+                                    </span>
+                                </div>
+                                <button onClick={() => openAdd(college === UNSPECIFIED ? "" : college)}
+                                    className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
+                                    <Plus className="h-3 w-3" /> Add
+                                </button>
                             </div>
+
+                            {/* Latest deposit for this college */}
+                            <div className="px-4 py-3 grid grid-cols-3 gap-3">
+                                <div>
+                                    <p className={labelCls}>Amount</p>
+                                    <p className="text-sm font-bold text-slate-800 break-words">{latest.deposit_amount || "—"}</p>
+                                </div>
+                                <div>
+                                    <p className={labelCls}>Mode</p>
+                                    <p className="text-sm font-bold text-slate-800 flex items-center gap-1">
+                                        <CreditCard className="h-3.5 w-3.5 text-slate-400" /> {latest.payment_mode || "—"}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className={labelCls}>Date</p>
+                                    <p className="text-sm font-bold text-slate-800 flex items-center gap-1">
+                                        <CalendarDays className="h-3.5 w-3.5 text-slate-400" /> {fmtDate(latest.payment_date)}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* This college's receipt */}
+                            <div className="px-4 pb-3">
+                                {receipt?.url ? (
+                                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
+                                        <div className="h-7 w-7 rounded-lg bg-rose-50 flex items-center justify-center shrink-0">
+                                            <FileText className="h-3.5 w-3.5 text-rose-500" />
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-700 truncate flex-1">{receipt.fileName || "Deposit Receipt.pdf"}</span>
+                                        <a href={fileUrl(receipt.url)} target="_blank" rel="noreferrer" title="View receipt"
+                                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+                                            <Eye className="h-3.5 w-3.5" />
+                                        </a>
+                                        <button type="button" onClick={() => triggerReceiptUpload(college)} disabled={busy} title="Replace"
+                                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50">
+                                            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                                        </button>
+                                        <button type="button" onClick={() => handleReceiptDelete(college)} disabled={busy} title="Remove"
+                                            className="p-1.5 rounded-lg text-rose-400 hover:text-rose-700 hover:bg-rose-50 transition-colors disabled:opacity-50">
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button type="button" onClick={() => triggerReceiptUpload(college)} disabled={busy || college === UNSPECIFIED}
+                                        title={college === UNSPECIFIED ? "Assign a college first" : "Attach receipt"}
+                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-[11px] font-bold text-slate-500 border border-dashed border-slate-300 rounded-lg hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/40 transition-colors disabled:opacity-50">
+                                        {busy ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</> : <><Upload className="h-3.5 w-3.5" /> Attach PDF receipt</>}
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Collapsible history for this college */}
+                            {entries.length > 1 && (
+                                <div className="border-t border-slate-100">
+                                    <button onClick={() => setExpanded(prev => {
+                                        const n = new Set(prev);
+                                        n.has(college) ? n.delete(college) : n.add(college);
+                                        return n;
+                                    })}
+                                        className="w-full px-4 py-2 flex items-center gap-1.5 text-[10px] font-extrabold text-slate-400 uppercase tracking-wide hover:bg-slate-50 transition-colors">
+                                        <History className="h-3 w-3" /> History ({entries.length - 1} earlier)
+                                        <ChevronDown className={cn("h-3.5 w-3.5 ml-auto transition-transform", isOpen && "rotate-180")} />
+                                    </button>
+                                    {isOpen && (
+                                        <ul className="px-4 pb-3 space-y-2">
+                                            {entries.slice(1).map((h, i) => (
+                                                <li key={i} className="flex items-start gap-2 text-[11px]">
+                                                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-300 shrink-0" />
+                                                    <div className="min-w-0">
+                                                        <p className="font-semibold text-slate-700">
+                                                            {h.deposit_amount || "—"} · {h.payment_mode || "—"} · {fmtDate(h.payment_date)}
+                                                        </p>
+                                                        <p className="text-slate-400">
+                                                            {fmtDateTime(h.recordedAt)}{h.recordedBy ? ` · ${h.recordedBy}` : ""}
+                                                        </p>
+                                                    </div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     );
-                })()}
+                })}
             </div>
 
-            {/* Edit modal */}
+            {/* Add-deposit modal */}
             {open && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => !saveMut.isPending && setOpen(false)}>
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
                         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <Wallet className="h-4 w-4 text-emerald-500" />
-                                <h3 className="text-sm font-bold text-slate-800">Deposit Details</h3>
+                                <h3 className="text-sm font-bold text-slate-800">Add Deposit</h3>
                             </div>
                             <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600">
                                 <X className="h-4 w-4" />
@@ -260,101 +319,53 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
                         </div>
 
                         <div className="p-5 space-y-4">
+                            {/* College selector */}
+                            <div className="space-y-1">
+                                <label className={labelCls}>College / University</label>
+                                {collegeOptions.length > 0 ? (
+                                    <select className={inputCls} value={draft.deposit_college || ""} onChange={e => setDraft(d => ({ ...d, deposit_college: e.target.value }))}>
+                                        <option value="">— Select College —</option>
+                                        {collegeOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                ) : (
+                                    <input className={inputCls} placeholder="College / University name" value={draft.deposit_college || ""} onChange={e => setDraft(d => ({ ...d, deposit_college: e.target.value }))} />
+                                )}
+                            </div>
+
                             <div className="space-y-1">
                                 <label className={labelCls}>Deposit Amount</label>
                                 <input className={inputCls} placeholder="e.g. $5,000 CAD / £3,000" value={draft.deposit_amount || ""} onChange={e => setDraft(d => ({ ...d, deposit_amount: e.target.value }))} />
                             </div>
+
                             <div className="space-y-1.5">
                                 <label className={labelCls}>Mode of Payment</label>
                                 <select
                                     className={inputCls}
-                                    value={
-                                        // If current draft mode is not built-in, show the sentinel
-                                        BUILT_IN_MODES.includes(draft.payment_mode)
-                                            ? draft.payment_mode
-                                            : draft.payment_mode
-                                                ? CUSTOM_SENTINEL
-                                                : ""
-                                    }
+                                    value={BUILT_IN_MODES.includes(draft.payment_mode) ? draft.payment_mode : (draft.payment_mode ? CUSTOM_SENTINEL : "")}
                                     onChange={e => {
                                         const val = e.target.value;
-                                        if (val === CUSTOM_SENTINEL) {
-                                            setDraft(d => ({ ...d, payment_mode: CUSTOM_SENTINEL }));
-                                        } else {
-                                            setCustomMode("");
-                                            setDraft(d => ({ ...d, payment_mode: val }));
-                                        }
+                                        if (val === CUSTOM_SENTINEL) setDraft(d => ({ ...d, payment_mode: CUSTOM_SENTINEL }));
+                                        else { setCustomMode(""); setDraft(d => ({ ...d, payment_mode: val })); }
                                     }}
                                 >
                                     <option value="">— Select —</option>
                                     {BUILT_IN_MODES.map(m => <option key={m} value={m}>{m}</option>)}
                                     <option value={CUSTOM_SENTINEL}>➕ Add Custom...</option>
                                 </select>
-
-                                {/* Custom mode input — only visible when "Add Custom..." is selected */}
                                 {(draft.payment_mode === CUSTOM_SENTINEL || (!BUILT_IN_MODES.includes(draft.payment_mode) && draft.payment_mode)) && (
                                     <div className="flex items-center gap-2 mt-1.5">
                                         <Plus className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-                                        <input
-                                            autoFocus
-                                            className={inputCls}
-                                            placeholder="Type custom payment mode..."
-                                            value={customMode}
-                                            onChange={e => setCustomMode(e.target.value)}
-                                        />
+                                        <input autoFocus className={inputCls} placeholder="Type custom payment mode..." value={customMode} onChange={e => setCustomMode(e.target.value)} />
                                     </div>
                                 )}
                             </div>
+
                             <div className="space-y-1">
                                 <label className={labelCls}>Date of Payment</label>
                                 <input type="date" className={inputCls} value={draft.payment_date || ""} onChange={e => setDraft(d => ({ ...d, payment_date: e.target.value }))} />
                             </div>
 
-                            {/* Deposit Receipt — PDF attachment */}
-                            <div className="space-y-1.5">
-                                <label className={labelCls}>Deposit Receipt <span className="text-slate-400 font-medium normal-case">(PDF)</span></label>
-                                <input
-                                    type="file"
-                                    ref={receiptInputRef}
-                                    accept="application/pdf"
-                                    className="hidden"
-                                    onChange={e => { handleReceiptUpload(e.target.files?.[0]); e.target.value = ""; }}
-                                />
-                                {receiptDoc?.url ? (
-                                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
-                                        <div className="h-8 w-8 rounded-lg bg-rose-50 flex items-center justify-center shrink-0">
-                                            <FileText className="h-4 w-4 text-rose-500" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="text-xs font-bold text-slate-700 truncate">{receiptDoc.fileName || "Deposit Receipt.pdf"}</p>
-                                            {receiptDoc.uploadedAt && (
-                                                <p className="text-[10px] text-slate-400">Uploaded {fmtDate(receiptDoc.uploadedAt)}</p>
-                                            )}
-                                        </div>
-                                        <a href={fileUrl(receiptDoc.url)} target="_blank" rel="noreferrer" title="View receipt"
-                                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
-                                            <Eye className="h-3.5 w-3.5" />
-                                        </a>
-                                        <button type="button" onClick={() => receiptInputRef.current?.click()} disabled={uploadingReceipt} title="Replace"
-                                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50">
-                                            {uploadingReceipt ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                                        </button>
-                                        <button type="button" onClick={handleReceiptDelete} disabled={uploadingReceipt} title="Remove"
-                                            className="p-1.5 rounded-lg text-rose-400 hover:text-rose-700 hover:bg-rose-50 transition-colors disabled:opacity-50">
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        onClick={() => receiptInputRef.current?.click()}
-                                        disabled={uploadingReceipt}
-                                        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-bold text-slate-500 border border-dashed border-slate-300 rounded-lg hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/40 transition-colors disabled:opacity-50"
-                                    >
-                                        {uploadingReceipt ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</> : <><Upload className="h-4 w-4" /> Attach PDF receipt</>}
-                                    </button>
-                                )}
-                            </div>
+                            <p className="text-[10px] text-slate-400">Attach the receipt PDF from the college card after saving.</p>
                         </div>
 
                         <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-end gap-2">
