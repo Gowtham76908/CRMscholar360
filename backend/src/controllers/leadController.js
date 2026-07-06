@@ -310,6 +310,23 @@ const getLead = async (req, res, next) => {
         // Sign locally-stored resumes so the cross-origin <a> link can fetch them
         // without relying on third-party cookies (Cloudinary URLs pass through unchanged).
         if (lead.resumeUrl) lead.resumeUrl = signUploadUrl(lead.resumeUrl);
+
+        // Sign customFields documents
+        if (lead.customFields && typeof lead.customFields === "object" && !Array.isArray(lead.customFields)) {
+            const customFields = { ...lead.customFields };
+            if (Array.isArray(customFields.documents)) {
+                customFields.documents = customFields.documents.map(doc => {
+                    if (doc.url) {
+                        return {
+                            ...doc,
+                            url: signUploadUrl(doc.url)
+                        };
+                    }
+                    return doc;
+                });
+                lead.customFields = customFields;
+            }
+        }
         res.json(lead);
     } catch (error) {
         return next(error);
@@ -376,6 +393,7 @@ const getLeadActivities = async (req, res, next) => {
                 }
                 // Sign locally-stored resume links in RESUME_UPLOADED activities
                 if (meta.resumeUrl) meta.resumeUrl = signUploadUrl(meta.resumeUrl);
+                if (meta.documentUrl) meta.documentUrl = signUploadUrl(meta.documentUrl);
             }
             return { ...act, metadata: meta };
         });

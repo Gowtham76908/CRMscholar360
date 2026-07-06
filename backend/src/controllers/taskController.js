@@ -5,6 +5,19 @@ const { getTasksSchema, getCalendarSchema } = require("../validations/task.valid
 const { ApiError, ERROR_CODES } = require("../utils/apiError");
 const logActivity = require("../utils/activityLogger");
 const { canAccessLead } = require("../services/permissionService");
+const { signUploadUrl } = require("../utils/signedUpload");
+
+const signTaskFiles = (task) => {
+    if (task && Array.isArray(task.files)) {
+        task.files = task.files.map(f => {
+            if (f.fileUrl) {
+                return { ...f, fileUrl: signUploadUrl(f.fileUrl) };
+            }
+            return f;
+        });
+    }
+    return task;
+};
 
 const taskInclude = {
     lead: {
@@ -92,7 +105,7 @@ const createTask = async (req, res, next) => {
             include: taskInclude
         });
 
-        res.status(201).json({ message: "Task created successfully", task: newTask });
+        res.status(201).json({ message: "Task created successfully", task: signTaskFiles(newTask) });
 
         logActivity({
             leadId:   newTask.leadId ?? null,
@@ -179,7 +192,7 @@ const getTaskById = async (req, res, next) => {
             include: taskInclude
         });
         if (!task) throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Task not found");
-        res.json(task);
+        res.json(signTaskFiles(task));
     } catch (error) {
         return next(error);
     }
@@ -213,7 +226,7 @@ const updateTask = async (req, res, next) => {
             },
             include: taskInclude
         });
-        res.json({ message: "Task updated", task });
+        res.json({ message: "Task updated", task: signTaskFiles(task) });
 
         const changes = Object.fromEntries(
             Object.entries({ title, description, assignedTo, dueDate, priority, type, storyPoints, estimatedHours, actualHours, labels, sprintId, leadId })
