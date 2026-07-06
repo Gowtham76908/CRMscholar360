@@ -190,47 +190,59 @@ export default function LeadDepositPanel({ leadId, lead, embedded = false }) {
                     </a>
                 )}
 
-                {/* History */}
-                {history.length > 0 && (
-                    <div className="mt-4 pt-3 border-t border-gray-100">
-                        <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1 mb-3">
-                            <History className="h-3 w-3" /> Deposit History ({history.length})
-                        </p>
-                        <div className="space-y-2.5">
-                            {history.map((h, i) => (
-                                <div key={i} className="rounded-xl border border-slate-100 bg-slate-50/60 px-3.5 py-3 space-y-2">
-                                    {/* College badge */}
-                                    {h.deposit_college && (
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] font-bold text-indigo-600">
-                                                🏫 {h.deposit_college}
-                                            </span>
+                {/* History — grouped by college as separate columns */}
+                {history.length > 0 && (() => {
+                    // Group entries by college name
+                    const groups = {};
+                    history.forEach(h => {
+                        const key = h.deposit_college || "—";
+                        if (!groups[key]) groups[key] = [];
+                        groups[key].push(h);
+                    });
+                    const groupEntries = Object.entries(groups);
+                    return (
+                        <div className="mt-4 pt-3 border-t border-gray-100">
+                            <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1 mb-3">
+                                <History className="h-3 w-3" /> Deposits by College ({groupEntries.length})
+                            </p>
+                            {/* Scrollable horizontal column layout */}
+                            <div className="flex gap-3 overflow-x-auto pb-1">
+                                {groupEntries.map(([collegeName, entries]) => (
+                                    <div
+                                        key={collegeName}
+                                        className="flex-none w-52 rounded-2xl border border-indigo-100 bg-indigo-50/30 overflow-hidden"
+                                    >
+                                        {/* College header */}
+                                        <div className="px-3 py-2 bg-indigo-50 border-b border-indigo-100 flex items-center gap-1.5">
+                                            <span className="text-sm">🏫</span>
+                                            <p className="text-[10px] font-extrabold text-indigo-700 uppercase tracking-wide truncate">
+                                                {collegeName}
+                                            </p>
                                         </div>
-                                    )}
-                                    {/* Amount / Mode / Date row */}
-                                    <div className="grid grid-cols-3 gap-2">
-                                        <div>
-                                            <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide">Amount</p>
-                                            <p className="text-xs font-bold text-slate-800 break-words">{h.deposit_amount || "—"}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide">Mode</p>
-                                            <p className="text-xs font-bold text-slate-700">{h.payment_mode || "—"}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide">Date</p>
-                                            <p className="text-xs font-bold text-slate-700">{fmtDate(h.payment_date) || "—"}</p>
+                                        {/* Deposit entries for this college */}
+                                        <div className="divide-y divide-indigo-100/60">
+                                            {entries.map((h, i) => (
+                                                <div key={i} className="px-3 py-2.5 space-y-1.5">
+                                                    <div className="flex items-baseline justify-between gap-1">
+                                                        <span className="text-sm font-extrabold text-slate-800">{h.deposit_amount || "—"}</span>
+                                                        <span className="text-[10px] font-semibold text-slate-400">{fmtDate(h.payment_date)}</span>
+                                                    </div>
+                                                    <div className="inline-flex items-center gap-1 bg-white border border-slate-200 rounded-full px-2 py-0.5">
+                                                        <CreditCard className="h-2.5 w-2.5 text-slate-400" />
+                                                        <span className="text-[10px] font-semibold text-slate-600">{h.payment_mode || "—"}</span>
+                                                    </div>
+                                                    <p className="text-[9px] text-slate-400">
+                                                        {fmtDateTime(h.recordedAt)}{h.recordedBy ? ` · ${h.recordedBy}` : ""}
+                                                    </p>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
-                                    {/* Recorded metadata */}
-                                    <p className="text-[10px] text-slate-400">
-                                        Recorded {fmtDateTime(h.recordedAt)}{h.recordedBy ? ` · by ${h.recordedBy}` : ""}
-                                    </p>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
-                    </div>
-                )}
+                    );
+                })()}
             </div>
 
             {/* Edit modal */}
