@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
     Calendar, PhoneCall, CheckSquare, GraduationCap,
     FileText, Award, UploadCloud, ShieldCheck,
-    CheckCircle2, AlertCircle, RefreshCw, Send, Loader2, ArrowRight, X, List, Save, Plus, Trash2, Search, Check, ChevronDown, User, MapPin, Globe, ShieldAlert, Phone, Briefcase, BookOpen
+    CheckCircle2, AlertCircle, RefreshCw, Send, Loader2, ArrowRight, X, List, Save, Plus, Trash2, Search, Check, ChevronDown, User, MapPin, Globe, ShieldAlert, Phone, Briefcase, BookOpen, Wallet
 } from "lucide-react";
 import api from "../../api/axios";
 import { cn } from "../../lib/utils";
@@ -272,6 +272,8 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
     const [uploadingProof, setUploadingProof] = useState(false);
     const [validationErrors, setValidationErrors] = useState({});
     const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+    // Per-university inline deposit form state
+    const [univDepositModal, setUnivDepositModal] = useState(null); // { univName, amount, mode, date, customMode, saving }
 
     const renderTestField = (testName, fieldKey, label, type = "text", required = false) => {
         const name = `testScores.${testName}.${fieldKey}`;
@@ -976,24 +978,28 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                 const resolvedPaymentMode = formValues.payment_mode === "__custom__"
                     ? customPaymentMode.trim()
                     : (formValues.payment_mode || "");
+                const selectedCollege = formValues.deposit_college || "";
                 const historyEntry = {
                     deposit_amount: formValues.deposit_amount || "",
                     payment_mode: resolvedPaymentMode,
                     payment_date: formValues.payment_date || "",
+                    deposit_college: selectedCollege,
                     recordedAt: new Date().toISOString(),
                 };
                 await saveCustomFieldsMut.mutateAsync({
                     deposit_amount: formValues.deposit_amount || "",
                     payment_mode: resolvedPaymentMode,
                     payment_date: formValues.payment_date || "",
+                    deposit_college: selectedCollege,
                     deposit_history: [historyEntry, ...prevHistory]
                 });
                 // Surface the payment details on the lead's activity timeline.
                 const paidOn = formValues.payment_date
                     ? new Date(formValues.payment_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
                     : "—";
+                const collegeNote = selectedCollege ? ` · College: ${selectedCollege}` : "";
                 await api.post(`/leads/${lead.id}/notes`, {
-                    content: `💰 Deposit recorded — Amount: ${formValues.deposit_amount || "—"} · Mode: ${resolvedPaymentMode || "—"} · Date: ${paidOn}`
+                    content: `💰 Deposit recorded — Amount: ${formValues.deposit_amount || "—"} · Mode: ${resolvedPaymentMode || "—"} · Date: ${paidOn}${collegeNote}`
                 });
                 // Stage progression is manual — save the deposit details but do NOT
                 // auto-advance to Visa Documentation. The user moves it forward
@@ -1263,7 +1269,8 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             setFormValues({
                 deposit_amount: customFields.deposit_amount || "",
                 payment_mode: customFields.payment_mode || "",
-                payment_date: customFields.payment_date || ""
+                payment_date: customFields.payment_date || "",
+                deposit_college: customFields.deposit_college || ""
             });
         }
         else if (currentStage === "VISA_DOCUMENTATION") {
@@ -2643,6 +2650,123 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                                     Confirmed for Admission
                                                 </label>
                                             </div>
+
+                                            {/* Per-university deposit button */}
+                                            <div className="pt-2 border-t border-slate-100">
+                                                {univDepositModal?.univName === univ.univ_name ? (
+                                                    // Inline deposit form
+                                                    <div className="space-y-3 bg-emerald-50/60 border border-emerald-100 rounded-xl p-3">
+                                                        <div className="flex items-center gap-1.5 mb-1">
+                                                            <Wallet className="h-3.5 w-3.5 text-emerald-600" />
+                                                            <span className="text-xs font-bold text-emerald-700">Add Deposit for {univ.univ_name}</span>
+                                                        </div>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Deposit Amount (e.g. £5,000)"
+                                                            value={univDepositModal.amount || ""}
+                                                            onChange={e => setUnivDepositModal(s => ({ ...s, amount: e.target.value }))}
+                                                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500 bg-white font-semibold"
+                                                        />
+                                                        <select
+                                                            value={DEPOSIT_BUILT_IN_MODES.includes(univDepositModal.mode) ? univDepositModal.mode : (univDepositModal.mode ? "__custom__" : "")}
+                                                            onChange={e => {
+                                                                const val = e.target.value;
+                                                                if (val === "__custom__") {
+                                                                    setUnivDepositModal(s => ({ ...s, mode: "__custom__", customMode: "" }));
+                                                                } else {
+                                                                    setUnivDepositModal(s => ({ ...s, mode: val, customMode: "" }));
+                                                                }
+                                                            }}
+                                                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500 bg-white font-semibold"
+                                                        >
+                                                            <option value="">— Mode of Payment —</option>
+                                                            {DEPOSIT_BUILT_IN_MODES.map(m => <option key={m} value={m}>{m}</option>)}
+                                                            <option value="__custom__">➕ Add Custom...</option>
+                                                        </select>
+                                                        {(univDepositModal.mode === "__custom__" || (!DEPOSIT_BUILT_IN_MODES.includes(univDepositModal.mode) && univDepositModal.mode)) && (
+                                                            <input
+                                                                autoFocus
+                                                                type="text"
+                                                                placeholder="Custom payment mode..."
+                                                                value={univDepositModal.customMode || ""}
+                                                                onChange={e => setUnivDepositModal(s => ({ ...s, customMode: e.target.value }))}
+                                                                className="w-full px-3 py-2 text-xs border border-emerald-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500 bg-white font-semibold"
+                                                            />
+                                                        )}
+                                                        <input
+                                                            type="date"
+                                                            value={univDepositModal.date || ""}
+                                                            onChange={e => setUnivDepositModal(s => ({ ...s, date: e.target.value }))}
+                                                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500 bg-white font-semibold"
+                                                        />
+                                                        <div className="flex gap-2 pt-1">
+                                                            <button
+                                                                type="button"
+                                                                disabled={univDepositModal.saving}
+                                                                onClick={async () => {
+                                                                    const resolvedMode = univDepositModal.mode === "__custom__"
+                                                                        ? (univDepositModal.customMode || "").trim()
+                                                                        : (univDepositModal.mode || "");
+                                                                    if (!univDepositModal.amount && !resolvedMode) return;
+                                                                    setUnivDepositModal(s => ({ ...s, saving: true }));
+                                                                    try {
+                                                                        const cf = lead?.customFields || {};
+                                                                        const prevHistory = Array.isArray(cf.deposit_history) ? cf.deposit_history : [];
+                                                                        const entry = {
+                                                                            deposit_amount: univDepositModal.amount || "",
+                                                                            payment_mode: resolvedMode,
+                                                                            payment_date: univDepositModal.date || "",
+                                                                            deposit_college: univ.univ_name,
+                                                                            recordedAt: new Date().toISOString(),
+                                                                        };
+                                                                        await api.patch(`/leads/${lead.id}/custom-fields`, {
+                                                                            fields: {
+                                                                                deposit_amount: univDepositModal.amount || cf.deposit_amount || "",
+                                                                                payment_mode: resolvedMode || cf.payment_mode || "",
+                                                                                payment_date: univDepositModal.date || cf.payment_date || "",
+                                                                                deposit_college: univ.univ_name,
+                                                                                deposit_history: [entry, ...prevHistory],
+                                                                            }
+                                                                        });
+                                                                        const paidOn = univDepositModal.date
+                                                                            ? new Date(univDepositModal.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                                                                            : "—";
+                                                                        await api.post(`/leads/${lead.id}/notes`, {
+                                                                            content: `💰 Deposit recorded — Amount: ${univDepositModal.amount || "—"} · Mode: ${resolvedMode || "—"} · Date: ${paidOn} · College: ${univ.univ_name}`
+                                                                        });
+                                                                        toast.success(`Deposit saved for ${univ.univ_name}`);
+                                                                        onChanged();
+                                                                        setUnivDepositModal(null);
+                                                                    } catch (err) {
+                                                                        toast.error(err?.response?.data?.message || "Failed to save deposit");
+                                                                        setUnivDepositModal(s => ({ ...s, saving: false }));
+                                                                    }
+                                                                }}
+                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-colors"
+                                                            >
+                                                                {univDepositModal.saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
+                                                                Save Deposit
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setUnivDepositModal(null)}
+                                                                className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setUnivDepositModal({ univName: univ.univ_name, amount: "", mode: "", date: "", customMode: "", saving: false })}
+                                                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors"
+                                                    >
+                                                        <Wallet className="h-3.5 w-3.5" />
+                                                        Add Deposit for this University
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     ))}
                                     <p className="text-[11px] text-blue-600 bg-blue-50 border border-blue-100 p-2.5 rounded-lg leading-relaxed font-semibold mt-3">
@@ -2652,8 +2776,33 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                             )}
 
                             {/* DEPOSIT_STATUS Payment */}
-                            {currentStage === "DEPOSIT_STATUS" && !isProfileMode && (
+                            {currentStage === "DEPOSIT_STATUS" && !isProfileMode && (() => {
+                                const shortlist = Array.isArray(customFields.shortlisted_universities)
+                                    ? customFields.shortlisted_universities
+                                    : customFields.univ_name
+                                        ? [{ univ_name: customFields.univ_name, univ_country: customFields.univ_country || "", univ_course: customFields.univ_course || "" }]
+                                        : [];
+                                return (
                                 <div className="space-y-4">
+                                    {/* College selector */}
+                                    {shortlist.length > 0 && (
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-semibold text-slate-500 uppercase">Select College / University</label>
+                                            <select
+                                                required
+                                                value={formValues.deposit_college || ""}
+                                                onChange={e => setFormValues({ ...formValues, deposit_college: e.target.value })}
+                                                className="w-full px-3 py-2 text-sm border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-indigo-50/30 font-semibold text-slate-700"
+                                            >
+                                                <option value="">— Select College —</option>
+                                                {shortlist.map((u, idx) => (
+                                                    <option key={idx} value={u.univ_name}>
+                                                        {u.univ_name}{u.univ_country ? ` · ${u.univ_country}` : ""}{u.univ_course ? ` (${u.univ_course})` : ""}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 uppercase">Deposit Amount</label>
                                         <input
@@ -2719,7 +2868,8 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                         ℹ️ System Action: Accommodation department will be activated instantly on submit.
                                     </p>
                                 </div>
-                            )}
+                                );
+                            })()}
 
                             {/* VISA_DOCUMENTATION Verification */}
                             {currentStage === "VISA_DOCUMENTATION" && !isProfileMode && (
