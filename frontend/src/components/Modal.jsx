@@ -18,7 +18,7 @@ export const Modal = ({ isOpen, onClose, title, children }) => {
                     </button>
                 </div>
                 {/* Body */}
-                <div className="relative p-6 flex-auto">{children}</div>
+                <div className="relative p-6 flex-auto max-h-[75vh] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">{children}</div>
             </div>
         </div>
     );

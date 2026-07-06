@@ -14,7 +14,7 @@ import {
     Zap, Users, Save, SlidersHorizontal, Eye, MousePointerClick, GitBranch,
     TrendingUp, IndianRupee, Pencil, Paperclip, ArrowRight,
     PanelRightOpen, PanelRightClose, Archive, MoreVertical, RefreshCw, RotateCcw, Copy, Trash2,
-    Globe, Download, CheckCheck, Check,
+    Globe, Download, CheckCheck, Check, Bell,
 } from "lucide-react";
 import { Modal } from "../components/Modal";
 import SlidePanel from "../components/SlidePanel";
@@ -397,15 +397,36 @@ function TimelineItem({ item }) {
             );
         }
         if (item.action === "REMINDER_SET" && meta.remindAt) {
+            const due = new Date(meta.remindAt);
+            const diffMs = due.getTime() - Date.now();
+            const overdue = diffMs < 0;
+            const absMs = Math.abs(diffMs);
+            const d = Math.floor(absMs / 86_400_000);
+            const h = Math.floor((absMs % 86_400_000) / 3_600_000);
+            const m = Math.floor((absMs % 3_600_000) / 60_000);
+            const rel = d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${Math.max(m, 1)}m`;
+            const relLabel = overdue ? `${rel} overdue` : `in ${rel}`;
+            const t = overdue
+                ? { box: "bg-rose-50 border-rose-100", tile: "bg-rose-100 text-rose-600", title: "text-rose-900", meta: "text-rose-500", pill: "bg-rose-100 text-rose-700" }
+                : { box: "bg-amber-50 border-amber-100", tile: "bg-amber-100 text-amber-600", title: "text-amber-900", meta: "text-amber-600", pill: "bg-amber-100 text-amber-700" };
             return (
-                <div className="mt-1.5 flex items-start gap-2.5 bg-amber-50 border border-amber-100 rounded-lg p-2.5">
-                    <div className="h-6 w-6 rounded-md bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
-                        <Clock className="h-3.5 w-3.5 text-amber-600" />
+                <div className={`mt-2 flex items-stretch gap-2.5 rounded-xl border p-2.5 ${t.box}`}>
+                    <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${t.tile}`}>
+                        <Bell className="h-4 w-4" />
                     </div>
-                    <div className="min-w-0 space-y-0.5">
-                        {meta.message && <p className="text-xs font-semibold text-amber-900">{meta.message}</p>}
-                        <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">
-                            Due {new Date(meta.remindAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                            <span className={`text-[10px] font-bold uppercase tracking-wide ${t.meta}`}>Reminder</span>
+                            <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${t.pill}`}>
+                                <Clock className="h-2.5 w-2.5" /> {relLabel}
+                            </span>
+                        </div>
+                        {meta.message && <p className={`text-xs font-semibold leading-snug ${t.title}`}>{meta.message}</p>}
+                        <p className={`flex items-center gap-1.5 text-[11px] font-semibold ${t.meta}`}>
+                            <Calendar className="h-3 w-3 shrink-0" />
+                            {due.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
+                            <span className="opacity-50">·</span>
+                            {due.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
                         </p>
                     </div>
                 </div>
