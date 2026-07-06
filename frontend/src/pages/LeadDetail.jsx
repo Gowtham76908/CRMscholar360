@@ -1669,14 +1669,7 @@ export default function LeadDetail() {
                                     <span>Assignee: {primaryDept?.assignedEmployee?.name || "Unassigned"}</span>
                                     <ChevronDown className="h-3 w-3 text-indigo-400" />
                                 </button>
-                                <button
-                                    onClick={() => setDepartmentsOpen(true)}
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors cursor-pointer"
-                                    title="Allocate Departments"
-                                >
-                                    <GitBranch className="h-3 w-3 text-slate-400" />
-                                    <span>Manage Departments</span>
-                                </button>
+
                                 {lead.score != null && (
                                     <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-br from-purple-50 to-indigo-50 text-purple-700 border border-purple-100">
                                         <span className="font-black">{lead.score}</span>
