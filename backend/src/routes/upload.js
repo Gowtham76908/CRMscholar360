@@ -8,6 +8,7 @@ const authMiddleware = require("../middleware/authMiddleware");
 const prisma = require("../utils/prisma");
 const { toSafeUser } = require("../utils/safeUser");
 const { uploadToCloudinary } = require("../utils/cloudinary");
+const { signUploadUrl } = require("../utils/signedUpload");
 
 // Ensure upload directory exists
 const uploadDir = "uploads/profiles";
@@ -165,7 +166,7 @@ router.post("/task-files", (req, res, next) => {
 
             filesData.push({
                 fileName: file.originalname,
-                fileUrl: fileUrl,
+                fileUrl: signUploadUrl(fileUrl),
                 fileSize: file.size,
                 mimeType: file.mimetype
             });
@@ -312,7 +313,7 @@ router.post("/resume/:leadId", (req, res, next) => {
 
         res.json({
             message: "Resume uploaded successfully",
-            resumeUrl,
+            resumeUrl: signUploadUrl(resumeUrl),
             resumeName
         });
     } catch (error) {
@@ -452,9 +453,16 @@ router.post("/document/:leadId", (req, res, next) => {
             }
         });
 
+        const signedDocs = docs.map(d => {
+            if (d.url) {
+                return { ...d, url: signUploadUrl(d.url) };
+            }
+            return d;
+        });
+
         res.json({
             message: "Document uploaded successfully",
-            documents: docs
+            documents: signedDocs
         });
     } catch (error) {
         console.error("Document upload error:", error);
