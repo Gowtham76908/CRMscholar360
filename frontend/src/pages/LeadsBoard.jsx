@@ -168,7 +168,7 @@ export default function LeadsBoard({
         const update = () => {
             // Measure distance from top dynamically to size board to fit screen
             const top = el.getBoundingClientRect().top;
-            setBoardHeight(Math.max(window.innerHeight - top - 24, 320));
+            setBoardHeight(Math.max(window.innerHeight + top + 124, 220));
         };
         update();
         const ro = new ResizeObserver(update);
