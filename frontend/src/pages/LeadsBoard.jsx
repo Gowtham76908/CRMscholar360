@@ -190,11 +190,10 @@ export default function LeadsBoard({
                         <button
                             key={d}
                             onClick={() => changeDepartment(d)}
-                            className={`px-5 py-2 rounded-full text-xs font-bold transition-all duration-300 relative cursor-pointer ${
-                                department === d 
-                                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-200/50 scale-[1.03]" 
+                            className={`px-5 py-2 rounded-full text-xs font-bold transition-all duration-300 relative cursor-pointer ${department === d
+                                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-200/50 scale-[1.03]"
                                     : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
-                            }`}
+                                }`}
                         >
                             {departmentLabel(d)}
                         </button>
@@ -227,7 +226,7 @@ export default function LeadsBoard({
                         sticky proxy bar at the bottom of the screen drives it instead. */}
                     <div
                         ref={boardScrollRef}
-                        style={boardHeight ? { height: `${boardHeight}px` } : undefined}
+                        style={boardHeight ? { height: `${boardHeight + 20}px` } : undefined}
                         className={`flex gap-5 overflow-x-auto overflow-y-hidden pt-2 pb-2 items-stretch transition-opacity duration-150 select-none scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent ${boardHeight ? "" : "h-[calc(100vh-170px)]"} ${isFetching ? "opacity-60" : ""}`}
                     >
                         {stages.map((stage) => (
@@ -239,7 +238,7 @@ export default function LeadsBoard({
                                 totalInStage={columns[stage.code]?.total ?? 0}
                                 slaWarningDays={slaWarningDays}
                                 slaBreachDays={slaBreachDays}
-                                  onPreviewTask={setPreviewTask}
+                                onPreviewTask={setPreviewTask}
                                 onAssignClick={(lead) => setAssigningLead(lead)}
                             />
                         ))}
@@ -315,17 +314,17 @@ function formatLastUpdated(date) {
     const updated = new Date(date);
     const diffMs = now - updated;
     if (diffMs < 0) return "just now";
-    
+
     const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
     const isToday = now.toDateString() === updated.toDateString();
-    
+
     if (isToday) {
         if (diffHrs < 1) {
             return "less than 1 hr";
         }
         return `${diffHrs} hr${diffHrs === 1 ? "" : "s"} ago`;
     }
-    
+
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
     if (diffDays <= 0) {
         return "1 day ago";
@@ -359,13 +358,12 @@ function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTas
     return (
         <Link
             to={`/leads/${lead.id}`}
-            className={`group block bg-white rounded-xl border transition-all duration-300 p-3.5 relative overflow-visible shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-indigo-400/80 ${
-                sla?.level === "breach" 
-                    ? "border-red-200 bg-gradient-to-br from-white to-red-50/5 border-l-[4px] border-l-red-500" 
+            className={`group block bg-white rounded-xl border transition-all duration-300 p-3.5 relative overflow-visible shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-indigo-400/80 ${sla?.level === "breach"
+                    ? "border-red-200 bg-gradient-to-br from-white to-red-50/5 border-l-[4px] border-l-red-500"
                     : sla?.level === "warning"
-                    ? "border-amber-200 bg-gradient-to-br from-white to-amber-50/5 border-l-[4px] border-l-amber-500"
-                    : "border-slate-200/75 border-l-[4px] border-l-indigo-400/30"
-            }`}
+                        ? "border-amber-200 bg-gradient-to-br from-white to-amber-50/5 border-l-[4px] border-l-amber-500"
+                        : "border-slate-200/75 border-l-[4px] border-l-indigo-400/30"
+                }`}
         >
             {/* Row 1 — name + SLA badge */}
             <div className="flex items-start justify-between gap-2.5">
@@ -373,11 +371,10 @@ function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTas
                     {lead.name}
                 </span>
                 {sla && (
-                    <span className={`flex-shrink-0 text-[9px] font-extrabold px-2 py-0.5 rounded-full border shadow-sm ${
-                        sla.level === "breach" 
-                            ? "bg-red-100/80 text-red-700 border-red-200" 
+                    <span className={`flex-shrink-0 text-[9px] font-extrabold px-2 py-0.5 rounded-full border shadow-sm ${sla.level === "breach"
+                            ? "bg-red-100/80 text-red-700 border-red-200"
                             : "bg-amber-100/80 text-amber-700 border-amber-200"
-                    }`}>
+                        }`}>
                         {sla.days}d inactive
                     </span>
                 )}
@@ -435,13 +432,13 @@ function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTas
                 <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 animate-fadeIn">
                     <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-1">Department Assignees</p>
                     {(lead.leadDepartments || []).map(ld => {
-                        const dotColor = 
+                        const dotColor =
                             ld.department === "SALES" ? "bg-indigo-500" :
-                            ld.department === "APPLICATION_VISA" ? "bg-sky-500" :
-                            ld.department === "LOAN" ? "bg-emerald-500" :
-                            ld.department === "ACCOMMODATION_TICKETS" ? "bg-amber-500" :
-                            ld.department === "FOREX" ? "bg-violet-500" :
-                            "bg-slate-400";
+                                ld.department === "APPLICATION_VISA" ? "bg-sky-500" :
+                                    ld.department === "LOAN" ? "bg-emerald-500" :
+                                        ld.department === "ACCOMMODATION_TICKETS" ? "bg-amber-500" :
+                                            ld.department === "FOREX" ? "bg-violet-500" :
+                                                "bg-slate-400";
                         return (
                             <div key={ld.id} className="flex items-center justify-between text-xs font-semibold py-1 border-b border-slate-50 last:border-0">
                                 <div className="flex items-center gap-1.5">
@@ -481,8 +478,8 @@ function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTas
                 {countries.length > 0 && (
                     <div className="flex items-center -space-x-1 hover:-space-x-0.5 transition-all duration-200">
                         {countries.map((c, i) => (
-                            <span 
-                                key={i} 
+                            <span
+                                key={i}
                                 className="group/flag relative w-5 h-5 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center text-xs shadow-xs select-none hover:scale-110 hover:z-10 transition-all duration-200 cursor-help"
                             >
                                 {getCountryFlag(c)}
@@ -656,11 +653,11 @@ function DepartmentAssignSection({ ld, onDone }) {
 
     const deptDotColor =
         ld.department === "SALES" ? "bg-indigo-500" :
-        ld.department === "APPLICATION_VISA" ? "bg-sky-500" :
-        ld.department === "LOAN" ? "bg-emerald-500" :
-        ld.department === "ACCOMMODATION_TICKETS" ? "bg-amber-500" :
-        ld.department === "FOREX" ? "bg-violet-500" :
-        "bg-slate-400";
+            ld.department === "APPLICATION_VISA" ? "bg-sky-500" :
+                ld.department === "LOAN" ? "bg-emerald-500" :
+                    ld.department === "ACCOMMODATION_TICKETS" ? "bg-amber-500" :
+                        ld.department === "FOREX" ? "bg-violet-500" :
+                            "bg-slate-400";
 
     return (
         <div className="rounded-xl border border-slate-200/70 overflow-hidden hover:border-slate-300 transition-colors">
@@ -704,9 +701,8 @@ function DepartmentAssignSection({ ld, onDone }) {
                                         e.stopPropagation();
                                         mut.mutate(m.id);
                                     }}
-                                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all duration-200 hover:bg-slate-50 focus:outline-none ${
-                                        isCurrent ? "bg-indigo-50/60 ring-1 ring-indigo-200" : "text-slate-700"
-                                    } ${mut.isPending ? "opacity-50 cursor-wait" : ""}`}
+                                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all duration-200 hover:bg-slate-50 focus:outline-none ${isCurrent ? "bg-indigo-50/60 ring-1 ring-indigo-200" : "text-slate-700"
+                                        } ${mut.isPending ? "opacity-50 cursor-wait" : ""}`}
                                 >
                                     <Avatar user={m} size="xs" className="w-7 h-7 shrink-0" />
                                     <div className="min-w-0 flex-1">
