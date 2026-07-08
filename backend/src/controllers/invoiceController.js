@@ -116,6 +116,7 @@ const createInvoice = async (req, res, next) => {
             notes,
             dealId,
             leadId,
+            department,
         } = req.body;
 
         if (!clientName) throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Client name is required");
@@ -145,6 +146,7 @@ const createInvoice = async (req, res, next) => {
                     createdById: userId,
                     dealId: dealId || null,
                     leadId: leadId || null,
+                    department: department || null,
                     items: { create: processedItems },
                 },
                 include: { items: true, payments: true, createdBy: { select: { id: true, name: true } } },
@@ -201,6 +203,7 @@ const getInvoices = async (req, res, next) => {
                     updatedAt: true,
                     dealId: true,
                     leadId: true,
+                    department: true,
                     payments: {
                         select: { amount: true, type: true },
                         orderBy: { paymentDate: "desc" },
@@ -409,7 +412,10 @@ const addPayment = async (req, res, next) => {
                 });
 
                 // Fully paid → advance the lead's SALES service to Commission Invoicing.
-                if (newStatus === "PAID") {
+                // Only a SALES invoice drives the Sales pipeline; a general (null) invoice
+                // is a separate manual bucket, and other-department invoices (e.g. LOAN)
+                // must not auto-advance Sales.
+                if (newStatus === "PAID" && invoice.department === "SALES") {
                     try {
                         await advanceSalesOnInvoicePaid(leadId, req.user.userId);
                     } catch (err) {

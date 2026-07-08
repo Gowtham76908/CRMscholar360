@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { createPortal } from "react-dom";
 import { LeadDetailSkeleton } from "../components/ui/Skeleton";
@@ -28,12 +28,18 @@ import StudentJourneyPanel from "../components/lead/StudentJourneyPanel";
 import LeadUniversitiesPanel from "../components/lead/LeadUniversitiesPanel";
 import LeadDepositPanel from "../components/lead/LeadDepositPanel";
 import LeadVisaPanel from "../components/lead/LeadVisaPanel";
+import LeadLoanPanel from "../components/lead/LeadLoanPanel";
+import LeadLoanJourneyCard from "../components/lead/LeadLoanJourneyCard";
+import LeadAccommodationPanel from "../components/lead/LeadAccommodationPanel";
+import LeadAccommodationJourneyCard from "../components/lead/LeadAccommodationJourneyCard";
+import LeadMiscellaneousPanel from "../components/lead/LeadMiscellaneousPanel";
 import SmartSuggestions from "../components/lead/SmartSuggestions";
 import WhatsAppModal from "../components/lead/WhatsAppModal";
 import PostCallPanel from "../components/lead/PostCallPanel";
 import ComposeEmailModal from "../components/ComposeEmailModal";
 import { useLeadPresence } from "../hooks/useLeadPresence";
 import { useLeadDepartments, useWorkflows } from "../hooks/useDepartments";
+import { departmentLabel } from "../lib/departments";
 import { ACTION_CONFIG, relTime } from "../lib/activity";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -44,16 +50,16 @@ const SOURCE_LABEL = {
 };
 
 const FILTER_PILLS = [
-    { id: "all",         label: "All", icon: SlidersHorizontal },
-    { id: "note",        label: "Notes", icon: Pencil },
-    { id: "call",        label: "Calls", icon: PhoneCall },
-    { id: "whatsapp",    label: "WhatsApp", icon: MessageSquare },
-    { id: "email",       label: "Email", icon: Mail },
-    { id: "activity",    label: "Activity", icon: Activity },
-    { id: "task",        label: "Tasks", icon: CheckCircle },
-    { id: "attachment",  label: "Attachments", icon: Paperclip },
-    { id: "document",    label: "Documents", icon: FileText },
-    { id: "visa",        label: "Visa Details", icon: Globe },
+    { id: "all", label: "All", icon: SlidersHorizontal },
+    { id: "note", label: "Notes", icon: Pencil },
+    { id: "call", label: "Calls", icon: PhoneCall },
+    { id: "whatsapp", label: "WhatsApp", icon: MessageSquare },
+    { id: "email", label: "Email", icon: Mail },
+    { id: "activity", label: "Activity", icon: Activity },
+    { id: "task", label: "Tasks", icon: CheckCircle },
+    { id: "attachment", label: "Attachments", icon: Paperclip },
+    { id: "document", label: "Documents", icon: FileText },
+    { id: "visa", label: "Visa Details", icon: Globe },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -81,11 +87,11 @@ const initials = (name = "") =>
 // Legacy audit-log status pills (historical STATUS_CHANGED entries only — the live
 // workflow stage now lives per-department in LeadDepartmentsPanel).
 const STATUS_PILL = {
-    NEW:       "bg-blue-100 text-blue-700",
+    NEW: "bg-blue-100 text-blue-700",
     CONTACTED: "bg-indigo-100 text-indigo-700",
     FOLLOW_UP: "bg-amber-100 text-amber-700",
     CONVERTED: "bg-green-100 text-green-700",
-    LOST:      "bg-red-100 text-red-700",
+    LOST: "bg-red-100 text-red-700",
 };
 
 function TimelineItem({ item }) {
@@ -371,9 +377,8 @@ function TimelineItem({ item }) {
                     <p className="text-xs font-medium text-gray-700">{item.subject}</p>
                     <p className="text-xs text-gray-500 line-clamp-2">{item.body}</p>
                     <div className="flex items-center gap-3 pt-0.5">
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                            item.openedAt ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"
-                        }`}>
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${item.openedAt ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"
+                            }`}>
                             <Eye className="h-2.5 w-2.5" />
                             {item.openedAt
                                 ? `Opened ${relTime(item.openedAt)}`
@@ -576,7 +581,7 @@ function CallItem({ call, leadId }) {
                     {call.recordingUrl && (
                         <div className="flex items-center gap-3 flex-wrap">
                             <a href={fileUrl(call.recordingUrl)} target="_blank" rel="noopener noreferrer"
-                               className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
                                 <Play className="h-3 w-3" /> Play Recording
                             </a>
                             {!call.isTranscribed && (
@@ -877,10 +882,10 @@ function CustomFieldsPanel({ leadId, lead }) {
 // ─── Deal Stage helpers ───────────────────────────────────────────────────────
 
 const DEAL_STAGE_STYLE = {
-    NEW:         "bg-blue-100 text-blue-800",
+    NEW: "bg-blue-100 text-blue-800",
     NEGOTIATION: "bg-orange-100 text-orange-800",
-    WON:         "bg-green-100 text-green-800",
-    LOST:        "bg-red-100 text-red-800",
+    WON: "bg-green-100 text-green-800",
+    LOST: "bg-red-100 text-red-800",
 };
 
 const CURRENCY_SYMBOL = { INR: "₹", USD: "$", EUR: "€", GBP: "£" };
@@ -1196,25 +1201,44 @@ export default function LeadDetail() {
     const { data: assignments = [] } = useLeadDepartments(id);
     const { stageLabel, getStages, hasWorkflow } = useWorkflows();
 
-    // Get primary (first) department for stage actions
-    const primaryDept = assignments.length > 0 ? assignments[0] : null;
+    // Which department's service the Stage Actions + status badge operate on.
+    // Defaults to the department the lead was opened from (?dept=…, e.g. clicking a
+    // card on the Loan board), falling back to the first accessible service (Sales).
+    // The `assignments` list is already visibility-scoped server-side, so it only
+    // ever contains services this user is allowed to act on.
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [activeDeptCode, setActiveDeptCode] = useState(searchParams.get("dept") || null);
+
+    const primaryDept = useMemo(() => {
+        if (assignments.length === 0) return null;
+        return assignments.find((a) => a.department === activeDeptCode) || assignments[0];
+    }, [assignments, activeDeptCode]);
+
+    // Switch which department service is active (updates URL so it survives refresh/share).
+    const switchDept = (code) => {
+        setActiveDeptCode(code);
+        setShowStageDropdown(false);
+        const next = new URLSearchParams(searchParams);
+        next.set("dept", code);
+        setSearchParams(next, { replace: true });
+    };
     const canUpdateStage = primaryDept && hasWorkflow(primaryDept.department);
-    
+
     // Calculate next and previous stages
     const stages = primaryDept ? getStages(primaryDept.department) : [];
     const currentIndex = stages.findIndex((s) => s.code === primaryDept?.stage);
     const nextStage = currentIndex !== -1 && currentIndex < stages.length - 1 ? stages[currentIndex + 1] : null;
     const prevStage = currentIndex > 0 ? stages[currentIndex - 1] : null;
-    
+
     // Check if user can move to previous (Manager or Director only)
     const canMoveToPrevious = (user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && prevStage;
-    
+
     // Check current stage for special actions
     const isArchived = primaryDept?.stage === "ARCHIVE";
     const isFutureProspect = primaryDept?.stage === "FUTURE_PROSPECT";
 
     const stageMut = useMutation({
-        mutationFn: ({ leadDepartmentId, newStage }) => 
+        mutationFn: ({ leadDepartmentId, newStage }) =>
             api.patch(`/lead-departments/${leadDepartmentId}/stage`, { stage: newStage }).then(r => r.data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["lead-departments", id] });
@@ -1338,7 +1362,7 @@ export default function LeadDetail() {
     const calls = Array.isArray(callsData) ? callsData : (callsData?.data ?? []);
     const tasks = tasksData?.data ?? [];
     const activeAutomations = Array.isArray(automationsRaw) ? automationsRaw.filter(a => a.active) : [];
-    const navIdx    = leadNav ? leadNav.indexOf(id) : -1;
+    const navIdx = leadNav ? leadNav.indexOf(id) : -1;
     const prevLeadId = navIdx > 0 ? leadNav[navIdx - 1] : null;
     const nextLeadId = navIdx >= 0 && navIdx < (leadNav?.length ?? 0) - 1 ? leadNav[navIdx + 1] : null;
 
@@ -1444,11 +1468,11 @@ export default function LeadDetail() {
 
         const isTaskAction = (i) => i._type === "activity" && i.action?.startsWith("TASK_");
         const isAttachment = (i) => i.action === "RESUME_UPLOADED" && i.metadata?.resumeUrl;
-        const filtered = timelineFilter === "all"        ? allItems
-            : timelineFilter === "task"       ? allItems.filter(i => isTaskAction(i))
-            : timelineFilter === "attachment" ? allItems.filter(i => isAttachment(i))
-            : timelineFilter === "activity"   ? allItems.filter(i => i._type === "activity" && !isTaskAction(i))
-            : allItems.filter(i => i._type === timelineFilter);
+        const filtered = timelineFilter === "all" ? allItems
+            : timelineFilter === "task" ? allItems.filter(i => isTaskAction(i))
+                : timelineFilter === "attachment" ? allItems.filter(i => isAttachment(i))
+                    : timelineFilter === "activity" ? allItems.filter(i => i._type === "activity" && !isTaskAction(i))
+                        : allItems.filter(i => i._type === timelineFilter);
 
         const now = Date.now();
         const MS_7D = 7 * 86_400_000;
@@ -1490,6 +1514,9 @@ export default function LeadDetail() {
         { id: "universities", label: "Universities" },
         { id: "deposit", label: "Deposit" },
         { id: "visa", label: "Visa" },
+        { id: "loan", label: "Loan" },
+        { id: "accommodation", label: "Accommodation" },
+        { id: "miscellaneous", label: "Miscellaneous" },
     ];
     const effectiveTab = activityTabs.some(t => t.id === activityTab) ? activityTab : "timeline";
 
@@ -1581,11 +1608,10 @@ export default function LeadDetail() {
                     <button
                         onClick={() => setShowDetails(v => !v)}
                         title={showDetails ? "Hide lead details" : "Show lead details"}
-                        className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-lg border text-xs font-bold transition-all shadow-sm cursor-pointer ${
-                            showDetails
+                        className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-lg border text-xs font-bold transition-all shadow-sm cursor-pointer ${showDetails
                                 ? "bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600 shadow-indigo-100 ring-2 ring-indigo-500/20"
                                 : "bg-indigo-50/80 hover:bg-indigo-100 text-indigo-600 border-indigo-200 hover:border-indigo-300"
-                        }`}
+                            }`}
                     >
                         {showDetails ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
                         Details
@@ -1643,18 +1669,43 @@ export default function LeadDetail() {
                                         </button>
                                     </span>
                                 )}
+                                {/* Department switcher — which service's status/actions are shown.
+                                    A plain badge when the user can see only one department here,
+                                    a dropdown when they have access to multiple on this lead. */}
+                                {primaryDept && (
+                                    assignments.length > 1 ? (
+                                        <div className="relative inline-flex items-center">
+                                            <select
+                                                value={primaryDept.department}
+                                                onChange={(e) => switchDept(e.target.value)}
+                                                title="Switch department"
+                                                className="appearance-none cursor-pointer inline-flex items-center pl-2.5 pr-6 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                            >
+                                                {assignments.map((a) => (
+                                                    <option key={a.id} value={a.department}>
+                                                        {departmentLabel(a.department)}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown className="h-3 w-3 text-slate-400 absolute right-1.5 pointer-events-none" />
+                                        </div>
+                                    ) : (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide bg-slate-100 text-slate-700 border border-slate-200">
+                                            {departmentLabel(primaryDept.department)}
+                                        </span>
+                                    )
+                                )}
                                 {primaryDept?.stage && (
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide ${
-                                        primaryDept.stage === "ARCHIVE"
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide ${primaryDept.stage === "ARCHIVE"
                                             ? "bg-gray-100 text-gray-700 border border-gray-200"
                                             : primaryDept.stage === "FUTURE_PROSPECT"
-                                            ? "bg-blue-100 text-blue-700 border border-blue-200"
-                                            : primaryDept.stage === "COMMISSION_INVOICING"
-                                            ? "bg-green-100 text-green-700 border border-green-200"
-                                            : primaryDept.stage === "ENQUIRY"
-                                            ? "bg-amber-100 text-amber-700 border border-amber-200"
-                                            : "bg-indigo-100 text-indigo-700 border border-indigo-200"
-                                    }`}>
+                                                ? "bg-blue-100 text-blue-700 border border-blue-200"
+                                                : primaryDept.stage === "COMMISSION_INVOICING"
+                                                    ? "bg-green-100 text-green-700 border border-green-200"
+                                                    : primaryDept.stage === "ENQUIRY"
+                                                        ? "bg-amber-100 text-amber-700 border border-amber-200"
+                                                        : "bg-indigo-100 text-indigo-700 border border-indigo-200"
+                                        }`}>
                                         {stageLabel(primaryDept.department, primaryDept.stage)}
                                     </span>
                                 )}
@@ -1808,7 +1859,7 @@ export default function LeadDetail() {
                                 </button>
                             )}
                             <button
-                                onClick={() => navigate(`/invoices?leadId=${id}&invoiceForLead=1`)}
+                                onClick={() => navigate(`/invoices?leadId=${id}&invoiceForLead=1${primaryDept?.department ? `&department=${primaryDept.department}` : ""}`)}
                                 className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-all cursor-pointer shadow-sm"
                             >
                                 <IndianRupee className="h-3.5 w-3.5" /> Invoice
@@ -1837,11 +1888,11 @@ export default function LeadDetail() {
                                     </button>
                                     {showStageDropdown && createPortal(
                                         <>
-                                            <div 
-                                                className="fixed inset-0 z-40" 
+                                            <div
+                                                className="fixed inset-0 z-40"
                                                 onClick={() => setShowStageDropdown(false)}
                                             />
-                                            <div 
+                                            <div
                                                 className="fixed w-56 bg-white border border-gray-200 rounded-lg shadow-xl z-50"
                                                 style={{
                                                     top: `${dropdownPosition.top}px`,
@@ -1891,22 +1942,30 @@ export default function LeadDetail() {
                                                                 <span>Move to <span className="font-semibold text-amber-700">{prevStage.label}</span></span>
                                                             </button>
                                                         )}
-                                                        <button
-                                                            onClick={handleArchive}
-                                                            disabled={stageMut.isPending}
-                                                            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-b border-gray-100"
-                                                        >
-                                                            <Archive className="h-4 w-4 text-gray-600" />
-                                                            <span>Archive</span>
-                                                        </button>
-                                                        <button
-                                                            onClick={handleFutureProspect}
-                                                            disabled={stageMut.isPending}
-                                                            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed rounded-b-lg"
-                                                        >
-                                                            <RefreshCw className="h-4 w-4 text-blue-600" />
-                                                            <span>Future Prospect</span>
-                                                        </button>
+                                                        {/* Archive is supported for any department whose workflow has an ARCHIVE stage
+                                                            (SALES, LOAN, FOREX, ACCOMMODATION_TICKETS, MISCELLANEOUS). */}
+                                                        {stages.some((s) => s.code === "ARCHIVE") && (
+                                                            <button
+                                                                onClick={handleArchive}
+                                                                disabled={stageMut.isPending}
+                                                                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${primaryDept?.department === "SALES" ? "border-b border-gray-100" : "rounded-b-lg"
+                                                                    }`}
+                                                            >
+                                                                <Archive className="h-4 w-4 text-gray-600" />
+                                                                <span>Archive</span>
+                                                            </button>
+                                                        )}
+                                                        {/* Future Prospect is a SALES-only stage */}
+                                                        {primaryDept?.department === "SALES" && (
+                                                            <button
+                                                                onClick={handleFutureProspect}
+                                                                disabled={stageMut.isPending}
+                                                                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed rounded-b-lg"
+                                                            >
+                                                                <RefreshCw className="h-4 w-4 text-blue-600" />
+                                                                <span>Future Prospect</span>
+                                                            </button>
+                                                        )}
                                                     </>
                                                 )}
                                             </div>
@@ -1956,11 +2015,10 @@ export default function LeadDetail() {
                                     <button
                                         key={t.id}
                                         onClick={() => setActivityTab(t.id)}
-                                        className={`text-xs font-bold px-3 py-2 -mb-px border-b-2 transition-colors ${
-                                            effectiveTab === t.id
+                                        className={`text-xs font-bold px-3 py-2 -mb-px border-b-2 transition-colors ${effectiveTab === t.id
                                                 ? "border-indigo-600 text-indigo-700"
                                                 : "border-transparent text-gray-400 hover:text-gray-700"
-                                        }`}
+                                            }`}
                                     >
                                         {t.label}
                                     </button>
@@ -1974,295 +2032,295 @@ export default function LeadDetail() {
                             <LeadDepositPanel leadId={id} lead={lead} embedded />
                         ) : effectiveTab === "visa" ? (
                             <LeadVisaPanel leadId={id} lead={lead} embedded />
+                        ) : effectiveTab === "loan" ? (
+                            <LeadLoanPanel leadId={id} lead={lead} embedded />
+                        ) : effectiveTab === "accommodation" ? (
+                            <LeadAccommodationPanel leadId={id} lead={lead} embedded />
+                        ) : effectiveTab === "miscellaneous" ? (
+                            <LeadMiscellaneousPanel leadId={id} lead={lead} embedded />
                         ) : (
-                        <>
-                        {/* Inline note/reminder compose (unified) */}
-                        <div className="border-b border-gray-100 overflow-hidden">
-                            <div className="p-4">
-                                <form onSubmit={handleNoteSubmit} className="space-y-3">
-                                    {/* Mode toggle — Note (text only) vs Reminder (message + required date/time) */}
-                                    <div className="inline-flex items-center gap-0.5 p-0.5 bg-gray-100 rounded-lg">
-                                        <button
-                                            type="button"
-                                            onClick={() => { setShowReminder(false); setReminderAt(""); }}
-                                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                                                !showReminder ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                                            }`}
-                                        >
-                                            <FileText className="h-3.5 w-3.5" /> Note
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowReminder(true)}
-                                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                                                showReminder ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                                            }`}
-                                        >
-                                            <Bell className="h-3.5 w-3.5" /> Reminder
-                                        </button>
-                                    </div>
+                            <>
+                                {/* Inline note/reminder compose (unified) */}
+                                <div className="border-b border-gray-100 overflow-hidden">
+                                    <div className="p-4">
+                                        <form onSubmit={handleNoteSubmit} className="space-y-3">
+                                            {/* Mode toggle — Note (text only) vs Reminder (message + required date/time) */}
+                                            <div className="inline-flex items-center gap-0.5 p-0.5 bg-gray-100 rounded-lg">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setShowReminder(false); setReminderAt(""); }}
+                                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${!showReminder ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                                                        }`}
+                                                >
+                                                    <FileText className="h-3.5 w-3.5" /> Note
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowReminder(true)}
+                                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${showReminder ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                                                        }`}
+                                                >
+                                                    <Bell className="h-3.5 w-3.5" /> Reminder
+                                                </button>
+                                            </div>
 
-                                    <div className="flex gap-2 items-end">
-                                        <textarea
-                                            ref={noteRef}
-                                            value={noteText}
-                                            onChange={e => setNoteText(e.target.value)}
-                                            onKeyDown={e => {
-                                                if (e.key === "Enter" && !e.shiftKey) {
-                                                    e.preventDefault();
-                                                    handleNoteSubmit(e);
-                                                }
-                                            }}
-                                            placeholder={showReminder
-                                                ? "What's this reminder about? (optional)"
-                                                : "Add a note… (Enter to save, Shift+Enter for new line)"}
-                                            rows={2}
-                                            className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400"
-                                        />
-                                        <input
-                                            type="file"
-                                            ref={fileInputRef}
-                                            onChange={handleFileChange}
-                                            accept=".pdf,.doc,.docx,.txt"
-                                            className="hidden"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => fileInputRef.current?.click()}
-                                            disabled={uploadingFile}
-                                            className="flex-shrink-0 p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 border border-gray-200 rounded-lg transition-all cursor-pointer"
-                                            title="Upload Resume"
-                                        >
-                                            {uploadingFile ? (
-                                                <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
-                                            ) : (
-                                                <Paperclip className="h-4 w-4" />
-                                            )}
-                                        </button>
-                                        <button
-                                            type="submit"
-                                            disabled={
-                                                (addNote.isPending || addReminder.isPending) ||
-                                                (showReminder ? !reminderAt : !noteText.trim())
-                                            }
-                                            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-all cursor-pointer"
-                                        >
-                                            {(addNote.isPending || addReminder.isPending)
-                                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                : showReminder ? <><Bell className="h-3.5 w-3.5" /> Set Reminder</> : "Save Note"}
-                                        </button>
-                                    </div>
-
-                                    {/* Reminder date/time — required in Reminder mode */}
-                                    {showReminder && (
-                                        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between rounded-lg bg-amber-50/60 border border-amber-100 px-3 py-2">
-                                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
-                                                <span className="flex items-center gap-1 text-xs font-bold text-amber-700 whitespace-nowrap">
-                                                    <Calendar className="h-3.5 w-3.5" /> Remind me at
-                                                    <span className="text-red-500">*</span>
-                                                </span>
-                                                <input
-                                                    type="datetime-local"
-                                                    value={reminderAt}
-                                                    onChange={e => setReminderAt(e.target.value)}
-                                                    className={`text-xs border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 bg-white cursor-pointer ${
-                                                        reminderAt
-                                                            ? "border-gray-200 focus:border-indigo-400 focus:ring-indigo-100"
-                                                            : "border-red-300 focus:border-red-400 focus:ring-red-100"
-                                                    }`}
+                                            <div className="flex gap-2 items-end">
+                                                <textarea
+                                                    ref={noteRef}
+                                                    value={noteText}
+                                                    onChange={e => setNoteText(e.target.value)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === "Enter" && !e.shiftKey) {
+                                                            e.preventDefault();
+                                                            handleNoteSubmit(e);
+                                                        }
+                                                    }}
+                                                    placeholder={showReminder
+                                                        ? "What's this reminder about? (optional)"
+                                                        : "Add a note… (Enter to save, Shift+Enter for new line)"}
+                                                    rows={2}
+                                                    className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400"
                                                 />
+                                                <input
+                                                    type="file"
+                                                    ref={fileInputRef}
+                                                    onChange={handleFileChange}
+                                                    accept=".pdf,.doc,.docx,.txt"
+                                                    className="hidden"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    disabled={uploadingFile}
+                                                    className="flex-shrink-0 p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 border border-gray-200 rounded-lg transition-all cursor-pointer"
+                                                    title="Upload Resume"
+                                                >
+                                                    {uploadingFile ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+                                                    ) : (
+                                                        <Paperclip className="h-4 w-4" />
+                                                    )}
+                                                </button>
+                                                <button
+                                                    type="submit"
+                                                    disabled={
+                                                        (addNote.isPending || addReminder.isPending) ||
+                                                        (showReminder ? !reminderAt : !noteText.trim())
+                                                    }
+                                                    className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-all cursor-pointer"
+                                                >
+                                                    {(addNote.isPending || addReminder.isPending)
+                                                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                        : showReminder ? <><Bell className="h-3.5 w-3.5" /> Set Reminder</> : "Save Note"}
+                                                </button>
                                             </div>
-                                            {gcalConnected && (
-                                                <label className="flex items-center gap-2 cursor-pointer select-none">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={addToGcal}
-                                                        onChange={e => setAddToGcal(e.target.checked)}
-                                                        className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
-                                                    />
-                                                    <span className="flex items-center gap-1 text-xs text-gray-600 font-semibold">
-                                                        <Calendar className="h-3.5 w-3.5 text-blue-500" /> Add to GCal
-                                                    </span>
-                                                </label>
+
+                                            {/* Reminder date/time — required in Reminder mode */}
+                                            {showReminder && (
+                                                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between rounded-lg bg-amber-50/60 border border-amber-100 px-3 py-2">
+                                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+                                                        <span className="flex items-center gap-1 text-xs font-bold text-amber-700 whitespace-nowrap">
+                                                            <Calendar className="h-3.5 w-3.5" /> Remind me at
+                                                            <span className="text-red-500">*</span>
+                                                        </span>
+                                                        <input
+                                                            type="datetime-local"
+                                                            value={reminderAt}
+                                                            onChange={e => setReminderAt(e.target.value)}
+                                                            className={`text-xs border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 bg-white cursor-pointer ${reminderAt
+                                                                    ? "border-gray-200 focus:border-indigo-400 focus:ring-indigo-100"
+                                                                    : "border-red-300 focus:border-red-400 focus:ring-red-100"
+                                                                }`}
+                                                        />
+                                                    </div>
+                                                    {gcalConnected && (
+                                                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={addToGcal}
+                                                                onChange={e => setAddToGcal(e.target.checked)}
+                                                                className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
+                                                            />
+                                                            <span className="flex items-center gap-1 text-xs text-gray-600 font-semibold">
+                                                                <Calendar className="h-3.5 w-3.5 text-blue-500" /> Add to GCal
+                                                            </span>
+                                                        </label>
+                                                    )}
+                                                </div>
                                             )}
-                                        </div>
-                                    )}
-                                </form>
-                            </div>
-                        </div>
+                                        </form>
+                                    </div>
+                                </div>
 
-                        {/* Filter pills */}
-                        <div className="px-4 py-3 bg-slate-50/60 border-b border-gray-100/80 overflow-x-auto scrollbar-none flex items-center gap-2 -mx-px">
-                            <div className="flex gap-2 px-1">
-                                {FILTER_PILLS.map(f => {
-                                    const IconComponent = f.icon;
-                                    const isActive = timelineFilter === f.id;
-                                    return (
-                                        <button
-                                            key={f.id}
-                                            onClick={() => setTimelineFilter(f.id)}
-                                            className={`text-xs font-semibold px-3.5 py-1.5 rounded-full flex items-center gap-1.5 transition-all duration-200 shrink-0 transform active:scale-95 ${
-                                                isActive
-                                                    ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm shadow-indigo-100 border border-indigo-600"
-                                                    : "bg-white border border-gray-200/80 text-gray-500 hover:text-gray-850 hover:bg-gray-50/80 hover:border-gray-300"
-                                            }`}
-                                        >
-                                            {IconComponent && <IconComponent className={`h-3.5 w-3.5 ${isActive ? "text-white" : "text-gray-400"}`} />}
-                                            {f.label}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
+                                {/* Filter pills */}
+                                <div className="px-4 py-3 bg-slate-50/60 border-b border-gray-100/80 overflow-x-auto scrollbar-none flex items-center gap-2 -mx-px">
+                                    <div className="flex gap-2 px-1">
+                                        {FILTER_PILLS.map(f => {
+                                            const IconComponent = f.icon;
+                                            const isActive = timelineFilter === f.id;
+                                            return (
+                                                <button
+                                                    key={f.id}
+                                                    onClick={() => setTimelineFilter(f.id)}
+                                                    className={`text-xs font-semibold px-3.5 py-1.5 rounded-full flex items-center gap-1.5 transition-all duration-200 shrink-0 transform active:scale-95 ${isActive
+                                                            ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm shadow-indigo-100 border border-indigo-600"
+                                                            : "bg-white border border-gray-200/80 text-gray-500 hover:text-gray-850 hover:bg-gray-50/80 hover:border-gray-300"
+                                                        }`}
+                                                >
+                                                    {IconComponent && <IconComponent className={`h-3.5 w-3.5 ${isActive ? "text-white" : "text-gray-400"}`} />}
+                                                    {f.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
 
-                        {/* Timeline content */}
-                        <div className="p-5 max-h-[550px] overflow-y-auto">
-                            {timelineFilter === "visa" ? (
-                                <VisaDetailsSection
-                                    lead={lead}
-                                    onChanged={() => {
-                                        queryClient.invalidateQueries({ queryKey: ["lead", id] });
-                                        queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
-                                    }}
-                                />
-                            ) : timelineFilter === "document" ? (
-                                <DocumentSection 
-                                    lead={lead} 
-                                    onChanged={() => {
-                                        queryClient.invalidateQueries({ queryKey: ["lead", id] });
-                                        queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
-                                    }} 
-                                />
-                            ) : timelineGroups.length === 0 ? (
-                                <p className="text-sm text-gray-400 text-center py-8">No activity yet.</p>
-                            ) : (
-                                <div className="space-y-5">
-                                    {timelineGroups.map(({ key: day, items }) => {
-                                        const isOpen = true;
-                                        return (
-                                        <div key={day}>
-                                            <div className="w-full text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                                <span>{day}</span>
-                                                <span className="flex-1 h-px bg-gray-100" />
-                                            </div>
-                                            {isOpen && <div className="space-y-1">
-                                                {items.map((item) => (
-                                                    item._type === "call" ? (
-                                                        <CallItem key={item.id} call={item} leadId={id} />
-                                                    ) : item._type === "note" ? (
-                                                        <div key={item.id} className="flex items-start gap-3">
-                                                            <div className="relative flex-shrink-0 mt-0.5">
-                                                                {!item.user ? (
-                                                                    <div className="w-8 h-8 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-xs">
-                                                                        📝
-                                                                    </div>
-                                                                ) : (
-                                                                    <>
-                                                                        <Avatar user={item.user} size="sm" />
-                                                                        <span className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full border border-white flex items-center justify-center text-[9px] shadow-sm bg-amber-50 text-amber-505">
-                                                                            📝
-                                                                        </span>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex-1 pb-3 border-b border-gray-100 last:border-0">
-                                                                <div className="flex items-start justify-between">
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <p className="text-sm font-semibold text-gray-800 mb-0.5">Note</p>
-                                                                        {item.user?.name && (
-                                                                            <p className="text-xs text-gray-500 mb-1">by {item.user.name}</p>
-                                                                        )}
-                                                                        <p className="text-sm text-gray-600 line-clamp-3">{item.content}</p>
-                                                                    </div>
-                                                                    <span className="text-[11px] text-gray-400 flex-shrink-0 ml-2">{relTime(item.createdAt)}</span>
-                                                                </div>
-                                                            </div>
+                                {/* Timeline content */}
+                                <div className="p-5 max-h-[550px] overflow-y-auto">
+                                    {timelineFilter === "visa" ? (
+                                        <VisaDetailsSection
+                                            lead={lead}
+                                            onChanged={() => {
+                                                queryClient.invalidateQueries({ queryKey: ["lead", id] });
+                                                queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
+                                            }}
+                                        />
+                                    ) : timelineFilter === "document" ? (
+                                        <DocumentSection
+                                            lead={lead}
+                                            onChanged={() => {
+                                                queryClient.invalidateQueries({ queryKey: ["lead", id] });
+                                                queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
+                                            }}
+                                        />
+                                    ) : timelineGroups.length === 0 ? (
+                                        <p className="text-sm text-gray-400 text-center py-8">No activity yet.</p>
+                                    ) : (
+                                        <div className="space-y-5">
+                                            {timelineGroups.map(({ key: day, items }) => {
+                                                const isOpen = true;
+                                                return (
+                                                    <div key={day}>
+                                                        <div className="w-full text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                            <span>{day}</span>
+                                                            <span className="flex-1 h-px bg-gray-100" />
                                                         </div>
-                                                    ) : item._type === "whatsapp" ? (
-                                                        <div key={item.id} className="flex items-start gap-3">
-                                                            <div className="relative flex-shrink-0 mt-0.5">
-                                                                {item.direction === "INBOUND" ? (
-                                                                    <div className="w-8 h-8 rounded-full bg-emerald-500 border border-emerald-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
-                                                                        {initials(lead?.name) || "C"}
-                                                                    </div>
-                                                                ) : (
-                                                                    <>
-                                                                        <Avatar user={item.user} size="sm" />
-                                                                        <span className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full border border-white flex items-center justify-center text-[9px] shadow-sm bg-emerald-500 text-white font-bold">
-                                                                            wa
-                                                                        </span>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex-1 pb-4 border-b border-gray-100 last:border-0">
-                                                                {/* Header */}
-                                                                <div className="flex items-center justify-between mb-1.5 gap-2">
-                                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                                        <span className="text-xs font-bold text-gray-700 flex items-center gap-1">
-                                                                            <MessageSquare className="h-3 w-3 text-emerald-500 shrink-0" />
-                                                                            {item.direction === "INBOUND" ? "Inbound WhatsApp" : "WhatsApp Outbound"}
-                                                                        </span>
-                                                                        {item.direction === "OUTBOUND" && item.user?.name && (
-                                                                            <span className="text-xs text-gray-400">by {item.user.name}</span>
-                                                                        )}
-                                                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full tracking-wider border ${
-                                                                            item.status === "READ"      ? "bg-blue-50 border-blue-100 text-blue-600" :
-                                                                            item.status === "DELIVERED" ? "bg-emerald-50 border-emerald-100 text-emerald-600" :
-                                                                            item.status === "REPLIED"   ? "bg-violet-50 border-violet-100 text-violet-600" :
-                                                                            item.status === "FAILED"    ? "bg-red-50 border-red-100 text-red-600" :
-                                                                            "bg-gray-50 border-gray-100 text-gray-500"
-                                                                        }`}>
-                                                                            {item.status}
-                                                                        </span>
-                                                                    </div>
-                                                                    <span className="text-[11px] text-gray-400 flex-shrink-0 whitespace-nowrap">{relTime(item.createdAt)}</span>
-                                                                </div>
-
-                                                                {/* Message Bubble Card */}
-                                                                <div className={`inline-block max-w-[85%] text-sm px-3.5 py-2.5 rounded-2xl border shadow-3xs ${
-                                                                    item.direction === "INBOUND"
-                                                                        ? "bg-slate-50 border-gray-200 text-slate-800 rounded-tl-none"
-                                                                        : "bg-emerald-50/70 border-emerald-150/80 text-emerald-950 rounded-tr-none"
-                                                                }`}>
-                                                                    {/* Quoted Message (reply to) */}
-                                                                    {item.replyText && item.direction === "OUTBOUND" && (
-                                                                        <div className="mb-2 bg-emerald-100/40 border-l-4 border-emerald-500 px-2 py-1 rounded text-[11px] text-emerald-800">
-                                                                            <p className="font-bold text-[9px] uppercase tracking-wider text-emerald-600 mb-0.5">Inbound message</p>
-                                                                            <p className="line-clamp-2 italic">"{item.replyText}"</p>
-                                                                        </div>
-                                                                    )}
-                                                                    
-                                                                    <p className="whitespace-pre-wrap leading-relaxed">{item.messageBody}</p>
-                                                                    
-                                                                    {/* Read receipt / status checkmarks for outbound */}
-                                                                    {item.direction === "OUTBOUND" && (
-                                                                        <div className="flex justify-end items-center mt-1 -mr-1">
-                                                                            {item.status === "READ" ? (
-                                                                                <CheckCheck className="h-3.5 w-3.5 text-blue-500" />
-                                                                            ) : item.status === "DELIVERED" || item.status === "REPLIED" ? (
-                                                                                <CheckCheck className="h-3.5 w-3.5 text-gray-400" />
-                                                                            ) : item.status === "FAILED" ? (
-                                                                                <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                                                        {isOpen && <div className="space-y-1">
+                                                            {items.map((item) => (
+                                                                item._type === "call" ? (
+                                                                    <CallItem key={item.id} call={item} leadId={id} />
+                                                                ) : item._type === "note" ? (
+                                                                    <div key={item.id} className="flex items-start gap-3">
+                                                                        <div className="relative flex-shrink-0 mt-0.5">
+                                                                            {!item.user ? (
+                                                                                <div className="w-8 h-8 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-xs">
+                                                                                    📝
+                                                                                </div>
                                                                             ) : (
-                                                                                <Check className="h-3.5 w-3.5 text-gray-400" />
+                                                                                <>
+                                                                                    <Avatar user={item.user} size="sm" />
+                                                                                    <span className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full border border-white flex items-center justify-center text-[9px] shadow-sm bg-amber-50 text-amber-505">
+                                                                                        📝
+                                                                                    </span>
+                                                                                </>
                                                                             )}
                                                                         </div>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <TimelineItem key={item.id} item={item} />
-                                                    )
-                                                ))}
-                                            </div>}
+                                                                        <div className="flex-1 pb-3 border-b border-gray-100 last:border-0">
+                                                                            <div className="flex items-start justify-between">
+                                                                                <div className="flex-1 min-w-0">
+                                                                                    <p className="text-sm font-semibold text-gray-800 mb-0.5">Note</p>
+                                                                                    {item.user?.name && (
+                                                                                        <p className="text-xs text-gray-500 mb-1">by {item.user.name}</p>
+                                                                                    )}
+                                                                                    <p className="text-sm text-gray-600 line-clamp-3">{item.content}</p>
+                                                                                </div>
+                                                                                <span className="text-[11px] text-gray-400 flex-shrink-0 ml-2">{relTime(item.createdAt)}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : item._type === "whatsapp" ? (
+                                                                    <div key={item.id} className="flex items-start gap-3">
+                                                                        <div className="relative flex-shrink-0 mt-0.5">
+                                                                            {item.direction === "INBOUND" ? (
+                                                                                <div className="w-8 h-8 rounded-full bg-emerald-500 border border-emerald-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                                                                                    {initials(lead?.name) || "C"}
+                                                                                </div>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <Avatar user={item.user} size="sm" />
+                                                                                    <span className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full border border-white flex items-center justify-center text-[9px] shadow-sm bg-emerald-500 text-white font-bold">
+                                                                                        wa
+                                                                                    </span>
+                                                                                </>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex-1 pb-4 border-b border-gray-100 last:border-0">
+                                                                            {/* Header */}
+                                                                            <div className="flex items-center justify-between mb-1.5 gap-2">
+                                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                                    <span className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                                                                                        <MessageSquare className="h-3 w-3 text-emerald-500 shrink-0" />
+                                                                                        {item.direction === "INBOUND" ? "Inbound WhatsApp" : "WhatsApp Outbound"}
+                                                                                    </span>
+                                                                                    {item.direction === "OUTBOUND" && item.user?.name && (
+                                                                                        <span className="text-xs text-gray-400">by {item.user.name}</span>
+                                                                                    )}
+                                                                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full tracking-wider border ${item.status === "READ" ? "bg-blue-50 border-blue-100 text-blue-600" :
+                                                                                            item.status === "DELIVERED" ? "bg-emerald-50 border-emerald-100 text-emerald-600" :
+                                                                                                item.status === "REPLIED" ? "bg-violet-50 border-violet-100 text-violet-600" :
+                                                                                                    item.status === "FAILED" ? "bg-red-50 border-red-100 text-red-600" :
+                                                                                                        "bg-gray-50 border-gray-100 text-gray-500"
+                                                                                        }`}>
+                                                                                        {item.status}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <span className="text-[11px] text-gray-400 flex-shrink-0 whitespace-nowrap">{relTime(item.createdAt)}</span>
+                                                                            </div>
+
+                                                                            {/* Message Bubble Card */}
+                                                                            <div className={`inline-block max-w-[85%] text-sm px-3.5 py-2.5 rounded-2xl border shadow-3xs ${item.direction === "INBOUND"
+                                                                                    ? "bg-slate-50 border-gray-200 text-slate-800 rounded-tl-none"
+                                                                                    : "bg-emerald-50/70 border-emerald-150/80 text-emerald-950 rounded-tr-none"
+                                                                                }`}>
+                                                                                {/* Quoted Message (reply to) */}
+                                                                                {item.replyText && item.direction === "OUTBOUND" && (
+                                                                                    <div className="mb-2 bg-emerald-100/40 border-l-4 border-emerald-500 px-2 py-1 rounded text-[11px] text-emerald-800">
+                                                                                        <p className="font-bold text-[9px] uppercase tracking-wider text-emerald-600 mb-0.5">Inbound message</p>
+                                                                                        <p className="line-clamp-2 italic">"{item.replyText}"</p>
+                                                                                    </div>
+                                                                                )}
+
+                                                                                <p className="whitespace-pre-wrap leading-relaxed">{item.messageBody}</p>
+
+                                                                                {/* Read receipt / status checkmarks for outbound */}
+                                                                                {item.direction === "OUTBOUND" && (
+                                                                                    <div className="flex justify-end items-center mt-1 -mr-1">
+                                                                                        {item.status === "READ" ? (
+                                                                                            <CheckCheck className="h-3.5 w-3.5 text-blue-500" />
+                                                                                        ) : item.status === "DELIVERED" || item.status === "REPLIED" ? (
+                                                                                            <CheckCheck className="h-3.5 w-3.5 text-gray-400" />
+                                                                                        ) : item.status === "FAILED" ? (
+                                                                                            <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                                                                                        ) : (
+                                                                                            <Check className="h-3.5 w-3.5 text-gray-400" />
+                                                                                        )}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <TimelineItem key={item.id} item={item} />
+                                                                )
+                                                            ))}
+                                                        </div>}
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
-                                        );
-                                    })}
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                        </>
+                            </>
                         )}
                     </div>
 
@@ -2270,142 +2328,157 @@ export default function LeadDetail() {
 
                 {/* ── RIGHT: lead context (collapsible, sticky on desktop) ─────── */}
                 {showDetails && (
-                <div className="lg:col-span-1 w-full space-y-5 lg:sticky lg:top-6 self-start pb-16">
+                    <div className="lg:col-span-1 w-full space-y-5 lg:sticky lg:top-6 self-start pb-16">
 
-                    <LeadSidebar
-                        lead={lead}
-                        leadId={id}
-                        hideContact
-                        calls={calls}
-                        notes={notes}
-                        tasks={tasks}
-                    />
-
-                    {lead.leadDepartments?.some(ld => ld.department === "SALES") && (
-                        <StudentJourneyPanel
+                        <LeadSidebar
                             lead={lead}
-                            onChanged={() => {
-                                queryClient.invalidateQueries({ queryKey: ["lead", id] });
-                                queryClient.invalidateQueries({ queryKey: ["lead-departments", id] });
-                                queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
-                                queryClient.invalidateQueries({ queryKey: ["lead-notes", id] });
-                            }}
+                            leadId={id}
+                            hideContact
+                            calls={calls}
+                            notes={notes}
+                            tasks={tasks}
                         />
-                    )}
+
+                        {lead.leadDepartments?.some(ld => ld.department === "SALES") && (
+                            <StudentJourneyPanel
+                                lead={lead}
+                                onChanged={() => {
+                                    queryClient.invalidateQueries({ queryKey: ["lead", id] });
+                                    queryClient.invalidateQueries({ queryKey: ["lead-departments", id] });
+                                    queryClient.invalidateQueries({ queryKey: ["lead-activities", id] });
+                                    queryClient.invalidateQueries({ queryKey: ["lead-notes", id] });
+                                }}
+                            />
+                        )}
+
+                        {lead.leadDepartments?.some(ld => ld.department === "LOAN") && (
+                            <LeadLoanJourneyCard leadId={id} lead={lead} />
+                        )}
+
+                        {lead.leadDepartments?.some(ld => ld.department === "ACCOMMODATION_TICKETS") && (
+                            <LeadAccommodationJourneyCard leadId={id} lead={lead} />
+                        )}
+
+                        {lead.leadDepartments?.some(ld => ld.department === "MISCELLANEOUS") && (
+                            <LeadMiscellaneousPanel
+                                leadId={id}
+                                lead={lead}
+                            />
+                        )}
 
 
 
-                    {/* ── Custom Fields ───────────────────────────────────────── */}
-                    <CustomFieldsPanel leadId={id} lead={lead} />
+                        {/* ── Custom Fields ───────────────────────────────────────── */}
+                        <CustomFieldsPanel leadId={id} lead={lead} />
 
-                    {/* ── Deals ───────────────────────────────────────────────── */}
-                    <DealsPanel deals={leadDeals} loading={dealsLoading} onAdd={() => setShowDealModal(true)} />
+                        {/* ── Deals ───────────────────────────────────────────────── */}
+                        <DealsPanel deals={leadDeals} loading={dealsLoading} onAdd={() => setShowDealModal(true)} />
 
-                    {/* ── Related Team Activity ────────────────────────────────── */}
-                    {teamActivity.length > 0 && (
-                        <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
-                            <div className="flex items-center justify-between mb-0 cursor-pointer select-none" onClick={() => setTeamActivityOpen(!teamActivityOpen)}>
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5 py-1">
-                                    {teamActivityOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
-                                    <Users className="h-3.5 w-3.5 text-gray-400" />
-                                    Team Activity
-                                </h3>
+                        {/* ── Related Team Activity ────────────────────────────────── */}
+                        {teamActivity.length > 0 && (
+                            <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
+                                <div className="flex items-center justify-between mb-0 cursor-pointer select-none" onClick={() => setTeamActivityOpen(!teamActivityOpen)}>
+                                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5 py-1">
+                                        {teamActivityOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+                                        <Users className="h-3.5 w-3.5 text-gray-400" />
+                                        Team Activity
+                                    </h3>
+                                </div>
+                                {teamActivityOpen && (
+                                    <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
+                                        {teamActivity.map(a => {
+                                            const cfg = ACTION_CONFIG[a.action] ?? ACTION_CONFIG.DEFAULT;
+                                            return (
+                                                <div key={a.id} className="flex items-start gap-2">
+                                                    <div className="h-5 w-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                        <span className="text-[9px] font-bold text-indigo-600">
+                                                            {a.user?.name?.charAt(0).toUpperCase()}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs text-gray-700 leading-snug">
+                                                            <span className="font-semibold">{a.user?.name}</span>
+                                                            {" "}{cfg.label.toLowerCase()}
+                                                        </p>
+                                                        <p className="text-[10px] text-gray-400">{relTime(a.createdAt)}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
-                            {teamActivityOpen && (
-                                <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
-                                    {teamActivity.map(a => {
-                                        const cfg = ACTION_CONFIG[a.action] ?? ACTION_CONFIG.DEFAULT;
-                                        return (
-                                            <div key={a.id} className="flex items-start gap-2">
-                                                <div className="h-5 w-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                                    <span className="text-[9px] font-bold text-indigo-600">
-                                                        {a.user?.name?.charAt(0).toUpperCase()}
-                                                    </span>
+                        )}
+
+                        {/* ── Tasks Section (Collapsible) ──────────────────────────── */}
+                        <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
+                            <div className="flex items-center justify-between mb-0 cursor-pointer select-none" onClick={() => setTasksOpen(!tasksOpen)}>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5 py-1">
+                                    {tasksOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+                                    <CheckCircle className="h-3.5 w-3.5 text-indigo-500" />
+                                    Tasks {tasks.length > 0 && <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full ml-1">{openTasks.length} open</span>}
+                                </h3>
+                                {tasksOpen && isAdmin && (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setShowTaskModal(true); }}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-all shadow-sm shadow-indigo-100 cursor-pointer"
+                                    >
+                                        <Plus className="h-3 w-3" /> New
+                                    </button>
+                                )}
+                            </div>
+                            {tasksOpen && (
+                                <div className="mt-3 pt-3 border-t border-gray-100">
+                                    {tasksLoading ? (
+                                        <div className="flex justify-center py-4">
+                                            <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                                        </div>
+                                    ) : tasks.length === 0 ? (
+                                        <p className="text-xs text-gray-400 py-2">No tasks yet.</p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {tasks.map(task => (
+                                                <div key={task.id} className="py-1 border-b border-gray-100 last:border-0">
+                                                    <TaskRow task={task} leadId={id} compact={true} />
                                                 </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs text-gray-700 leading-snug">
-                                                        <span className="font-semibold">{a.user?.name}</span>
-                                                        {" "}{cfg.label.toLowerCase()}
-                                                    </p>
-                                                    <p className="text-[10px] text-gray-400">{relTime(a.createdAt)}</p>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
-                    )}
 
-                    {/* ── Tasks Section (Collapsible) ──────────────────────────── */}
-                    <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
-                        <div className="flex items-center justify-between mb-0 cursor-pointer select-none" onClick={() => setTasksOpen(!tasksOpen)}>
-                            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5 py-1">
-                                {tasksOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
-                                <CheckCircle className="h-3.5 w-3.5 text-indigo-500" />
-                                Tasks {tasks.length > 0 && <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full ml-1">{openTasks.length} open</span>}
-                            </h3>
-                            {tasksOpen && isAdmin && (
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); setShowTaskModal(true); }}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-all shadow-sm shadow-indigo-100 cursor-pointer"
-                                >
-                                    <Plus className="h-3 w-3" /> New
-                                </button>
-                            )}
-                        </div>
-                        {tasksOpen && (
-                            <div className="mt-3 pt-3 border-t border-gray-100">
-                                {tasksLoading ? (
-                                    <div className="flex justify-center py-4">
-                                        <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
-                                    </div>
-                                ) : tasks.length === 0 ? (
-                                    <p className="text-xs text-gray-400 py-2">No tasks yet.</p>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {tasks.map(task => (
-                                            <div key={task.id} className="py-1 border-b border-gray-100 last:border-0">
-                                                <TaskRow task={task} leadId={id} compact={true} />
+                        {/* ── Active Automations ───────────────────────────────────── */}
+                        {activeAutomations.length > 0 && (
+                            <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
+                                <div className="flex items-center justify-between mb-0 cursor-pointer select-none" onClick={() => setAutomationsOpen(!automationsOpen)}>
+                                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5 py-1">
+                                        {automationsOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+                                        <Zap className="h-3.5 w-3.5 text-violet-500" />
+                                        Active Automations
+                                    </h3>
+                                </div>
+                                {automationsOpen && (
+                                    <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+                                        {activeAutomations.slice(0, 4).map(auto => (
+                                            <div key={auto.id} className="flex items-center gap-2">
+                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                                                <p className="text-xs text-gray-700 truncate flex-1">{auto.name}</p>
+                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 flex-shrink-0">
+                                                    ON
+                                                </span>
                                             </div>
                                         ))}
+                                        {activeAutomations.length > 4 && (
+                                            <Link to="/automations" className="text-[10px] text-indigo-600 hover:underline mt-2 block">
+                                                +{activeAutomations.length - 4} more
+                                            </Link>
+                                        )}
                                     </div>
                                 )}
                             </div>
                         )}
                     </div>
-
-                    {/* ── Active Automations ───────────────────────────────────── */}
-                    {activeAutomations.length > 0 && (
-                        <div className="bg-white border border-gray-200/70 rounded-2xl p-4 shadow-sm">
-                            <div className="flex items-center justify-between mb-0 cursor-pointer select-none" onClick={() => setAutomationsOpen(!automationsOpen)}>
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1.5 py-1">
-                                    {automationsOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
-                                    <Zap className="h-3.5 w-3.5 text-violet-500" />
-                                    Active Automations
-                                </h3>
-                            </div>
-                            {automationsOpen && (
-                                <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
-                                    {activeAutomations.slice(0, 4).map(auto => (
-                                        <div key={auto.id} className="flex items-center gap-2">
-                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                                            <p className="text-xs text-gray-700 truncate flex-1">{auto.name}</p>
-                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 flex-shrink-0">
-                                                ON
-                                            </span>
-                                        </div>
-                                    ))}
-                                    {activeAutomations.length > 4 && (
-                                        <Link to="/automations" className="text-[10px] text-indigo-600 hover:underline mt-2 block">
-                                            +{activeAutomations.length - 4} more
-                                        </Link>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
                 )}
             </div>
 
@@ -2531,7 +2604,7 @@ function DocumentSection({ lead, onChanged }) {
 
     const handleDelete = async (docName) => {
         if (!window.confirm(`Are you sure you want to delete ${docName}?`)) return;
-        
+
         try {
             const updatedDocs = docList.filter(d => d.name.toLowerCase() !== docName.toLowerCase());
             await api.patch(`/leads/${lead.id}/custom-fields`, {
@@ -2569,15 +2642,13 @@ function DocumentSection({ lead, onChanged }) {
                     return (
                         <div
                             key={name}
-                            className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors ${
-                                uploaded
+                            className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors ${uploaded
                                     ? "border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/20"
                                     : "border-dashed border-slate-200 bg-slate-50/60"
-                            }`}
+                                }`}
                         >
-                            <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
-                                uploaded ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"
-                            }`}>
+                            <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${uploaded ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"
+                                }`}>
                                 {uploaded ? <CheckCircle className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
                             </div>
 
@@ -2585,11 +2656,10 @@ function DocumentSection({ lead, onChanged }) {
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <p className="text-xs font-bold text-slate-700 truncate">{name}</p>
                                     {uploaded && (
-                                        <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                                            approved
+                                        <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${approved
                                                 ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
                                                 : "bg-amber-50 text-amber-700 border border-amber-100"
-                                        }`}>
+                                            }`}>
                                             {docInfo.qcStatus || "Under Review"}
                                         </span>
                                     )}
@@ -2615,11 +2685,10 @@ function DocumentSection({ lead, onChanged }) {
                                 )}
                                 <label
                                     title={uploaded ? "Replace document" : "Upload document"}
-                                    className={`inline-flex items-center gap-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${
-                                        uploaded
+                                    className={`inline-flex items-center gap-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${uploaded
                                             ? "px-2 py-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
                                             : "px-2.5 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
-                                    }`}
+                                        }`}
                                 >
                                     {isUploading ? (
                                         <><Loader2 className="h-3 w-3 animate-spin" /> …</>
@@ -2654,27 +2723,26 @@ function DocumentSection({ lead, onChanged }) {
             <div className="border-t border-slate-200/60 pt-3 mt-2">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Upload Custom Document</p>
                 <div className="flex flex-col sm:flex-row gap-2">
-                    <input 
-                        type="text" 
+                    <input
+                        type="text"
                         placeholder="Enter document name (e.g. Course Completion)"
                         value={customDocName}
                         onChange={(e) => setCustomDocName(e.target.value)}
                         className="flex-1 px-3 py-1.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 text-xs font-semibold"
                     />
-                    <label className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all shadow-3xs text-center cursor-pointer select-none inline-flex items-center justify-center gap-1.5 ${
-                        customDocName.trim() 
-                            ? "bg-indigo-600 hover:bg-indigo-700 text-white hover:scale-[1.01]" 
+                    <label className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all shadow-3xs text-center cursor-pointer select-none inline-flex items-center justify-center gap-1.5 ${customDocName.trim()
+                            ? "bg-indigo-600 hover:bg-indigo-700 text-white hover:scale-[1.01]"
                             : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                    }`}>
+                        }`}>
                         {isUploadingCustom ? (
                             <>
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...
                             </>
                         ) : "Select & Upload"}
                         {customDocName.trim() && (
-                            <input 
-                                type="file" 
-                                className="hidden" 
+                            <input
+                                type="file"
+                                className="hidden"
                                 onChange={async (e) => {
                                     const file = e.target.files?.[0];
                                     if (file) {
@@ -2762,18 +2830,17 @@ function VisaDetailsSection({ lead, onChanged }) {
                     <div>
                         <span className="text-[10px] font-extrabold text-slate-400 uppercase block tracking-wider mb-0.5">Visa Appointment Date</span>
                         <span className="text-slate-800 font-bold">
-                            {values.visa_appointment_date 
-                                ? new Date(values.visa_appointment_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) 
+                            {values.visa_appointment_date
+                                ? new Date(values.visa_appointment_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
                                 : "N/A"}
                         </span>
                     </div>
                     <div>
                         <span className="text-[10px] font-extrabold text-slate-400 uppercase block tracking-wider mb-0.5">Visa Manager Approved</span>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                            values.visa_manager_approved 
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${values.visa_manager_approved
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
                                 : "bg-amber-50 text-amber-700 border border-amber-100"
-                        }`}>
+                            }`}>
                             {values.visa_manager_approved ? "Approved" : "Pending"}
                         </span>
                     </div>

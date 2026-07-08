@@ -315,7 +315,7 @@ function ServiceCard({ row, department, stages, canAssign = false, onMove, moveL
                 <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-1 min-w-0">
                         <Link
-                            to={`/leads/${lead.id}`}
+                            to={`/leads/${lead.id}${department ? `?dept=${department}` : ""}`}
                             onClick={(e) => e.stopPropagation()}
                             className="text-xs font-bold text-gray-900 leading-tight hover:text-indigo-700 transition-colors truncate flex-1 min-w-0"
                         >

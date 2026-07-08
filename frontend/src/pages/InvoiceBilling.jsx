@@ -10,6 +10,7 @@ import {
     Info, Hash, ChevronLeft, Users, Download, Search,
 } from "lucide-react";
 import api from "../api/axios";
+import { departmentLabel, DEPARTMENT_ORDER } from "../lib/departments";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const fmt = (n) =>
@@ -45,6 +46,14 @@ const TypePill = ({ type }) => {
     const c = TYPE_CFG[type] || TYPE_CFG.PROFORMA;
     return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full border text-[10px] font-bold tracking-wider uppercase ${c.cls}`}>{c.label}</span>;
 };
+// Which department pipeline this invoice was raised for. null = a general
+// invoice (header button / Sales bucket). Makes each lead's per-department
+// invoices visually distinguishable when the client name is identical.
+const DeptPill = ({ department }) => (
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full border text-[10px] font-bold tracking-wider uppercase bg-indigo-50 text-indigo-700 border-indigo-200">
+        {department ? departmentLabel(department) : "General"}
+    </span>
+);
 const Field = ({ label, children, half, className = "" }) => (
     <div className={`flex flex-col gap-1.5 ${half ? "col-span-1" : "col-span-2"} ${className}`}>
         <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{label}</label>
@@ -107,6 +116,9 @@ const CreateInvoiceModal = ({ onClose, editData = null, company, clientPrefill =
         clientGstin:   editData?.clientGstin   || clientPrefill?.clientGstin   || "",
         dueDate:       editData?.dueDate ? editData.dueDate.split("T")[0] : "",
         notes:         editData?.notes || company?.defaultNotes || "",
+        // Which department pipeline this invoice belongs to. "" = General (Sales).
+        // Pre-filled from the department the invoice was raised from (?department=…).
+        department:    editData?.department || clientPrefill?.department || "",
     });
     const [items, setItems] = useState(
         editData?.items?.length
@@ -178,6 +190,8 @@ const CreateInvoiceModal = ({ onClose, editData = null, company, clientPrefill =
             // Link the invoice to the lead it was raised for (commission-invoicing flow),
             // so full payment auto-advances the lead and credits the consultant's revenue.
             ...(clientPrefill?.leadId ? { leadId: clientPrefill.leadId } : {}),
+            // Tag with the chosen department (LOAN, …); "" = a general (Sales) invoice.
+            department: form.department || null,
         };
 
         mutation.mutate(payload);
@@ -228,6 +242,18 @@ const CreateInvoiceModal = ({ onClose, editData = null, company, clientPrefill =
                                 </Field>
                                 <Field label="Due Date" half>
                                     <Input type="date" value={form.dueDate} onChange={(e) => setField("dueDate", e.target.value)} />
+                                </Field>
+                                <Field label="Department" className="col-span-2">
+                                    <select
+                                        value={form.department}
+                                        onChange={(e) => setField("department", e.target.value)}
+                                        className="h-9 px-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                    >
+                                        <option value="">General (standalone)</option>
+                                        {DEPARTMENT_ORDER.map((code) => (
+                                            <option key={code} value={code}>{departmentLabel(code)}</option>
+                                        ))}
+                                    </select>
                                 </Field>
                                 <Field label="Address" className="col-span-2">
                                     <Input value={form.clientAddress} onChange={(e) => setField("clientAddress", e.target.value)} placeholder="Street, City, State - Pincode" />
@@ -736,7 +762,7 @@ const AddPaymentModal = ({ invoice, onClose }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // INVOICE DETAIL MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
-const InvoiceDetail = ({ invoice, onClose, onSendEmail, onPayment, onEdit, company }) => {
+const InvoiceDetail = ({ invoice, onClose, onSendEmail, onPayment, onEdit, onViewAll, company }) => {
     const qc = useQueryClient();
     const printRef = useRef(null);
     const { data: detail, isLoading } = useQuery({
@@ -868,6 +894,7 @@ ${inv.notes ? `<div class="notes"><strong>Note: </strong>${inv.notes}</div>` : "
                             <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-sm font-black text-zinc-800">{inv.invoiceNumber}</span>
                                 <TypePill type={inv.invoiceType} />
+                                <DeptPill department={inv.department} />
                                 <Badge status={inv.status} />
                             </div>
                             <p className="text-xs text-zinc-400 truncate">{inv.clientName} · {fmtDate(inv.createdAt)}</p>
@@ -1063,7 +1090,14 @@ ${inv.notes ? `<div class="notes"><strong>Note: </strong>${inv.notes}</div>` : "
 
                 {/* Modal Footer Controls */}
                 <div className="px-6 py-4 border-t border-zinc-100 flex items-center justify-between bg-zinc-50/50 shrink-0">
-                    <button onClick={onClose} className="text-xs font-bold text-zinc-450 hover:text-zinc-650 transition-colors">Close Preview</button>
+                    <div className="flex items-center gap-3">
+                        <button onClick={onClose} className="text-xs font-bold text-zinc-450 hover:text-zinc-650 transition-colors">Close Preview</button>
+                        {onViewAll && (
+                            <button onClick={() => { onClose(); onViewAll(invoice); }} className="flex items-center gap-1.5 text-xs font-bold text-violet-600 hover:text-violet-800 transition-colors">
+                                <Receipt className="h-3.5 w-3.5" /> View all invoices
+                            </button>
+                        )}
+                    </div>
                     <div className="flex gap-2">
                         <button onClick={handlePrint} className="flex items-center gap-1.5 h-9 px-4 text-xs font-semibold text-zinc-600 bg-white border border-zinc-200 rounded-xl hover:bg-zinc-50 transition shadow-sm">
                             <Download className="h-3.5 w-3.5 text-zinc-500" /> Download PDF
@@ -1285,8 +1319,31 @@ const ClientList = ({ invoices, onSelectClient, onNewInvoice }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // CLIENT DETAIL
 // ═══════════════════════════════════════════════════════════════════════════════
-const ClientDetail = ({ client, company, onBack, onNewInvoice, onView, onEdit, onSendEmail, onPayment, onDelete }) => {
+const ClientDetail = ({ client, company, onBack, onNewInvoice, onView, onEdit, onSendEmail, onPayment, onDelete, activeDept = "ALL", onDeptChange }) => {
     const [activeTab, setActiveTab] = useState("invoices");
+
+    // Department buckets present on this client's invoices, in canonical order.
+    // Invoices with no department are the "General" (Sales) bucket, keyed GENERAL.
+    const deptBuckets = useMemo(() => {
+        const counts = new Map();
+        for (const inv of client.invoices) {
+            const key = inv.department || "GENERAL";
+            counts.set(key, (counts.get(key) || 0) + 1);
+        }
+        const ordered = ["GENERAL", ...DEPARTMENT_ORDER].filter((k) => counts.has(k));
+        return ordered.map((key) => ({ key, count: counts.get(key) }));
+    }, [client]);
+
+    // Invoices shown in the table — narrowed to the selected department bucket.
+    const shownInvoices = useMemo(() => {
+        if (activeDept === "ALL") return client.invoices;
+        return client.invoices.filter((inv) => (inv.department || "GENERAL") === activeDept);
+    }, [client, activeDept]);
+
+    // Department to pre-fill when creating from this view. ALL/General → "" (general).
+    const createDept = activeDept === "ALL" || activeDept === "GENERAL" ? "" : activeDept;
+    const newInvoiceForDept = () => onNewInvoice({ ...client, department: createDept });
+    const deptName = (key) => (key === "GENERAL" ? "General" : departmentLabel(key));
 
     const allPayments = useMemo(() =>
         client.invoices
@@ -1331,10 +1388,10 @@ const ClientDetail = ({ client, company, onBack, onNewInvoice, onView, onEdit, o
                         </div>
                     </div>
 
-                    {/* Quick action */}
-                    <button onClick={() => onNewInvoice(client)}
+                    {/* Quick action — creates in the currently-selected department bucket */}
+                    <button onClick={newInvoiceForDept}
                         className="flex items-center gap-1.5 h-9 px-4 text-xs font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition shrink-0 shadow-sm">
-                        <Plus className="h-3.5 w-3.5" /> New Invoice
+                        <Plus className="h-3.5 w-3.5" /> New {createDept ? `${departmentLabel(createDept)} ` : ""}Invoice
                     </button>
                 </div>
 
@@ -1370,6 +1427,24 @@ const ClientDetail = ({ client, company, onBack, onNewInvoice, onView, onEdit, o
                 ))}
             </div>
 
+            {/* Department segmentation — split this client's invoices per department.
+                Each bucket is its own page/tab on the same route; the choice is
+                persisted to the URL (?dept=) by the parent so it survives reload. */}
+            {activeTab === "invoices" && deptBuckets.length > 0 && (
+                <div className="flex gap-1.5 flex-wrap items-center">
+                    <button onClick={() => onDeptChange?.("ALL")}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition ${activeDept === "ALL" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-50"}`}>
+                        All <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${activeDept === "ALL" ? "bg-indigo-500" : "bg-zinc-100 text-zinc-500"}`}>{client.invoices.length}</span>
+                    </button>
+                    {deptBuckets.map(({ key, count }) => (
+                        <button key={key} onClick={() => onDeptChange?.(key)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition ${activeDept === key ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-50"}`}>
+                            {deptName(key)} <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${activeDept === key ? "bg-indigo-500" : "bg-zinc-100 text-zinc-500"}`}>{count}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
+
             {/* Invoices Tab */}
             {activeTab === "invoices" && (
                 <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden">
@@ -1377,7 +1452,7 @@ const ClientDetail = ({ client, company, onBack, onNewInvoice, onView, onEdit, o
                         <div className="text-center py-16">
                             <Receipt className="h-10 w-10 text-zinc-200 mx-auto mb-3" />
                             <p className="text-sm font-bold text-zinc-700">No invoices yet</p>
-                            <button onClick={() => onNewInvoice(client)} className="mt-2 text-xs font-bold text-violet-600 hover:underline">
+                            <button onClick={newInvoiceForDept} className="mt-2 text-xs font-bold text-violet-600 hover:underline">
                                 Create first invoice →
                             </button>
                         </div>
@@ -1392,10 +1467,11 @@ const ClientDetail = ({ client, company, onBack, onNewInvoice, onView, onEdit, o
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {client.invoices.map((inv) => (
+                                    {shownInvoices.map((inv) => (
                                         <tr key={inv.id} className="border-b border-zinc-100/50 hover:bg-zinc-50/60 transition-colors">
                                             <td className="px-4 py-3.5">
                                                 <button onClick={() => onView(inv)} className="font-extrabold text-violet-600 hover:text-violet-850">{inv.invoiceNumber}</button>
+                                                <div className="mt-1"><DeptPill department={inv.department} /></div>
                                             </td>
                                             <td className="px-4 py-3.5 text-zinc-500 font-medium">{fmtDate(inv.createdAt)}</td>
                                             <td className="px-4 py-3.5 text-zinc-500 font-medium">{fmtDate(inv.dueDate)}</td>
@@ -1422,13 +1498,20 @@ const ClientDetail = ({ client, company, onBack, onNewInvoice, onView, onEdit, o
                                     ))}
                                 </tbody>
                                 <tfoot className="bg-zinc-50 border-t border-zinc-100 font-bold text-zinc-700">
-                                    <tr>
-                                        <td colSpan={4} className="px-4 py-3.5 text-xs text-zinc-400">TOTAL ({client.invoices.length} invoices)</td>
-                                        <td className="px-4 py-3.5 text-right text-xs font-black text-zinc-800">₹{fmt(client.totalInvoiced)}</td>
-                                        <td className="px-4 py-3.5 text-right text-xs font-black text-emerald-600">₹{fmt(client.totalPaid)}</td>
-                                        <td className={`px-4 py-3.5 text-right text-xs font-black ${client.balance > 0 ? "text-amber-500" : "text-emerald-600"}`}>₹{fmt(client.balance)}</td>
-                                        <td colSpan={2} />
-                                    </tr>
+                                    {(() => {
+                                        const sInvoiced = shownInvoices.reduce((s, i) => s + i.total, 0);
+                                        const sPaid     = shownInvoices.reduce((s, i) => s + (i.totalPaid || 0), 0);
+                                        const sBalance  = shownInvoices.reduce((s, i) => s + (i.balance ?? (i.total - (i.totalPaid || 0))), 0);
+                                        return (
+                                            <tr>
+                                                <td colSpan={4} className="px-4 py-3.5 text-xs text-zinc-400">TOTAL ({shownInvoices.length} invoice{shownInvoices.length !== 1 ? "s" : ""}{activeDept !== "ALL" ? ` · ${deptName(activeDept)}` : ""})</td>
+                                                <td className="px-4 py-3.5 text-right text-xs font-black text-zinc-800">₹{fmt(sInvoiced)}</td>
+                                                <td className="px-4 py-3.5 text-right text-xs font-black text-emerald-600">₹{fmt(sPaid)}</td>
+                                                <td className={`px-4 py-3.5 text-right text-xs font-black ${sBalance > 0 ? "text-amber-500" : "text-emerald-600"}`}>₹{fmt(sBalance)}</td>
+                                                <td colSpan={2} />
+                                            </tr>
+                                        );
+                                    })()}
                                 </tfoot>
                             </table>
                         </div>
@@ -1571,20 +1654,38 @@ export default function InvoiceBilling() {
         if (!leadId || !(searchParams.get("invoiceForLead") || searchParams.get("newInvoice"))) return;
         let cancelled = false;
 
+        // Department the invoice belongs to. Absent (header "Invoice" button) = a
+        // general invoice; a department card (e.g. Loan) passes ?department=LOAN.
+        // Invoices are split per department: opening/creating only ever considers
+        // invoices for this same department (general invoices are their own bucket).
+        // Department this invoice belongs to (LOAN, ACCOMMODATION_TICKETS, …).
+        // Absent (header "Invoice" button / SALES) = the general bucket, stored as
+        // a null department. Each department keeps its own separate invoice per lead.
+        const department = searchParams.get("department") || null;
+        // Same-bucket test: a department card only ever considers invoices tagged
+        // with that same department; the general button only considers null ones.
+        const sameBucket = (inv) => (inv.department || null) === department;
+
         (async () => {
             try {
-                const existing = await api.get("/invoices", { params: { leadId, limit: 1 } }).then((r) => r.data?.data ?? r.data ?? []);
-                if (cancelled) return;
-                if (Array.isArray(existing) && existing.length > 0) {
-                    // Fetch full invoice (with items) for the detail modal.
-                    const full = await api.get(`/invoices/${existing[0].id}`).then((r) => r.data);
-                    if (!cancelled) setViewInv(full);
-                    return;
+                const forceNew = searchParams.get("forceNew") === "1";
+                if (!forceNew) {
+                    // Pull the lead's invoices, then narrow to this department's bucket.
+                    const all = await api.get("/invoices", { params: { leadId, limit: 100 } }).then((r) => r.data?.data ?? r.data ?? []);
+                    if (cancelled) return;
+                    const inBucket = all.filter(sameBucket);
+                    if (inBucket.length > 0) {
+                        // This department already has an invoice → open the latest one.
+                        const full = await api.get(`/invoices/${inBucket[0].id}`).then((r) => r.data);
+                        if (!cancelled) setViewInv(full);
+                        return;
+                    }
                 }
                 const lead = await api.get(`/leads/${leadId}`).then((r) => r.data).catch(() => ({}));
                 if (cancelled) return;
                 openNewInvoice({
                     leadId,
+                    department,
                     clientName:    lead.name    || "",
                     clientEmail:   lead.email   || "",
                     clientPhone:   lead.phone   || "",
@@ -1592,7 +1693,7 @@ export default function InvoiceBilling() {
                     clientGstin:   "",
                 });
             } catch {
-                if (!cancelled) openNewInvoice({ leadId });
+                if (!cancelled) openNewInvoice({ leadId, department });
             } finally {
                 // Clear params so a refresh doesn't reopen the modal.
                 if (!cancelled) setSearchParams({}, { replace: true });
@@ -1603,11 +1704,35 @@ export default function InvoiceBilling() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Merge-update the URL query (same /invoices route) so the client-detail view
+    // and its selected department survive a reload. Empty/null values are removed.
+    const patchParams = (updates) => {
+        const next = new URLSearchParams(searchParams);
+        Object.entries(updates).forEach(([k, v]) => {
+            if (v == null || v === "") next.delete(k);
+            else next.set(k, v);
+        });
+        setSearchParams(next, { replace: true });
+    };
+
     // When a client is selected from the list, sync with latest invoice data
     const handleSelectClient = (client) => {
         setSelectedClient(client);
         setTab("clients");
+        patchParams({ client: client.clientName, dept: null });
     };
+
+    const activeDept = searchParams.get("dept") || "ALL";
+    const handleBackToClients = () => { setSelectedClient(null); patchParams({ client: null, dept: null }); };
+
+    // Restore the open client from ?client= on first load / reload (no leadId flow).
+    useEffect(() => {
+        const cname = searchParams.get("client");
+        if (!cname || selectedClient || !invoices.length) return;
+        const match = invoices.find((i) => i.clientName.trim().toLowerCase() === cname.trim().toLowerCase());
+        if (match) { setSelectedClient({ clientName: match.clientName }); setTab("clients"); }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [invoices]);
 
     // Keep selectedClient in sync with latest invoice data after mutations
     const syncedClient = useMemo(() => {
@@ -1720,13 +1845,15 @@ export default function InvoiceBilling() {
                         ? <ClientDetail
                             client={syncedClient}
                             company={company}
-                            onBack={() => setSelectedClient(null)}
+                            onBack={handleBackToClients}
                             onNewInvoice={openNewInvoice}
                             onView={setViewInv}
                             onEdit={setEditInv}
                             onSendEmail={setEmailInv}
                             onPayment={setPayInv}
                             onDelete={(inv) => setConfirmDeleteInv(inv)}
+                            activeDept={activeDept}
+                            onDeptChange={(d) => patchParams({ dept: d === "ALL" ? null : d })}
                           />
                         : <ClientList
                             invoices={invoices}
@@ -1779,6 +1906,7 @@ export default function InvoiceBilling() {
                                         <tr key={inv.id} className="hover:bg-zinc-50/40 transition-colors duration-150">
                                             <td className="px-5 py-3.5">
                                                 <button onClick={() => setViewInv(inv)} className="font-extrabold text-violet-650 hover:text-violet-850 hover:underline">{inv.invoiceNumber}</button>
+                                                <div className="mt-1"><DeptPill department={inv.department} /></div>
                                             </td>
                                             <td className="px-5 py-3.5">
                                                 <button onClick={() => { setTab("clients"); handleSelectClient({ clientName: inv.clientName }); }}
@@ -1831,6 +1959,7 @@ export default function InvoiceBilling() {
                     onSendEmail={setEmailInv}
                     onPayment={setPayInv}
                     onEdit={setEditInv}
+                    onViewAll={(inv) => { setTab("clients"); handleSelectClient({ clientName: inv.clientName }); }}
                 />
             )}
             {showSettings && <CompanySettingsModal initialData={company} onClose={() => setShowSettings(false)} />}

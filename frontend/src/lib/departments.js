@@ -6,11 +6,11 @@
 // Canonical display order (matches the backend DepartmentType enum intent).
 export const DEPARTMENT_ORDER = [
     "SALES",
-    "APPLICATION_VISA",
     "LOAN",
-    "ACCOMMODATION_TICKETS",
     "FOREX",
+    "ACCOMMODATION_TICKETS",
     "MISCELLANEOUS",
+    "APPLICATION_VISA",
 ];
 
 export const DEPARTMENT_LABELS = {

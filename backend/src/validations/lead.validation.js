@@ -24,6 +24,7 @@ const getLeadsSchema = z.object({
     // Multi-department filters: scope the list to one department's service / stage.
     department: z.enum(DEPARTMENTS).optional(),
     stage: z.string().trim().max(50).optional(),
+    country: z.string().trim().max(100).optional(),
 })
 .refine((data) => {
     if (data.startDate && data.endDate) {

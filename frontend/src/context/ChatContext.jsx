@@ -9,12 +9,58 @@ import { getSocket } from "../utils/socket";
 const ChatContext = createContext(null);
 export const useChat = () => useContext(ChatContext) ?? {};
 
-const playNotificationSound = () => {
+// A single shared AudioContext, unlocked on the user's first interaction so the
+// browser autoplay policy doesn't silently block notification sounds. Creating a
+// new AudioContext per notification hits the browser's context limit, so we reuse
+// this one for the app's lifetime.
+let sharedAudioCtx = null;
+
+const getAudioContext = () => {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return null;
+    if (!sharedAudioCtx) sharedAudioCtx = new AudioContext();
+    return sharedAudioCtx;
+};
+
+// Resume the AudioContext on the first user gesture (click / keypress / touch).
+// After this runs once, notification sounds play reliably for the whole session.
+const unlockAudio = () => {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
+};
+
+// Ask for OS-level notification permission so we can alert the user even when the
+// CRM tab is in the background. Also gated behind the first user gesture.
+const requestNotificationPermission = () => {
+    if (typeof Notification === "undefined") return;
+    if (Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {});
+    }
+};
+
+// Show a native OS notification (with the system sound) when the tab isn't focused.
+// Returns true if a native notification was shown, so callers can skip the toast.
+const showBrowserNotification = (title, body, onClick) => {
+    if (typeof Notification === "undefined") return false;
+    if (Notification.permission !== "granted") return false;
+    if (typeof document !== "undefined" && document.visibilityState === "visible") return false;
     try {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContext) return;
-        const ctx = new AudioContext();
-        
+        const n = new Notification(title, { body, icon: "/SCHOLAR360.PNG" });
+        if (onClick) {
+            n.onclick = () => {
+                window.focus();
+                onClick();
+                n.close();
+            };
+        }
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+const playChime = (ctx) => {
+    try {
         // Note 1: D5 (587.33 Hz)
         const osc1 = ctx.createOscillator();
         const gain1 = ctx.createGain();
@@ -46,6 +92,20 @@ const playNotificationSound = () => {
     }
 };
 
+const playNotificationSound = () => {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    // A suspended context has a frozen clock, so scheduling notes now would place
+    // them in the past once it resumes. Resume first, then schedule once running.
+    if (ctx.state === "suspended") {
+        ctx.resume().then(() => playChime(ctx)).catch((e) => {
+            console.warn("Failed to resume audio for notification sound:", e);
+        });
+    } else {
+        playChime(ctx);
+    }
+};
+
 export const ChatProvider = ({ children }) => {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -61,6 +121,24 @@ export const ChatProvider = ({ children }) => {
     const activeChIdRef = useRef(null);
 
     useEffect(() => { pathRef.current = location.pathname; }, [location.pathname]);
+
+    // Unlock audio + request OS notification permission on the first user gesture,
+    // so notification sounds aren't blocked by the browser autoplay policy and we
+    // can show native notifications when the tab is backgrounded.
+    useEffect(() => {
+        const onFirstInteraction = () => {
+            unlockAudio();
+            requestNotificationPermission();
+        };
+        window.addEventListener("click", onFirstInteraction, { once: true });
+        window.addEventListener("keydown", onFirstInteraction, { once: true });
+        window.addEventListener("touchstart", onFirstInteraction, { once: true });
+        return () => {
+            window.removeEventListener("click", onFirstInteraction);
+            window.removeEventListener("keydown", onFirstInteraction);
+            window.removeEventListener("touchstart", onFirstInteraction);
+        };
+    }, []);
 
     // Fetch channel list from REST
     const fetchChannels = useCallback(async () => {
@@ -138,6 +216,8 @@ export const ChatProvider = ({ children }) => {
                     const sender = msg.author?.name?.split(" ")[0] || "Someone";
                     const body   = msg.text?.length > 80 ? msg.text.slice(0, 80) + "…" : msg.text;
                     playNotificationSound();
+                    // Native OS notification when the tab is backgrounded; in-app toast otherwise.
+                    showBrowserNotification(`💬 ${sender}`, body, () => navigate("/messages"));
                     toast.message(`💬 ${sender}`, {
                         description: body,
                         action: { label: "Open", onClick: () => navigate("/messages") },
@@ -154,6 +234,11 @@ export const ChatProvider = ({ children }) => {
                 return;
             }
             playNotificationSound();
+            showBrowserNotification(
+                notif.title || "🔔 Notification",
+                notif.message,
+                notif.link ? () => navigate(notif.link) : undefined,
+            );
             toast.message(notif.title || "🔔 Notification", {
                 description: notif.message,
                 action: notif.link ? { label: "View", onClick: () => navigate(notif.link) } : undefined,

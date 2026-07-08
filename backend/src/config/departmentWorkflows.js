@@ -34,15 +34,19 @@ const DEPARTMENT_WORKFLOWS = {
         "LOAN_DOCUMENTATION",
         "AWAITING_APPROVAL",
         "APPROVED",
-        "REJECTED",
         "COMMISSION_INVOICING",
+        // Off-pipeline outcomes (not part of the linear progression):
+        "REJECTED",
+        "ARCHIVE",
     ],
 
     ACCOMMODATION_TICKETS: [
         "ENQUIRY",
         "ON_PROGRESS",
+        "AWAITING_CONFIRMATION",
         "BOOKING_CONFIRMED",
         "COMMISSION_INVOICING",
+        "ARCHIVE",
     ],
 
     FOREX: [
@@ -50,13 +54,14 @@ const DEPARTMENT_WORKFLOWS = {
         "ON_PROGRESS",
         "PROCESS_COMPLETED",
         "COMMISSION_INVOICING",
+        "ARCHIVE",
     ],
 
     MISCELLANEOUS: [
         "ENQUIRY",
         "ON_PROGRESS",
-        "PROCESS_COMPLETED",
         "COMMISSION_INVOICING",
+        "ARCHIVE",
     ],
 };
 
@@ -72,16 +77,16 @@ const WON_STAGES = {
     LOAN: ["APPROVED", "COMMISSION_INVOICING"],
     ACCOMMODATION_TICKETS: ["BOOKING_CONFIRMED", "COMMISSION_INVOICING"],
     FOREX: ["PROCESS_COMPLETED", "COMMISSION_INVOICING"],
-    MISCELLANEOUS: ["PROCESS_COMPLETED", "COMMISSION_INVOICING"],
+    MISCELLANEOUS: ["COMMISSION_INVOICING"],
 };
 
 const LOST_STAGES = {
     SALES: ["ARCHIVE"],
     APPLICATION_VISA: [],
     LOAN: ["REJECTED"],
-    ACCOMMODATION_TICKETS: [],
-    FOREX: [],
-    MISCELLANEOUS: [],
+    ACCOMMODATION_TICKETS: ["ARCHIVE"],
+    FOREX: ["ARCHIVE"],
+    MISCELLANEOUS: ["ARCHIVE"],
 };
 
 /**
@@ -128,10 +133,10 @@ function getTerminalStages(department) {
 const OFF_PIPELINE_STAGES = {
     SALES: ["ARCHIVE", "FUTURE_PROSPECT"],
     APPLICATION_VISA: [],
-    LOAN: [],
-    ACCOMMODATION_TICKETS: [],
-    FOREX: [],
-    MISCELLANEOUS: [],
+    LOAN: ["ARCHIVE"],
+    ACCOMMODATION_TICKETS: ["ARCHIVE"],
+    FOREX: ["ARCHIVE"],
+    MISCELLANEOUS: ["ARCHIVE"],
 };
 
 /** Stages excluded from analytics (archived / future prospect) for a department. */
@@ -175,6 +180,7 @@ const STAGE_LABELS = {
     AWAITING_APPROVAL: "Awaiting Approval",
     APPROVED: "Approved",
     REJECTED: "Rejected",
+    AWAITING_CONFIRMATION: "Awaiting Confirmation",
     ON_PROGRESS: "On Progress",
     BOOKING_CONFIRMED: "Booking Confirmed",
     PROCESS_COMPLETED: "Process Completed",

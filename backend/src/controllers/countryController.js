@@ -3,7 +3,7 @@ const { ApiError, ERROR_CODES } = require("../utils/apiError");
 
 const listCountries = async (req, res, next) => {
     try {
-        const countries = await prisma.country.findMany({
+        const dbCountries = await prisma.country.findMany({
             include: {
                 universities: {
                     orderBy: { name: "asc" }
@@ -11,7 +11,77 @@ const listCountries = async (req, res, next) => {
             },
             orderBy: { name: "asc" }
         });
-        res.json(countries);
+
+        const leads = await prisma.lead.findMany({
+            where: { mergedIntoId: null },
+            select: { customFields: true }
+        });
+
+        const counts = {};
+        leads.forEach(l => {
+            const dest = l.customFields?.destinationCountries;
+            if (dest && typeof dest === "string") {
+                const list = dest.split(",").map(c => c.trim()).filter(Boolean);
+                const uniqueList = Array.from(new Set(list));
+                uniqueList.forEach(c => {
+                    counts[c] = (counts[c] || 0) + 1;
+                });
+            }
+        });
+
+        const countryMap = new Map();
+
+        // 1. Initialize map with default country options available when creating a lead
+        const DEFAULT_COUNTRIES = [
+            "United Kingdom",
+            "United States",
+            "USA",
+            "Canada",
+            "Australia",
+            "Ireland",
+            "Germany"
+        ];
+        DEFAULT_COUNTRIES.forEach(name => {
+            countryMap.set(name.toLowerCase(), {
+                id: `default-${name.toLowerCase()}`,
+                name: name,
+                universities: [],
+                count: 0
+            });
+        });
+
+        // 2. Overwrite/merge database countries (which might contain universities)
+        dbCountries.forEach(c => {
+            countryMap.set(c.name.toLowerCase(), {
+                id: c.id,
+                name: c.name,
+                universities: c.universities,
+                count: 0
+            });
+        });
+
+        // 3. Add counts and discover any custom countries on leads
+        Object.keys(counts).forEach(cName => {
+            const lower = cName.toLowerCase();
+            if (countryMap.has(lower)) {
+                countryMap.get(lower).count = counts[cName];
+            } else {
+                countryMap.set(lower, {
+                    id: `extra-${lower}`,
+                    name: cName,
+                    universities: [],
+                    count: counts[cName]
+                });
+            }
+        });
+
+        const result = Array.from(countryMap.values()).sort((a, b) => {
+            if (b.count !== a.count) {
+                return b.count - a.count;
+            }
+            return a.name.localeCompare(b.name);
+        });
+        res.json(result);
     } catch (error) {
         next(error);
     }

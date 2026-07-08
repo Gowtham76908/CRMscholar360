@@ -774,6 +774,9 @@ model Invoice {
   createdById   String
   dealId        String?
   leadId        String?
+  // Which department this invoice belongs to (SALES, LOAN, …). null = a general
+  // invoice raised from the header, not tied to any one department's pipeline.
+  department    String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
@@ -1150,6 +1153,15 @@ model University {
   @@unique([name, countryId])
 }
 
+// Master list of lending banks for the LOAN department. Seeded implicitly by the
+// curated defaults in the controller; custom banks a consultant types are saved
+// here so they appear in the dropdown for every lead thereafter.
+model Bank {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
 model Expense {
   id          String   @id @default(uuid())
   title       String
@@ -1167,6 +1179,12 @@ model Expense {
 }
 
 model ThirdPartyPortal {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model AccommodationAgent {
   id        String   @id @default(uuid())
   name      String   @unique
   createdAt DateTime @default(now())

@@ -403,7 +403,7 @@ function QueueRow({ row, department, stageLabel, canAssign, isSelected, onSelect
             {/* Left Section: Lead Main Info */}
             <div className="flex-1 min-w-0">
                 <div className="flex items-center flex-wrap gap-2 mb-1.5">
-                    <Link to={`/leads/${lead.id}`} className="text-sm font-bold text-gray-900 hover:text-indigo-600 flex items-center gap-1 group">
+                    <Link to={`/leads/${lead.id}${department ? `?dept=${department}` : ""}`} className="text-sm font-bold text-gray-900 hover:text-indigo-600 flex items-center gap-1 group">
                         {lead.name || "—"}
                         <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 text-gray-400 transition-opacity" />
                     </Link>
@@ -564,7 +564,7 @@ function ReassignRequests({ department }) {
                     return (
                         <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 bg-white border border-amber-100 rounded-xl px-3 py-2.5">
                             <div className="min-w-0">
-                                <Link to={`/leads/${r.leadDepartment?.lead?.id}`} className="text-sm font-semibold text-gray-900 hover:text-indigo-600">
+                                <Link to={`/leads/${r.leadDepartment?.lead?.id}${r.leadDepartment?.department ? `?dept=${r.leadDepartment.department}` : ""}`} className="text-sm font-semibold text-gray-900 hover:text-indigo-600">
                                     {r.leadDepartment?.lead?.name || "Lead"}
                                 </Link>
                                 <p className="text-xs text-gray-500 mt-0.5">

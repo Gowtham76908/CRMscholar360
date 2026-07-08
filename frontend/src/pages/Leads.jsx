@@ -123,11 +123,12 @@ const Leads = () => {
     const dateTo         = searchParams.get("endDate")   || "";
     const departmentFilter = searchParams.get("department") || "";
     const stageFilter      = searchParams.get("stage")      || "";
+    const countryFilter    = searchParams.get("country")    || "";
 
     const [filterOpen, setFilterOpen] = useState(false);
 
     // Count active filters (excluding status which has its own tab row)
-    const activeFilterCount = [sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, scoreMin, scoreMax, mineFilter, departmentFilter, stageFilter].filter(Boolean).length;
+    const activeFilterCount = [sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, scoreMin, scoreMax, mineFilter, departmentFilter, stageFilter, countryFilter].filter(Boolean).length;
 
     const [localSearch, setLocalSearch] = useState(searchTerm);
 
@@ -158,7 +159,7 @@ const Leads = () => {
     const setPage         = (v) => setSearchParams(p => { const next = new URLSearchParams(p); next.set("page", String(v)); return next; }, { replace: true });
     const clearAllFilters = () => setSearchParams(p => {
         const next = new URLSearchParams(p);
-        ["source","category","enquiryType","sla","startDate","endDate","score_min","score_max","mine","department","stage"].forEach(k => next.delete(k));
+        ["source","category","enquiryType","sla","startDate","endDate","score_min","score_max","mine","department","stage","country"].forEach(k => next.delete(k));
         next.set("page", "1");
         return next;
     }, { replace: true });
@@ -175,11 +176,17 @@ const Leads = () => {
     const queryClient = useQueryClient();
     const { user } = useAuth();
 
+    // Fetch registered countries list for the dropdown filter
+    const { data: countriesList = [] } = useQuery({
+        queryKey: ["countries"],
+        queryFn: () => api.get("/countries").then(r => r.data),
+    });
+
     // Board view fetches its own paginated data per department (see LeadsBoard /
     // useDepartmentBoard) instead of this list query — skip it entirely there so
     // switching to the board doesn't also fire an unused /leads request.
     const { data: leadsData, isLoading, isFetching } = useQuery({
-        queryKey: ["leads", page, limit, searchTerm, activeTab, sortBy, sortOrder, scoreMin, scoreMax, mineFilter, sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, departmentFilter, stageFilter],
+        queryKey: ["leads", page, limit, searchTerm, activeTab, sortBy, sortOrder, scoreMin, scoreMax, mineFilter, sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, departmentFilter, stageFilter, countryFilter],
         queryFn: async () => {
             const params = {
                 page,
@@ -199,6 +206,7 @@ const Leads = () => {
                 endDate: dateTo || undefined,
                 department: departmentFilter || undefined,
                 stage: stageFilter || undefined,
+                country: countryFilter || undefined,
             };
             const res = await api.get("/leads", { params });
             return res.data;
@@ -494,6 +502,7 @@ const Leads = () => {
                         {mineFilter      && <FilterChip label="My Leads"                                     onRemove={() => setParam("mine", "")} />}
                         {departmentFilter && <FilterChip label={`Dept: ${departmentLabel(departmentFilter)}`} onRemove={() => { setParam("department", ""); setParam("stage", ""); }} />}
                         {stageFilter     && <FilterChip label={`Stage: ${stageLabel(departmentFilter, stageFilter)}`} onRemove={() => setParam("stage", "")} />}
+                        {countryFilter   && <FilterChip label={`Country: ${countryFilter}`}                 onRemove={() => setParam("country", "")} />}
                         {(scoreMin || scoreMax) && <FilterChip label={`Score: ${scoreMin||"0"}–${scoreMax||"100"}`} onRemove={() => { setParam("score_min",""); setParam("score_max",""); }} />}
                         {(dateFrom || dateTo)   && <FilterChip label={`Date: ${dateFrom||"…"} → ${dateTo||"…"}`}   onRemove={() => { setParam("startDate",""); setParam("endDate",""); }} />}
                         <button onClick={clearAllFilters} className="text-xs text-red-500 hover:text-red-700 font-semibold ml-1">Clear all</button>
@@ -586,6 +595,23 @@ const Leads = () => {
                                 className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all whitespace-nowrap ${mineFilter ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"}`}>
                                 <CheckCircle2 className="h-3 w-3" />Assigned to me
                             </button>
+                        </div>
+
+                        {/* Preferred Country */}
+                        <div>
+                            <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
+                                <Globe className="h-3 w-3" />Preferred Country
+                            </label>
+                            <select value={countryFilter}
+                                onChange={e => setParam("country", e.target.value)}
+                                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-400 outline-none bg-white">
+                                <option value="">Any country</option>
+                                {countriesList.map(c => (
+                                    <option key={c.id} value={c.name}>
+                                        {c.name} ({c.count || 0})
+                                    </option>
+                                ))}
+                            </select>
                         </div>
 
                         {/* Department & Stage — disabled in board view: columns already split by stage */}
@@ -717,6 +743,7 @@ const Leads = () => {
                     endDate={dateTo || undefined}
                     score_min={scoreMin || undefined}
                     score_max={scoreMax || undefined}
+                    country={countryFilter || undefined}
                 />
             ) : viewMode === "grid" ? (
                 <div className={`grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 transition-opacity duration-150 ${isFetching && !isLoading ? "opacity-60" : ""}`}>

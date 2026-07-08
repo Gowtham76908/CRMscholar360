@@ -10,6 +10,25 @@ const SYSTEM_KEYS = new Set([
 const listFields = async (req, res, next) => {
     try {
         const fields = await prisma.customFieldDef.findMany({ orderBy: { order: "asc" } });
+
+        // Populate options for misc_service_type dynamically
+        const miscFieldIdx = fields.findIndex(f => f.fieldKey === "misc_service_type");
+        if (miscFieldIdx !== -1) {
+            const leads = await prisma.lead.findMany({
+                where: { mergedIntoId: null },
+                select: { customFields: true }
+            });
+            const defaultOptions = ["Admissions Support", "Visa Assistance", "Courier Service", "Document Translation", "Certificate Attestation"];
+            const customTypes = new Set(defaultOptions);
+            leads.forEach(l => {
+                const val = l.customFields?.misc_service_type;
+                if (val && typeof val === "string" && val.trim()) {
+                    customTypes.add(val.trim());
+                }
+            });
+            fields[miscFieldIdx].options = Array.from(customTypes);
+        }
+
         res.json(fields);
     } catch (e) {
         return next(e);
@@ -123,8 +142,14 @@ const saveLeadCustomFields = async (req, res, next) => {
             "deposit_amount", "payment_mode", "payment_date", "deposit_history", "deposit_college",
             // Visa / Documentation Stage Keys
             "financial_proof_docs", "cas_form_number", "visa_manager_approved", "visa_appointment_date", "visa_approved_date", "mock_interview_scorecard", "embassy_result", "approved_visa_passport", "flight_departure_date",
+            // Loan Stage Keys
+            "loan_banks",
+            // Accommodation Stage Keys
+            "accommodation_bookings",
             // Commission Invoicing Stage Keys
-            "first_year_tuition", "commission_percentage"
+            "first_year_tuition", "commission_percentage",
+            // Miscellaneous Stage Keys
+            "misc_service_type", "misc_description", "misc_due_date"
         ]);
         const invalidKeys = Object.keys(fields).filter(k => !validKeys.has(k));
         if (invalidKeys.length > 0) {
@@ -163,6 +188,130 @@ const saveLeadCustomFields = async (req, res, next) => {
             });
         }
 
+        // Handle Miscellaneous Task & Reminder Creation/Syncing
+        if (fields.misc_due_date !== undefined || fields.misc_service_type !== undefined || fields.misc_description !== undefined) {
+            const finalServiceType = fields.misc_service_type !== undefined ? fields.misc_service_type : (lead.customFields?.misc_service_type || "");
+            const finalDescription = fields.misc_description !== undefined ? fields.misc_description : (lead.customFields?.misc_description || "");
+            const finalDueDate = fields.misc_due_date !== undefined ? fields.misc_due_date : (lead.customFields?.misc_due_date || "");
+
+            const existingTask = await prisma.task.findFirst({
+                where: { leadId, title: { startsWith: "Miscellaneous Service:" } }
+            });
+            const existingReminder = await prisma.reminder.findFirst({
+                where: { leadId, message: { startsWith: "Miscellaneous Service:" } }
+            });
+
+            const isValidDate = finalDueDate && !isNaN(Date.parse(finalDueDate));
+
+            if (isValidDate) {
+                const dateObj = new Date(finalDueDate);
+                const logActivity = require("../utils/activityLogger");
+
+                // Sync Task
+                let taskId = existingTask?.id;
+                if (existingTask) {
+                    await prisma.task.update({
+                        where: { id: existingTask.id },
+                        data: {
+                            dueDate: dateObj,
+                            title: `Miscellaneous Service: ${finalServiceType || "General"}`,
+                            description: finalDescription || null
+                        }
+                    });
+
+                    await logActivity({
+                        leadId: leadId,
+                        userId: userId,
+                        action: "TASK_UPDATED",
+                        metadata: {
+                            taskId: existingTask.id,
+                            title: `Miscellaneous Service: ${finalServiceType || "General"}`,
+                            dueDate: dateObj
+                        }
+                    }).catch(console.error);
+                } else {
+                    const leadWithDept = await prisma.lead.findUnique({
+                        where: { id: leadId },
+                        include: { leadDepartments: true }
+                    });
+                    const miscDept = leadWithDept.leadDepartments.find(d => d.department === "MISCELLANEOUS");
+                    const assignedToId = miscDept?.assignedEmployeeId || leadWithDept.assignedToId || userId;
+
+                    const newTask = await prisma.task.create({
+                        data: {
+                            title: `Miscellaneous Service: ${finalServiceType || "General"}`,
+                            description: finalDescription || null,
+                            dueDate: dateObj,
+                            leadId: leadId,
+                            assignedToId: assignedToId,
+                            createdById: userId,
+                            priority: "MEDIUM",
+                            status: "PENDING"
+                        }
+                    });
+                    taskId = newTask.id;
+
+                    await logActivity({
+                        leadId: leadId,
+                        userId: userId,
+                        action: "TASK_CREATED",
+                        metadata: {
+                            taskId: newTask.id,
+                            title: newTask.title,
+                            priority: newTask.priority,
+                            dueDate: newTask.dueDate
+                        }
+                    }).catch(console.error);
+                }
+
+                // Sync Reminder
+                if (existingReminder) {
+                    await prisma.reminder.update({
+                        where: { id: existingReminder.id },
+                        data: {
+                            remindAt: dateObj,
+                            message: `Miscellaneous Service: ${finalServiceType || "General"}`
+                        }
+                    });
+                } else {
+                    const leadWithDept = await prisma.lead.findUnique({
+                        where: { id: leadId },
+                        include: { leadDepartments: true }
+                    });
+                    const miscDept = leadWithDept.leadDepartments.find(d => d.department === "MISCELLANEOUS");
+                    const assignedToId = miscDept?.assignedEmployeeId || leadWithDept.assignedToId || userId;
+
+                    await prisma.reminder.create({
+                        data: {
+                            leadId: leadId,
+                            taskId: taskId,
+                            userId: assignedToId,
+                            remindAt: dateObj,
+                            message: `Miscellaneous Service: ${finalServiceType || "General"}`
+                        }
+                    });
+
+                    await logActivity({
+                        leadId: leadId,
+                        userId: userId,
+                        action: "REMINDER_SET",
+                        metadata: {
+                            message: `Miscellaneous Service: ${finalServiceType || "General"}`,
+                            remindAt: dateObj
+                        }
+                    }).catch(console.error);
+                }
+            } else {
+                // If the due date was cleared, delete both the synchronized task and reminder
+                if (existingTask) {
+                    await prisma.task.delete({ where: { id: existingTask.id } });
+                }
+                if (existingReminder) {
+                    await prisma.reminder.delete({ where: { id: existingReminder.id } });
+                }
+            }
+        }
+
         // NOTE: SALES stage progression is intentionally manual. Saving custom fields
         // (e.g. university_response, embassy_result) no longer auto-advances the stage —
         // users move the lead forward explicitly via the "Move to next stage" control.
@@ -187,6 +336,9 @@ const SYSTEM_FIELD_DEFS = [
     { fieldKey: "linkedinUrl", name: "LinkedIn URL",  type: "TEXT",     required: false, order: 8 },
     { fieldKey: "category",    name: "Category",      type: "SELECT",   required: false, order: 9,
       options: ["COLD","WARM","HOT","PREMIUM"] },
+    { fieldKey: "misc_service_type", name: "Types of Services", type: "TEXT", required: false, order: 10 },
+    { fieldKey: "misc_description", name: "Miscellaneous Description", type: "TEXTAREA", required: false, order: 11 },
+    { fieldKey: "misc_due_date", name: "Miscellaneous Due Date", type: "DATE", required: false, order: 12 },
 ];
 
 const ensureSystemFields = async () => {

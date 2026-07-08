@@ -598,6 +598,21 @@ async function updateStage({ leadDepartmentId, stage, actor }) {
         await validateSalesStageMove(leadDept, leadDept.stage, stage, prisma);
     }
 
+    // Validation gates for LOAN department stage transitions
+    if (leadDept.department === "LOAN") {
+        await validateLoanStageMove(leadDept, leadDept.stage, stage, prisma);
+    }
+
+    // Validation gates for ACCOMMODATION_TICKETS department stage transitions
+    if (leadDept.department === "ACCOMMODATION_TICKETS") {
+        await validateAccommodationStageMove(leadDept, leadDept.stage, stage, prisma);
+    }
+
+    // Validation gates for MISCELLANEOUS department stage transitions
+    if (leadDept.department === "MISCELLANEOUS") {
+        await validateMiscellaneousStageMove(leadDept, leadDept.stage, stage, prisma);
+    }
+
     // Atomic: the stage update and its ledger row succeed or fail together, so a
     // stage change can never exist without the historical event that records it.
     const updated = await prisma.$transaction(async (tx) => {
@@ -688,6 +703,60 @@ async function updateStage({ leadDepartmentId, stage, actor }) {
             } catch (err) {
                 console.error("Failed to push alert to Accounts Team:", err);
             }
+        }
+    }
+
+    // System Actions for LOAN department transitions
+    if (leadDept.department === "LOAN" && stage === "COMMISSION_INVOICING") {
+        try {
+            const lead = await prisma.lead.findUnique({
+                where: { id: leadDept.leadId },
+                select: { name: true }
+            });
+            const admins = await prisma.user.findMany({
+                where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, isActive: true },
+                select: { id: true }
+            });
+            await Promise.all(
+                admins.map(admin =>
+                    createNotification({
+                        userId: admin.id,
+                        title: "Accounts Alert: Loan Commission Invoicing",
+                        message: `Loan lead "${lead.name}" has reached Commission Invoicing stage. Please process the loan commission invoice.`,
+                        type: "ACCOUNTS_ALERT",
+                        link: `/leads/${leadDept.leadId}`
+                    }).catch(console.error)
+                )
+            );
+        } catch (err) {
+            console.error("Failed to push loan alert to Accounts Team:", err);
+        }
+    }
+
+    // System Actions for ACCOMMODATION_TICKETS department transitions
+    if (leadDept.department === "ACCOMMODATION_TICKETS" && stage === "COMMISSION_INVOICING") {
+        try {
+            const lead = await prisma.lead.findUnique({
+                where: { id: leadDept.leadId },
+                select: { name: true }
+            });
+            const admins = await prisma.user.findMany({
+                where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, isActive: true },
+                select: { id: true }
+            });
+            await Promise.all(
+                admins.map(admin =>
+                    createNotification({
+                        userId: admin.id,
+                        title: "Accounts Alert: Accommodation Commission Invoicing",
+                        message: `Accommodation lead "${lead.name}" has reached Commission Invoicing stage. Please process the accommodation commission invoice.`,
+                        type: "ACCOUNTS_ALERT",
+                        link: `/leads/${leadDept.leadId}`
+                    }).catch(console.error)
+                )
+            );
+        } catch (err) {
+            console.error("Failed to push accommodation alert to Accounts Team:", err);
         }
     }
 
@@ -871,6 +940,13 @@ async function buildQueueWhere({ department, actor, filters = {} }) {
             { AND: [{ lastActivityAt: null }, { updatedAt: { lt: cutoff } }] },
         ];
         leadFilter.OR = slaOr;
+    }
+
+    if (filters.country) {
+        leadFilter.customFields = {
+            path: ['destinationCountries'],
+            string_contains: filters.country
+        };
     }
 
     if (Object.keys(leadFilter).length > 0) {
@@ -1148,11 +1224,197 @@ async function validateSalesStageMove(leadDept, currentStage, targetStage, txOrP
     // manual move so it can't reach Commission Invoicing (and award commission /
     // revenue) before the money is actually collected.
     if (targetStage === "COMMISSION_INVOICING") {
+        // The Sales pipeline requires a paid SALES invoice. General (null) invoices are
+        // a separate, manually-created bucket and do NOT satisfy the Sales pipeline, nor
+        // does any other department's invoice.
         const paidInvoice = await txOrPrisma.invoice.count({
-            where: { leadId: leadDept.leadId, status: "PAID", deletedAt: null },
+            where: { leadId: leadDept.leadId, department: "SALES", status: "PAID", deletedAt: null },
         });
         if (paidInvoice === 0) {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move to Commission Invoicing: create an invoice for this lead and collect full payment first.");
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move to Commission Invoicing: create a Sales invoice for this lead and collect full payment first.");
+        }
+    }
+}
+
+/**
+ * Validation gates for LOAN department stage transitions (mirrors
+ * validateSalesStageMove). Only forward moves are gated; moving back is free.
+ *
+ * Loan bank records live on lead.customFields.loan_banks — an array of bank
+ * objects the consultant fills from the Loan panel (LeadLoanPanel). Each entry
+ * carries a `status` (Pending/Accepted/Rejected) and, when Accepted, its
+ * sanctioned loan details.
+ */
+async function validateLoanStageMove(leadDept, currentStage, targetStage, txOrPrisma = prisma) {
+    if (currentStage === targetStage) return;
+
+    // Parking (Archive) or rejecting is allowed from any stage — these are
+    // off-pipeline outcomes, not steps that require the documentation to be complete.
+    if (targetStage === "ARCHIVE" || targetStage === "REJECTED") return;
+
+    const stages = getStages(leadDept.department);
+    const currentIndex = stages.indexOf(currentStage);
+    const targetIndex = stages.indexOf(targetStage);
+    const isMovingForward = targetIndex > currentIndex;
+
+    // Moving backward (correcting a stage) is always allowed.
+    if (!isMovingForward) return;
+
+    const lead = await txOrPrisma.lead.findUnique({
+        where: { id: leadDept.leadId },
+        select: { id: true, customFields: true },
+    });
+    if (!lead) return;
+
+    const cf = lead.customFields || {};
+    const banks = Array.isArray(cf.loan_banks) ? cf.loan_banks : [];
+
+    // Enquiry → Loan Documentation: must have engaged the lead at least once.
+    if (currentStage === "ENQUIRY") {
+        const noteCount = await txOrPrisma.note.count({ where: { leadId: leadDept.leadId } });
+        const reminderCount = await txOrPrisma.reminder.count({ where: { leadId: leadDept.leadId } });
+        if (noteCount === 0 && reminderCount === 0) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Enquiry stage: Must add at least one note or reminder first.");
+        }
+    }
+
+    // Loan Documentation → Awaiting Approval: at least one bank must be recorded
+    // with its mandatory fields filled (kept in sync with LoanBankModal's required
+    // fields). A bank row missing any of these isn't considered "documented".
+    if (currentStage === "LOAN_DOCUMENTATION") {
+        const filled = (v) => v !== undefined && v !== null && String(v).trim() !== "";
+        const isComplete = (b) =>
+            filled(b?.bank_name) && filled(b?.loan_type) && filled(b?.application_ref) && filled(b?.documents_submitted_date);
+        if (!banks.some(isComplete)) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Loan Documentation stage: Add at least one bank with Bank, Loan Type, Application Ref and Documents Submitted Date filled.");
+        }
+    }
+
+    // Awaiting Approval → Approved: at least one bank accepted, each accepted
+    // bank must carry its sanctioned amount so the loan details are complete.
+    if (currentStage === "AWAITING_APPROVAL") {
+        const accepted = banks.filter(b => b?.status === "Accepted");
+        if (accepted.length === 0) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Awaiting Approval stage: Mark at least one bank as Accepted first.");
+        }
+        const filled = (v) => v !== undefined && v !== null && String(v).trim() !== "";
+        const missingAmount = accepted.some(b => !filled(b.sanctioned_amount));
+        if (missingAmount) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Awaiting Approval stage: Every accepted bank must have its sanctioned amount filled.");
+        }
+    }
+
+    // Commission Invoicing requires a fully-paid LOAN invoice for this lead — a
+    // general or other-department invoice doesn't satisfy the loan pipeline.
+    if (targetStage === "COMMISSION_INVOICING") {
+        const paidInvoice = await txOrPrisma.invoice.count({
+            where: { leadId: leadDept.leadId, department: "LOAN", status: "PAID", deletedAt: null },
+        });
+        if (paidInvoice === 0) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move to Commission Invoicing: create a Loan invoice for this lead and collect full payment first.");
+        }
+    }
+}
+
+async function validateMiscellaneousStageMove(leadDept, currentStage, targetStage, txOrPrisma = prisma) {
+    if (currentStage === targetStage) return;
+
+    const stages = getStages(leadDept.department);
+    const currentIndex = stages.indexOf(currentStage);
+    const targetIndex = stages.indexOf(targetStage);
+    const isMovingForward = targetIndex > currentIndex;
+
+    if (!isMovingForward) return;
+
+    const lead = await txOrPrisma.lead.findUnique({
+        where: { id: leadDept.leadId },
+        select: { id: true, customFields: true },
+    });
+    if (!lead) return;
+
+    const cf = lead.customFields || {};
+
+    // Enquiry → On Progress: must have specified Types of Services.
+    if (currentStage === "ENQUIRY") {
+        const serviceType = cf.misc_service_type;
+        if (!serviceType || String(serviceType).trim() === "") {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Enquiry stage: 'Types of Services' custom field must be specified first.");
+        }
+    }
+
+    // Commission Invoicing requires a fully-paid Miscellaneous invoice for this
+    // lead — a general or other-department invoice doesn't satisfy this pipeline.
+    if (targetStage === "COMMISSION_INVOICING") {
+        const paidInvoice = await txOrPrisma.invoice.count({
+            where: { leadId: leadDept.leadId, department: "MISCELLANEOUS", status: "PAID", deletedAt: null },
+        });
+        if (paidInvoice === 0) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move to Commission Invoicing: create a Miscellaneous invoice for this lead and collect full payment first.");
+        }
+    }
+}
+
+async function validateAccommodationStageMove(leadDept, currentStage, targetStage, txOrPrisma = prisma) {
+    if (currentStage === targetStage) return;
+
+    if (targetStage === "ARCHIVE" || targetStage === "REJECTED") return;
+
+    const stages = getStages(leadDept.department);
+    const currentIndex = stages.indexOf(currentStage);
+    const targetIndex = stages.indexOf(targetStage);
+    const isMovingForward = targetIndex > currentIndex;
+
+    if (!isMovingForward) return;
+
+    const lead = await txOrPrisma.lead.findUnique({
+        where: { id: leadDept.leadId },
+        select: { id: true, customFields: true },
+    });
+    if (!lead) return;
+
+    const cf = lead.customFields || {};
+    const bookings = Array.isArray(cf.accommodation_bookings) ? cf.accommodation_bookings : [];
+
+    // Enquiry → On Progress: must have engaged the lead at least once.
+    if (currentStage === "ENQUIRY") {
+        const noteCount = await txOrPrisma.note.count({ where: { leadId: leadDept.leadId } });
+        const reminderCount = await txOrPrisma.reminder.count({ where: { leadId: leadDept.leadId } });
+        if (noteCount === 0 && reminderCount === 0) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Enquiry stage: Must add at least one note or reminder first.");
+        }
+    }
+
+    // On Progress → Awaiting Confirmation: must have at least one booking recorded with mandatory fields filled.
+    if (currentStage === "ON_PROGRESS") {
+        const filled = (v) => v !== undefined && v !== null && String(v).trim() !== "";
+        const isComplete = (b) =>
+            filled(b?.agent_name) && filled(b?.booking_type) && filled(b?.booking_ref) && filled(b?.details_submitted_date);
+        if (!bookings.some(isComplete)) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of On Progress stage: Add at least one booking with Agent/Company, Booking Type, Booking Ref, and Request Date filled.");
+        }
+    }
+
+    // Awaiting Confirmation → Booking Confirmed: at least one booking confirmed, each confirmed booking must have its booking cost filled.
+    if (currentStage === "AWAITING_CONFIRMATION") {
+        const confirmed = bookings.filter(b => b?.status === "Confirmed");
+        if (confirmed.length === 0) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Awaiting Confirmation stage: Mark at least one booking as Confirmed first.");
+        }
+        const filled = (v) => v !== undefined && v !== null && String(v).trim() !== "";
+        const missingCost = confirmed.some(b => !filled(b.booking_cost));
+        if (missingCost) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Awaiting Confirmation stage: Every confirmed booking must have its Booking Cost filled.");
+        }
+    }
+
+    // Commission Invoicing requires a fully-paid Accommodation invoice for this
+    // lead — a general or other-department invoice doesn't satisfy this pipeline.
+    if (targetStage === "COMMISSION_INVOICING") {
+        const paidInvoice = await txOrPrisma.invoice.count({
+            where: { leadId: leadDept.leadId, department: "ACCOMMODATION_TICKETS", status: "PAID", deletedAt: null },
+        });
+        if (paidInvoice === 0) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move to Commission Invoicing: create an Accommodation invoice for this lead and collect full payment first.");
         }
     }
 }

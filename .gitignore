@@ -27,3 +27,10 @@ dist-ssr/
 *.sw?
 token.txt
 uploads/
+
+# Playwright E2E
+e2e/.auth/
+e2e/report/
+e2e/.artifacts/
+test-results/
+playwright-report/

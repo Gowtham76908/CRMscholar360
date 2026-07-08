@@ -176,6 +176,9 @@ const createInvoiceSchema = z.object({
     notes: z.string().optional(),
     dealId: z.string().uuid().optional().or(z.literal("")).or(z.null()),
     leadId: z.string().uuid().optional().or(z.literal("")).or(z.null()),
+    // Which department pipeline this invoice belongs to (LOAN, ACCOMMODATION_TICKETS,
+    // …). null/absent = a general (Sales) invoice. Must be allowed here or Zod strips it.
+    department: z.string().optional().or(z.null()),
     items: z.array(invoiceItemSchema).min(1, "At least one item required"),
 });
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, Plus, X, Loader2, UserPlus, ChevronDown, History, ArrowRight } from "lucide-react";
+import { Building2, Plus, X, Loader2, UserPlus, ChevronDown, History, ArrowRight, Archive } from "lucide-react";
 import api from "../../api/axios";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -118,7 +118,15 @@ function DepartmentServiceRow({ assignment, user, isDirector, isManager, myDepar
     const { getStages } = useWorkflows();
     const stages = getStages(a.department);
     const currentIndex = stages.findIndex((s) => s.code === a.stage);
-    const nextStage = currentIndex !== -1 && currentIndex < stages.length - 1 ? stages[currentIndex + 1] : null;
+    // Off-pipeline stages (Archive / Rejected / Future Prospect) aren't a linear "next".
+    const OFF_PIPELINE_CODES = ["ARCHIVE", "FUTURE_PROSPECT", "REJECTED"];
+    const rawNextStage = currentIndex !== -1 && currentIndex < stages.length - 1 ? stages[currentIndex + 1] : null;
+    const nextStage = rawNextStage && !OFF_PIPELINE_CODES.includes(rawNextStage.code) ? rawNextStage : null;
+    // Archive is an off-pipeline outcome available from any non-archived stage — every
+    // department (Sales, Loan, Forex, Accommodation, Miscellaneous) that has an ARCHIVE
+    // stage can be parked here regardless of where it is in the linear pipeline.
+    const archiveStage = stages.find((s) => s.code === "ARCHIVE") || null;
+    const canArchive = archiveStage && a.stage !== "ARCHIVE";
 
     const managesDept = isDirector || (isManager && myDepartments.includes(a.department));
     const canAssign = managesDept;
@@ -227,6 +235,23 @@ function DepartmentServiceRow({ assignment, user, isDirector, isManager, myDepar
                             <ArrowRight className="h-3.5 w-3.5" />
                         )}
                         Move to {nextStage.label}
+                    </button>
+                )}
+                {canUpdateStage && canArchive && (
+                    <button
+                        onClick={() => {
+                            if (confirm(`Archive the ${departmentLabel(a.department)} service for this lead?`))
+                                stageMut.mutate(archiveStage.code);
+                        }}
+                        disabled={stageMut.isPending}
+                        className="w-full mt-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50 rounded-md transition-all"
+                    >
+                        {stageMut.isPending ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                            <Archive className="h-3.5 w-3.5" />
+                        )}
+                        Archive
                     </button>
                 )}
             </div>

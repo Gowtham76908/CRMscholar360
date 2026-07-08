@@ -201,6 +201,8 @@ app.use("/api/attendance", require("./routes/attendance"));
 app.use("/api/leave", require("./routes/leave"));
 app.use("/api/upload", require("./routes/upload"));
 app.use("/api/countries", require("./routes/country"));
+app.use("/api/banks", require("./routes/bank"));
+app.use("/api/accommodation-agents", require("./routes/accommodationAgent"));
 app.use("/api/third-party-portals", require("./routes/thirdPartyPortal"));
 app.use("/api/user-status", require("./routes/userStatus"));
 app.use("/api/invoices", require("./routes/invoice"));

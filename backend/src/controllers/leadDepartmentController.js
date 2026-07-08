@@ -196,6 +196,7 @@ const getQueue = async (req, res, next) => {
                 endDate: req.query.endDate || undefined,
                 score_min: req.query.score_min || undefined,
                 score_max: req.query.score_max || undefined,
+                country: req.query.country || undefined,
             },
         });
         res.json(rows);
@@ -227,6 +228,7 @@ const getBoardQueue = async (req, res, next) => {
                 endDate: req.query.endDate || undefined,
                 score_min: req.query.score_min || undefined,
                 score_max: req.query.score_max || undefined,
+                country: req.query.country || undefined,
             },
             page,
             perStage,

@@ -110,6 +110,7 @@ export default function LeadsBoard({
     endDate,
     score_min,
     score_max,
+    country,
 }) {
     const { user } = useAuth();
     const { getStages, hasWorkflow, isLoading: workflowsLoading } = useWorkflows();
@@ -145,8 +146,9 @@ export default function LeadsBoard({
         if (endDate) f.endDate = endDate;
         if (score_min) f.score_min = score_min;
         if (score_max) f.score_max = score_max;
+        if (country) f.country = country;
         return f;
-    }, [search, mine, user, source, category, enquiryType, sla, startDate, endDate, score_min, score_max]);
+    }, [search, mine, user, source, category, enquiryType, sla, startDate, endDate, score_min, score_max, country]);
 
     const { data, isLoading, isFetching } = useDepartmentBoard(department, filters, 1, PER_STAGE);
     // Already split server-side, one entry per stage: { [stageCode]: { rows, total, totalPages } }.
@@ -357,7 +359,7 @@ function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTas
 
     return (
         <Link
-            to={`/leads/${lead.id}`}
+            to={`/leads/${lead.id}${department ? `?dept=${department}` : ""}`}
             className={`group block bg-white rounded-xl border transition-all duration-300 p-3.5 relative overflow-visible shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-indigo-400/80 ${sla?.level === "breach"
                     ? "border-red-200 bg-gradient-to-br from-white to-red-50/5 border-l-[4px] border-l-red-500"
                     : sla?.level === "warning"

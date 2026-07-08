@@ -213,6 +213,13 @@ const getLeads = async ({
         }
     }
 
+    if (filters.country) {
+        where.customFields = {
+            path: ['destinationCountries'],
+            string_contains: filters.country
+        };
+    }
+
     // Search filter (Case-insensitive)
     // Use AND to preserve any existing where.OR scope (e.g. manager team filter)
     if (search) {
