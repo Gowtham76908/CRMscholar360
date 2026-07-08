@@ -98,27 +98,26 @@ const PROVIDERS = [
         grad: "from-blue-500 to-blue-700",
         bg: "bg-blue-50", border: "border-blue-100", chip: "text-blue-700 bg-blue-50",
         oauth: false,
+        fbLogin: true,
         tags: ["Facebook", "Instagram", "Lead Forms", "Real-time sync"],
         configFields: [
-            { key: "accessToken", label: "Meta Access Token", placeholder: "EAAxxxxxxxx…  (Page or User access token)", type: "password" },
-            { key: "pageId",      label: "Page ID",           placeholder: "Your Facebook Page numeric ID",              type: "text" },
             { key: "appId",       label: "App ID",            placeholder: "Meta App ID (App Dashboard → Settings → Basic)", type: "text" },
-            { key: "appSecret",   label: "App Secret",        placeholder: "Meta App Secret — used to verify webhooks",   type: "password" },
+            { key: "appSecret",   label: "App Secret",        placeholder: "Meta App Secret (App Dashboard → Settings → Basic)", type: "password" },
         ],
         metaKeys: [
-            { key: "pageCount",  label: "Pages",       icon: "📄" },
+            { key: "pageName",   label: "Page",        icon: "📄" },
             { key: "leadCount",  label: "Leads synced", icon: "👥" },
         ],
         setupGuide: {
-            title: "How to get your Meta Access Token & Page ID",
+            title: "How to connect Meta Lead Ads",
             steps: [
-                { label: "Open Meta for Developers", detail: "Go to developers.facebook.com → My Apps → select your app (or create one)." },
-                { label: "Generate a Page Access Token", detail: "In your app dashboard → Tools → Graph API Explorer. Select your Facebook Page from the dropdown, then click \"Generate Access Token\". Copy the token — it starts with EAA…" },
-                { label: "Get your Page ID", detail: "Go to your Facebook Page → About (scroll down) → you'll see \"Page ID\" as a number. Or in Graph API Explorer, run GET /me?fields=id,name with your page token." },
-                { label: "Paste & Save", detail: "Enter the token and Page ID in the fields above, then click Save & Activate." },
+                { label: "Create a Meta App", detail: "Go to developers.facebook.com → My Apps → Create App (Business type). Add the Facebook Login and Webhooks products." },
+                { label: "Copy App ID & App Secret", detail: "In your app → App Settings → Basic, copy the App ID and App Secret. Paste both into the fields above and click Save." },
+                { label: "Add the redirect URI", detail: "In Facebook Login → Settings, add this app's backend callback URL (shown below) to \"Valid OAuth Redirect URIs\"." },
+                { label: "Connect with Facebook", detail: "Click \"Connect with Facebook\", sign in, and grant the leads permissions. Then pick the Page you want to sync leads from." },
             ],
-            note: "For long-lived tokens (60 days), exchange using Graph API: GET /oauth/access_token?grant_type=fb_exchange_token. For permanent tokens, use a System User in Meta Business Manager.",
-            links: [{ label: "Graph API Explorer", url: "https://developers.facebook.com/tools/explorer" }],
+            note: "No manual tokens needed — the app handles the OAuth login, grabs a long-lived Page token, and requests the leads_retrieval permission for you.",
+            links: [{ label: "Meta for Developers", url: "https://developers.facebook.com/apps" }],
         },
     },
     {
@@ -604,6 +603,40 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
     const [apiKey, setApiKey]     = useState("");
     const [showEmbed, setShowEmbed] = useState(false);
     const [activeStep, setActiveStep] = useState(0);
+    const [fbPages, setFbPages]     = useState(null);
+    const [selectedPage, setSelectedPage] = useState("");
+    const [fbBusy, setFbBusy]       = useState(false);
+
+    const { pending: fbPending, open: openFb } = useOAuthPopup((payload) => {
+        const pages = payload?.pages || [];
+        setFbPages(pages);
+        if (pages.length === 1) setSelectedPage(pages[0].id);
+        if (!pages.length) toast.error("No Facebook Pages found for this account — you must be a Page admin.");
+    });
+
+    const handleFbConnect = async () => {
+        if (!form.appId || !form.appSecret) { toast.error("Enter App ID and App Secret first"); return; }
+        setFbBusy(true);
+        try {
+            await api.put(`/integration-hub/${provider.key}/configure`, { config: { appId: form.appId, appSecret: form.appSecret } });
+            const res = await api.get(`/integration-hub/${provider.key}/oauth/start`);
+            openFb(res.data.authUrl);
+        } catch (err) {
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Could not start Facebook login");
+        } finally { setFbBusy(false); }
+    };
+
+    const handleSelectPage = async () => {
+        if (!selectedPage) { toast.error("Select a Page"); return; }
+        setFbBusy(true);
+        try {
+            const res = await api.post(`/integration-hub/${provider.key}/select-page`, { pageId: selectedPage });
+            toast.success(`Connected to ${res.data.pageName}`);
+            onSaved?.(); onClose();
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Could not connect Page");
+        } finally { setFbBusy(false); }
+    };
 
     useEffect(() => {
         if (open) {
@@ -613,6 +646,8 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
             (provider?.configFields || []).forEach(f => { initial[f.key] = ""; });
             setForm(initial);
             setShow({});
+            setFbPages(null);
+            setSelectedPage("");
             if (provider?.embedWidget) {
                 const existing = integration?.metadata?.apiKey || "";
                 setApiKey(existing);
@@ -825,6 +860,46 @@ document.getElementById('crm-lead-form').onsubmit = async function(e) {
                                                 );
                                             })}
                                         </div>
+                                    </div>
+                                )}
+
+                                {provider?.fbLogin && (
+                                    <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4 space-y-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-zinc-600 uppercase tracking-wide">Connect Facebook Page</span>
+                                        </div>
+                                        <p className="text-[11px] text-zinc-500 leading-relaxed">
+                                            Add this redirect URI to your Meta app under <span className="font-semibold">Facebook Login → Settings → Valid OAuth Redirect URIs</span>:
+                                        </p>
+                                        <div className="flex items-center gap-2 bg-white border border-zinc-200 rounded-xl px-3 py-2">
+                                            <code className="flex-1 text-[11px] text-zinc-700 break-all font-mono">{backendUrl}/api/integration-hub/oauth/meta_leads/callback</code>
+                                            <CopyButton text={`${backendUrl}/api/integration-hub/oauth/meta_leads/callback`} />
+                                        </div>
+
+                                        {!fbPages ? (
+                                            <button type="button" onClick={handleFbConnect} disabled={fbBusy || fbPending}
+                                                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 rounded-xl transition-all shadow-sm disabled:opacity-60">
+                                                {(fbBusy || fbPending) ? <><Loader2 size={14} className="animate-spin" />Connecting…</> : <>Connect with Facebook</>}
+                                            </button>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                <label className={labelCls}>Select a Page to sync leads from</label>
+                                                <select value={selectedPage} onChange={e => setSelectedPage(e.target.value)} className={inputCls}>
+                                                    <option value="">— Choose a Page —</option>
+                                                    {fbPages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                                </select>
+                                                <div className="flex gap-2">
+                                                    <button type="button" onClick={handleSelectPage} disabled={fbBusy || !selectedPage}
+                                                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 rounded-xl transition-all shadow-sm disabled:opacity-60">
+                                                        {fbBusy ? <><Loader2 size={14} className="animate-spin" />Connecting…</> : "Connect Page & Sync"}
+                                                    </button>
+                                                    <button type="button" onClick={() => setFbPages(null)}
+                                                        className="px-4 py-2.5 text-sm font-semibold text-zinc-600 bg-white border border-zinc-200 rounded-xl hover:bg-zinc-50">
+                                                        Retry
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 

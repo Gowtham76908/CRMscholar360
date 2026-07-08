@@ -11,6 +11,8 @@ router.use(auth);
 router.get("/",                        c.getAll);
 router.get("/:platform/oauth/start",   c.startOAuth);
 router.put("/:platform/configure",     c.configure);
+router.post("/:platform/pages",         c.listPages);
+router.post("/:platform/select-page",   c.selectMetaPage);
 router.post("/:platform/test",         c.testConnection);
 router.post("/:platform/sync",         c.sync);
 router.delete("/:platform/disconnect", c.disconnect);
