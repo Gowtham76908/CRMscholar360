@@ -19,7 +19,7 @@ const DEFAULTS = [
 // Providers that auto-connect after configure (no OAuth needed)
 const API_KEY_PROVIDERS = new Set([
     "linkedin_serper", "fasterq", "website_webhook",
-    "whatsapp_cloud", "google_ads", "livekit",
+    "meta_leads", "whatsapp_cloud", "google_ads", "livekit",
 ]);
 
 let _defaultsSeeded = false;
@@ -71,20 +71,12 @@ const getAll = async (req, res, next) => {
     }
 };
 
-// Backend URL the OAuth popup redirects back to. Must be listed in the Meta app's
-// "Valid OAuth Redirect URIs". Override with META_REDIRECT_URI for production.
-function callbackUri(req, platform) {
-    if (process.env.META_REDIRECT_URI) return process.env.META_REDIRECT_URI;
-    const proto = req.headers["x-forwarded-proto"] || req.protocol;
-    return `${proto}://${req.get("host")}/api/integration-hub/oauth/${platform}/callback`;
-}
-
 const startOAuth = async (req, res, next) => {
     const { platform } = req.params;
     try {
         const integration = await prisma.integration.findUnique({ where: { platform } });
         const provider = getProvider(platform, integration);
-        const { authUrl } = await provider.getAuthUrl(platform, { redirectUri: callbackUri(req, platform) });
+        const { authUrl } = await provider.getAuthUrl(platform);
         res.json({ authUrl });
     } catch (err) {
         return next(err);
@@ -113,25 +105,6 @@ const oauthCallback = async (req, res, next) => {
         if (!integration) return closeWithResult(false, { message: "Integration not found" });
 
         const provider = getProvider(platform, integration);
-
-        // Meta Lead Ads: OAuth yields a user token, but the user must still choose
-        // which Page to sync. Store the user token, return the Page list, defer connect.
-        if (platform === "meta_leads") {
-            const { userToken } = await provider.exchangeCode(code, { redirectUri: callbackUri(req, platform) });
-            const pages = await provider.fetchPages(userToken);
-            await prisma.integration.update({
-                where: { platform },
-                data: {
-                    status: "PENDING",
-                    isConnected: false,
-                    config: { ...(integration.config || {}), userToken: encrypt(userToken) },
-                    errorMessage: null,
-                },
-            });
-            await addLog(integration.id, "AUTH", "Facebook login successful — awaiting Page selection", "SUCCESS");
-            return closeWithResult(true, { platform, pages: pages.map(p => ({ id: p.id, name: p.name, tasks: p.tasks })) });
-        }
-
         const tokens = await provider.exchangeCode(code);
 
         await prisma.integration.update({
@@ -241,59 +214,6 @@ const configure = async (req, res, next) => {
         }
 
         res.json(safeIntegration(updated));
-    } catch (err) {
-        return next(err);
-    }
-};
-
-// POST /:platform/pages — re-list Pages using the stored user token (in case the
-// popup was dismissed or the user wants to change Page later).
-const listPages = async (req, res, next) => {
-    const { platform } = req.params;
-    try {
-        const integration = await prisma.integration.findUnique({ where: { platform } });
-        const userTokenEnc = integration?.config?.userToken;
-        if (!userTokenEnc) return res.status(400).json({ message: "Connect with Facebook first" });
-        const provider = getProvider(platform, integration);
-        const pages = await provider.fetchPages(decrypt(userTokenEnc));
-        res.json(pages.map(p => ({ id: p.id, name: p.name, tasks: p.tasks })));
-    } catch (err) {
-        return next(err);
-    }
-};
-
-// POST /:platform/select-page { pageId } — finalize: store the chosen Page's token
-// and Page ID, then mark the integration connected.
-const selectMetaPage = async (req, res, next) => {
-    const { platform } = req.params;
-    const { pageId } = req.body;
-    try {
-        if (!pageId) return res.status(400).json({ message: "pageId is required" });
-        const integration = await prisma.integration.findUnique({ where: { platform } });
-        const userTokenEnc = integration?.config?.userToken;
-        if (!userTokenEnc) return res.status(400).json({ message: "Connect with Facebook first" });
-
-        const provider = getProvider(platform, integration);
-        const pages = await provider.fetchPages(decrypt(userTokenEnc));
-        const page = pages.find(p => String(p.id) === String(pageId));
-        if (!page) return res.status(404).json({ message: "Page not found for this account" });
-
-        await prisma.integration.update({
-            where: { platform },
-            data: {
-                config: {
-                    ...(integration.config || {}),
-                    accessToken: encrypt(page.accessToken),
-                    pageId: page.id,
-                },
-                metadata: { ...(integration.metadata || {}), pageName: page.name, pageId: page.id },
-                isConnected: true,
-                status: "CONNECTED",
-                errorMessage: null,
-            },
-        });
-        await addLog(integration.id, "CONNECTED", `Page selected: ${page.name}`, "SUCCESS");
-        res.json({ ok: true, pageName: page.name });
     } catch (err) {
         return next(err);
     }
@@ -421,4 +341,4 @@ const getAllLogs = async (req, res, next) => {
     }
 };
 
-module.exports = { getAll, startOAuth, oauthCallback, configure, listPages, selectMetaPage, testConnection, sync, disconnect, getLogs, getAllLogs, ensureIntegrationDefaults: ensureDefaults };
+module.exports = { getAll, startOAuth, oauthCallback, configure, testConnection, sync, disconnect, getLogs, getAllLogs, ensureIntegrationDefaults: ensureDefaults };

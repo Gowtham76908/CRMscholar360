@@ -3,74 +3,11 @@ const prisma = require("../../utils/prisma");
 const leadService = require("../leadService");
 const { decrypt } = require("../../utils/encrypt");
 
-const GRAPH = "https://graph.facebook.com/v19.0";
-const OAUTH_SCOPES = ["leads_retrieval", "pages_show_list", "pages_read_engagement", "pages_manage_ads"];
-
 class MetaProvider extends ProviderInterface {
     _token() {
         const cfg = this.integration?.config || {};
         if (!cfg.accessToken) return null;
         try { return decrypt(cfg.accessToken); } catch { return cfg.accessToken; }
-    }
-
-    _appCreds() {
-        const cfg = this.integration?.config || {};
-        const appId = cfg.appId || process.env.META_APP_ID;
-        let appSecret = cfg.appSecret
-            ? (() => { try { return decrypt(cfg.appSecret); } catch { return cfg.appSecret; } })()
-            : process.env.META_APP_SECRET;
-        if (!appId || !appSecret) {
-            throw new Error("Enter your Meta App ID and App Secret in the fields above and Save before connecting with Facebook.");
-        }
-        return { appId, appSecret };
-    }
-
-    // ── OAuth ──────────────────────────────────────────────────────────────
-    // Build the Facebook login dialog URL. `ctx.redirectUri` is the backend
-    // callback the popup returns to; `ctx.state` round-trips through Meta.
-    async getAuthUrl(platform, ctx = {}) {
-        const { appId } = this._appCreds();
-        const params = new URLSearchParams({
-            client_id: appId,
-            redirect_uri: ctx.redirectUri,
-            scope: OAUTH_SCOPES.join(","),
-            response_type: "code",
-            state: ctx.state || "",
-        });
-        return { authUrl: `https://www.facebook.com/v19.0/dialog/oauth?${params}` };
-    }
-
-    // Exchange the OAuth code for a long-lived USER token. We don't connect yet —
-    // the user still has to pick which Page to sync (see fetchPages / selectPage).
-    async exchangeCode(code, ctx = {}) {
-        const { appId, appSecret } = this._appCreds();
-        const shortRes = await fetch(`${GRAPH}/oauth/access_token?` + new URLSearchParams({
-            client_id: appId, client_secret: appSecret, redirect_uri: ctx.redirectUri, code,
-        }));
-        const shortJson = await shortRes.json();
-        if (shortJson.error) throw new Error(shortJson.error.message);
-
-        // Upgrade to a long-lived (~60 day) user token
-        const longRes = await fetch(`${GRAPH}/oauth/access_token?` + new URLSearchParams({
-            grant_type: "fb_exchange_token", client_id: appId, client_secret: appSecret,
-            fb_exchange_token: shortJson.access_token,
-        }));
-        const longJson = await longRes.json();
-        const userToken = longJson.access_token || shortJson.access_token;
-        return { userToken };
-    }
-
-    // List the Pages the connected user manages, so the UI can offer a picker.
-    async fetchPages(userToken) {
-        const res = await fetch(`${GRAPH}/me/accounts?fields=id,name,access_token,tasks&access_token=${userToken}`);
-        const json = await res.json();
-        if (json.error) throw new Error(json.error.message);
-        return (json.data || []).map(p => ({
-            id: p.id,
-            name: p.name,
-            accessToken: p.access_token,   // long-lived page token (inherited from long-lived user token)
-            tasks: p.tasks || [],
-        }));
     }
 
     async validate() {
