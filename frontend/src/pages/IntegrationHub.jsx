@@ -102,6 +102,8 @@ const PROVIDERS = [
         configFields: [
             { key: "accessToken", label: "Meta Access Token", placeholder: "EAAxxxxxxxx…  (Page or User access token)", type: "password" },
             { key: "pageId",      label: "Page ID",           placeholder: "Your Facebook Page numeric ID",              type: "text" },
+            { key: "appId",       label: "App ID",            placeholder: "Meta App ID (App Dashboard → Settings → Basic)", type: "text" },
+            { key: "appSecret",   label: "App Secret",        placeholder: "Meta App Secret — used to verify webhooks",   type: "password" },
         ],
         metaKeys: [
             { key: "pageCount",  label: "Pages",       icon: "📄" },
@@ -132,6 +134,8 @@ const PROVIDERS = [
             { key: "accessToken",   label: "Permanent Access Token",     placeholder: "EAAxxxxxxxx…  (from Meta Developer Console)", type: "password" },
             { key: "phoneNumberId", label: "Phone Number ID",            placeholder: "Numeric phone number ID",                      type: "text" },
             { key: "wabaId",        label: "WhatsApp Business Account ID", placeholder: "Numeric WABA ID",                            type: "text" },
+            { key: "appId",         label: "App ID",                     placeholder: "Meta App ID (from App Dashboard → Settings)",  type: "text" },
+            { key: "appSecret",     label: "App Secret",                 placeholder: "Meta App Secret — used to verify webhooks",    type: "password" },
         ],
         metaKeys: [
             { key: "phoneNumber",     label: "Phone number",    icon: "📱" },
@@ -143,9 +147,10 @@ const PROVIDERS = [
                 { label: "Create a Meta App", detail: "Go to developers.facebook.com → Create App → choose Business type. Add the WhatsApp product to your app." },
                 { label: "Get your Phone Number ID & WABA ID", detail: "In your app → WhatsApp → Getting Started. You'll see the Phone Number ID and WhatsApp Business Account ID listed on that page." },
                 { label: "Generate a Permanent Token", detail: "Go to Meta Business Manager → System Users → Add System User (Admin role). Then assign your WhatsApp app, generate a token with whatsapp_business_messaging and whatsapp_business_management permissions." },
-                { label: "Paste & Save", detail: "Enter the three values above and click Save & Activate. The CRM can now send WhatsApp messages to your leads." },
+                { label: "Copy your App ID & App Secret", detail: "In your app → App Settings → Basic. Copy the App ID and click \"Show\" next to App Secret. Paste both into the fields above — the App Secret is used to verify incoming webhook signatures from Meta." },
+                { label: "Paste & Save", detail: "Enter all the values above and click Save & Activate. The CRM can now send WhatsApp messages to your leads and securely verify webhooks." },
             ],
-            note: "The token from the Getting Started page expires in 24 hours — always use a System User permanent token for production.",
+            note: "The token from the Getting Started page expires in 24 hours — always use a System User permanent token for production. Adding the App Secret here removes the need for a META_APP_SECRET .env variable.",
             links: [{ label: "Meta Business Manager", url: "https://business.facebook.com/settings/system-users" }],
         },
     },

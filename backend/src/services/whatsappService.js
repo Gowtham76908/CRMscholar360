@@ -44,6 +44,7 @@ async function _getConfig() {
         wabaId:           raw.wabaId || null,
         templateLanguage: raw.templateLanguage || "en_US",
         appSecret:        raw.appSecret ? (() => { try { return decrypt(raw.appSecret); } catch { return raw.appSecret; } })() : null,
+        appId:            raw.appId || null,
         verifyToken:      raw.verifyToken || null,
     };
     _cached = { ts: Date.now(), cfg };

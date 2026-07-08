@@ -173,9 +173,10 @@ export const ChatProvider = ({ children }) => {
 
         const s = getSocket();
 
-        const onConnect    = () => setConnected(true);
-        const onDisconnect = () => setConnected(false);
+        const onConnect    = () => { console.log("[socket] connected", s.id); setConnected(true); };
+        const onDisconnect = (reason) => { console.log("[socket] disconnected:", reason); setConnected(false); };
         const onConnectError = (err) => {
+            console.log("[socket] connect_error:", err.message);
             if (err.message === "UNAUTHENTICATED") {
                 s.disconnect();
             }
@@ -227,6 +228,7 @@ export const ChatProvider = ({ children }) => {
         };
 
         const onNotification = (notif) => {
+            console.log("[socket] notification:new received:", notif?.type, notif?.title);
             // Chat messages have their own toast (see onMessage). Here we only need
             // the bell to update, so refresh the notifications query and stop.
             if (notif.type === "CHAT_MESSAGE") {
