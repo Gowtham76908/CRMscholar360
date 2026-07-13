@@ -116,48 +116,54 @@ class MetaProvider extends ProviderInterface {
         const sampleFieldNames = new Set();
 
         for (const form of forms) {
-            const leadsRes = await fetch(
-                `https://graph.facebook.com/v19.0/${form.id}/leads?access_token=${token}&fields=field_data,created_time`
-            );
-            const leadsJson = await leadsRes.json();
-            if (leadsJson.error) {
-                console.warn(`[MetaSync] form ${form.id} (${form.name}) leads error:`, leadsJson.error.message);
-                continue;
-            }
-            for (const lead of leadsJson.data || []) {
-                leadsSeen++;
-                const fields = Object.fromEntries(
-                    (lead.field_data || []).map(f => [String(f.name).toLowerCase(), (f.values || [])[0] || ""])
-                );
-                Object.keys(fields).forEach(k => sampleFieldNames.add(k));
+            // Facebook returns leads in pages (25 by default). Follow paging.next
+            // so older leads import too — a form can hold hundreds. Without this,
+            // only the newest page is ever seen and older leads never sync.
+            let url = `https://graph.facebook.com/v19.0/${form.id}/leads?access_token=${token}&fields=field_data,created_time&limit=100`;
+            let page = 0;
+            while (url && page < 50) {
+                page++;
+                const leadsJson = await (await fetch(url)).json();
+                if (leadsJson.error) {
+                    console.warn(`[MetaSync] form ${form.id} (${form.name}) leads error:`, leadsJson.error.message);
+                    break;
+                }
+                for (const lead of leadsJson.data || []) {
+                    leadsSeen++;
+                    const fields = Object.fromEntries(
+                        (lead.field_data || []).map(f => [String(f.name).toLowerCase(), (f.values || [])[0] || ""])
+                    );
+                    Object.keys(fields).forEach(k => sampleFieldNames.add(k));
 
-                // Facebook field names vary by form (standard, custom, or localized),
-                // so match on common keys and fall back to pattern-matching.
-                const email = fields.email || fields.email_address || fields.work_email ||
-                    Object.entries(fields).find(([k, v]) => k.includes("email") || /@/.test(v))?.[1] || null;
-                const phone = fields.phone_number || fields.phone || fields.mobile ||
-                    fields.mobile_number || fields.contact_number ||
-                    Object.entries(fields).find(([k]) => /phone|mobile|contact/.test(k))?.[1] || null;
-                const name = fields.full_name || fields.name ||
-                    [fields.first_name, fields.last_name].filter(Boolean).join(" ").trim() ||
-                    "Facebook Lead";
+                    // Facebook field names vary by form (standard, custom, or localized),
+                    // so match on common keys and fall back to pattern-matching.
+                    const email = fields.email || fields.email_address || fields.work_email ||
+                        Object.entries(fields).find(([k, v]) => k.includes("email") || /@/.test(v))?.[1] || null;
+                    const phone = fields.phone_number || fields.phone || fields.mobile ||
+                        fields.mobile_number || fields.contact_number ||
+                        Object.entries(fields).find(([k]) => /phone|mobile|contact/.test(k))?.[1] || null;
+                    const name = fields.full_name || fields.name ||
+                        [fields.first_name, fields.last_name].filter(Boolean).join(" ").trim() ||
+                        "Facebook Lead";
 
-                if (!email && !phone) { skippedNoContact++; continue; }
+                    if (!email && !phone) { skippedNoContact++; continue; }
 
-                let existing = null;
-                if (email) existing = await prisma.lead.findFirst({ where: { email, source: "FACEBOOK" } });
-                if (!existing && phone) existing = await prisma.lead.findFirst({ where: { phone, source: "FACEBOOK" } });
-                if (existing) { skippedExisting++; continue; }
+                    let existing = null;
+                    if (email) existing = await prisma.lead.findFirst({ where: { email, source: "FACEBOOK" } });
+                    if (!existing && phone) existing = await prisma.lead.findFirst({ where: { phone, source: "FACEBOOK" } });
+                    if (existing) { skippedExisting++; continue; }
 
-                // Centralized creation: Lead + SALES LeadDepartment (unassigned)
-                await leadService.createLead({
-                    name,
-                    email: email || null,
-                    phone: phone || null,
-                    source: "FACEBOOK",
-                    enquiryType: "PRODUCT",
-                });
-                synced++;
+                    // Centralized creation: Lead + SALES LeadDepartment (unassigned)
+                    await leadService.createLead({
+                        name,
+                        email: email || null,
+                        phone: phone || null,
+                        source: "FACEBOOK",
+                        enquiryType: "PRODUCT",
+                    });
+                    synced++;
+                }
+                url = leadsJson.paging?.next || null;
             }
         }
 
