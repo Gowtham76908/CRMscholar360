@@ -9,6 +9,7 @@ import {
     ClipboardList, Plug, Loader2, ArrowUpRight, Eye, EyeOff, Copy, CheckCheck,
     CheckCircle2, Wifi, WifiOff, Activity, Clock, ShieldAlert, TrendingUp,
     ChevronLeft, ChevronRight, Search, Filter, KeyRound, Code2, HelpCircle,
+    Plus, Trash2,
 } from "lucide-react";
 
 // ── SVG icons ─────────────────────────────────────────────────────────────────
@@ -86,6 +87,7 @@ const HubSpotIcon   = ({ s = 22 }) =><svg width={s} height={s} viewBox="0 0 24 2
 const SlackIcon     = ({ s = 22 }) => <svg width={s} height={s} viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#4A154B" /><path d="M9 8a1.5 1.5 0 01-3 0V6a1.5 1.5 0 013 0v2zm0 0h6M15 8a1.5 1.5 0 003 0V6a1.5 1.5 0 00-3 0v2zm0 0v6M15 14a1.5 1.5 0 013 0v2a1.5 1.5 0 01-3 0v-2zm0 0H9M9 14a1.5 1.5 0 01-3 0v-2a1.5 1.5 0 013 0v2zm0 0v-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg>;
 const ZapierIcon    = ({ s = 22 }) => <svg width={s} height={s} viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#FF4A00" /><path d="M12 4l-1.5 6H5l5 3.5-1.5 6.5L12 16l3.5 4L14 13.5 19 10h-5.5L12 4z" fill="white" /></svg>;
 const AnalyticsIcon = ({ s = 22 }) => <svg width={s} height={s} viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#E37400" /><path d="M5 17l4-5 4 3 5-7" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+const GSheetIcon    = ({ s = 22 }) => <svg width={s} height={s} viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2" fill="#0F9D58" /><rect x="7" y="7" width="10" height="10" rx="1" fill="white" /><path d="M7 11h10M7 14h10M12 7v10" stroke="#0F9D58" strokeWidth="1.2" /></svg>;
 
 // ── Provider config ───────────────────────────────────────────────────────────
 
@@ -216,26 +218,27 @@ const PROVIDERS = [
     {
         key: "google_calendar",
         name: "Google Calendar",
-        desc: "Connect your Google Calendar to sync reminders and get event notifications.",
+        desc: "Configure global Google OAuth credentials to enable Google Calendar syncing.",
         Icon: GCalIcon,
         grad: "from-blue-500 to-sky-600",
         bg: "bg-blue-50", border: "border-blue-100", chip: "text-blue-700 bg-blue-50",
-        oauth: true,
+        oauth: false,
         noSync: true,
-        endpoints: {
-            status:     "/google/calendar/status",
-            oauthStart: "/google/auth?popup=1",
-            disconnect: "/google/calendar/disconnect",
-        },
+        configFields: [
+            { key: "clientId",     label: "Client ID",     placeholder: "Your Google OAuth Client ID",     type: "text" },
+            { key: "clientSecret", label: "Client Secret", placeholder: "Your Google OAuth Client Secret", type: "password" },
+            { key: "redirectUri",  label: "Redirect URI",  placeholder: "e.g., https://your-api.com/api/google/callback", type: "text" },
+        ],
         tags: ["OAuth", "Reminders Sync", "Event Notifications", "Per-user"],
         setupGuide: {
-            title: "How to connect Google Calendar",
+            title: "How to configure Google Calendar",
             steps: [
-                { label: "Click Connect", detail: "Click the Connect button below. A Google sign-in popup will appear." },
-                { label: "Sign in with Google", detail: "Choose the Google account whose calendar you want to sync. Grant calendar access when prompted." },
-                { label: "Done", detail: "The popup will close automatically. Your reminders will now sync to Google Calendar." },
+                { label: "Create a Google Cloud Project", detail: "Go to console.cloud.google.com and create a new project." },
+                { label: "Configure OAuth Consent Screen", detail: "Set up the External user type, select calendar scopes, and add your test user emails." },
+                { label: "Generate OAuth Credentials", detail: "Go to Credentials -> Create Credentials -> OAuth Client ID (Web Application). Set the Authorized Redirect URI to match the Redirect URI field above." },
+                { label: "Configure in CRM", detail: "Enter the resulting Client ID, Client Secret, and Redirect URI here, then click Save & Activate." },
             ],
-            note: "This connection is per-user — each team member connects their own Google account independently.",
+            note: "Once configured globally here, each team member can connect their own Google accounts in their profile Settings page.",
         },
     },
     {
@@ -292,6 +295,33 @@ const PROVIDERS = [
             ],
             note: "Each lead search uses roughly 1–3 Serper credits. Monitor your quota at serper.dev/dashboard.",
             links: [{ label: "Serper Dashboard", url: "https://serper.dev/dashboard" }],
+        },
+    },
+    {
+        key: "google_sheets",
+        name: "Google Sheets",
+        desc: "Import leads from a Google Sheet. Paste the link and hit Sync to pull the latest rows.",
+        Icon: GSheetIcon,
+        grad: "from-green-600 to-emerald-700",
+        bg: "bg-green-50", border: "border-green-100", chip: "text-green-700 bg-green-50",
+        oauth: false,
+        canSync: true,
+        multiSheet: true,
+        tags: ["Google Sheets", "Live Import", "No-code", "Sync on demand"],
+        configFields: [],
+        metaKeys: [
+            { key: "rowsSynced", label: "Rows synced", icon: "📊" },
+        ],
+        setupGuide: {
+            title: "How to connect a Google Sheet",
+            steps: [
+                { label: "Add a header row", detail: "The first row must be column names. Include columns for Name, Email, Phone, Course and Message (any order; extra columns are ignored)." },
+                { label: "Share the sheet", detail: "In Google Sheets click Share → General access → \"Anyone with the link\" → Viewer. (Or File → Share → Publish to web.) The CRM reads it anonymously — no Google login required." },
+                { label: "Paste the link & Save", detail: "Copy the sheet URL from your browser, paste it above, and click Save & Activate. The CRM checks it can read the sheet." },
+                { label: "Sync", detail: "Click Sync here or the Sync button in the board's ENQUIRY column. New rows (deduped by email/phone) are imported as leads. Re-sync any time to pull new rows." },
+            ],
+            note: "Each row needs at least an email or phone. Course is saved with the lead's details. The sheet must stay link-shared for syncs to keep working.",
+            links: [{ label: "Google Sheets", url: "https://sheets.google.com" }],
         },
     },
     {
@@ -608,6 +638,10 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
     const [fbBusy, setFbBusy]       = useState(false);
     const [fbWaiting, setFbWaiting] = useState(false);
     const fbPollRef = useRef(null);
+    const [sheetUrls, setSheetUrls] = useState([""]);   // Google Sheets: one input per connected sheet
+    const setSheetAt = (i, v) => setSheetUrls(a => a.map((u, idx) => (idx === i ? v : u)));
+    const addSheet = () => setSheetUrls(a => [...a, ""]);
+    const removeSheet = (i) => setSheetUrls(a => (a.length > 1 ? a.filter((_, idx) => idx !== i) : a));
 
     const stopFbPoll = () => {
         if (fbPollRef.current) { clearInterval(fbPollRef.current); fbPollRef.current = null; }
@@ -683,6 +717,10 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
                 setApiKey(existing);
                 setShowEmbed(!!existing);
             }
+            if (provider?.key === "google_sheets") {
+                const existing = (integration?.sheets || []).map(s => (typeof s === "string" ? s : s?.url)).filter(Boolean);
+                setSheetUrls(existing.length ? existing : [""]);
+            }
         }
     }, [open, provider, integration]);
 
@@ -701,7 +739,13 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
     const handleSave = async () => {
         setSaving(true);
         try {
-            const config = provider?.embedWidget ? { apiKey } : { ...form };
+            let config;
+            if (provider?.embedWidget) config = { apiKey };
+            else if (provider?.key === "google_sheets") {
+                const sheets = sheetUrls.map(u => u.trim()).filter(Boolean);
+                if (!sheets.length) { toast.error("Add at least one Google Sheet URL"); setSaving(false); return; }
+                config = { sheets };
+            } else config = { ...form };
             if (provider?.extras?.includes("secure")) config.secure = form.secure || false;
             const res = await api.put(`/integration-hub/${provider.key}/configure`, { config });
             if (res.data.ok === false) toast.error(res.data.message || "Failed");
@@ -892,6 +936,63 @@ document.getElementById('crm-lead-form').onsubmit = async function(e) {
                                                     </div>
                                                 );
                                             })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {provider?.multiSheet && (
+                                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-zinc-600 uppercase tracking-wide">Connected Sheets</span>
+                                            <span className="text-[10px] font-semibold text-zinc-400">{sheetUrls.filter(u => u.trim()).length} added</span>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {sheetUrls.map((url, i) => (
+                                                <div key={i} className="flex items-center gap-2">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="https://docs.google.com/spreadsheets/d/…"
+                                                        value={url}
+                                                        onChange={e => setSheetAt(i, e.target.value)}
+                                                        className={inputCls}
+                                                    />
+                                                    {sheetUrls.length > 1 && (
+                                                        <button type="button" onClick={() => removeSheet(i)} title="Remove sheet"
+                                                            className="shrink-0 p-2 rounded-lg text-zinc-400 hover:text-rose-500 hover:bg-rose-50 transition-colors">
+                                                            <Trash2 size={15} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <button type="button" onClick={addSheet}
+                                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 hover:text-green-800">
+                                            <Plus size={14} /> Add another sheet
+                                        </button>
+                                    </div>
+                                )}
+
+                                {provider?.key === "google_sheets" && (
+                                    <div className="rounded-2xl border border-green-100 bg-green-50/50 p-4 space-y-3">
+                                        <span className="text-xs font-bold text-green-700 uppercase tracking-wide">Before you connect</span>
+                                        <div className="space-y-2.5 text-[11px] text-zinc-600 leading-relaxed">
+                                            <div>
+                                                <p className="font-semibold text-zinc-700 mb-1.5">1. Make the first row column headers, including:</p>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {["Name", "Email", "Phone", "Course", "Message"].map(h => (
+                                                        <span key={h} className="px-2 py-0.5 rounded-md bg-white border border-green-200 font-mono text-[10px] font-bold text-green-700">{h}</span>
+                                                    ))}
+                                                </div>
+                                                <p className="text-zinc-400 mt-1.5">Any order. Each row needs at least an Email or Phone. Extra columns are ignored.</p>
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-zinc-700 mb-0.5">2. Share the sheet so the CRM can read it:</p>
+                                                <p><span className="font-semibold">Share → General access → “Anyone with the link” → Viewer</span> (or <span className="font-semibold">File → Share → Publish to web</span>).</p>
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-zinc-700 mb-0.5">3. Paste the sheet URL above and Save.</p>
+                                                <p className="text-zinc-400">Then hit Sync here or the Sync button in the board’s ENQUIRY column to import rows.</p>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -1434,12 +1535,6 @@ export default function IntegrationHub() {
     };
 
     const byKey = Object.fromEntries(integrations.map(i => [i.platform, i]));
-    byKey.google_calendar = {
-        platform: "google_calendar",
-        status: gcal?.connected ? "CONNECTED" : "DISCONNECTED",
-        lastSynced: gcal?.connectedAt || null,
-        metadata: {},
-    };
 
     const { pending: oauthPending, open: openOAuth } = useOAuthPopup(() => {
         toast.success("Connected successfully");

@@ -13,9 +13,8 @@ const RECOMMENDED = [
     { keys: ["LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "LIVEKIT_URL"], feature: "Video calls (LiveKit)" },
     { keys: ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"],  feature: "Outbound email (password reset, invoices, reminders)" },
     { keys: ["FRONTEND_URL"], feature: "Password-reset links & CORS origin" },
-    // ENCRYPTION_KEY is what encrypts stored Google OAuth tokens. Without it the
-    // calendar connect/refresh flow throws at runtime instead of warning up front.
-    { keys: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI", "ENCRYPTION_KEY"], feature: "Google Calendar integration" },
+    // ENCRYPTION_KEY is what encrypts stored Google OAuth tokens and integration configs.
+    { keys: ["ENCRYPTION_KEY"], feature: "Token encryption (Google Calendar / WhatsApp)" },
 ];
 
 const validateEnv = () => {

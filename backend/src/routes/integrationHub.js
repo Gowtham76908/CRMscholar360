@@ -9,6 +9,7 @@ router.get("/oauth/:platform/callback", c.oauthCallback);
 router.use(auth);
 
 router.get("/",                        c.getAll);
+router.post("/sync-all",               c.syncAll);
 router.get("/:platform/oauth/start",   c.startOAuth);
 router.put("/:platform/configure",     c.configure);
 router.post("/:platform/pages",         c.listPages);

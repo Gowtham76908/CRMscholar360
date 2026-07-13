@@ -14,12 +14,15 @@ const DEFAULTS = [
     { platform: "fasterq",         label: "Fasterq Calls" },
     { platform: "website_webhook", label: "Website Webhook" },
     { platform: "livekit",         label: "LiveKit Video" },
+    { platform: "google_sheets",   label: "Google Sheets" },
+    { platform: "google_calendar", label: "Google Calendar" },
 ];
 
 // Providers that auto-connect after configure (no OAuth needed)
 const API_KEY_PROVIDERS = new Set([
     "linkedin_serper", "fasterq", "website_webhook",
-    "whatsapp_cloud", "google_ads", "livekit",
+    "whatsapp_cloud", "google_ads", "livekit", "google_sheets",
+    "google_calendar",
 ]);
 
 let _defaultsSeeded = false;
@@ -32,12 +35,29 @@ async function ensureDefaults() {
             createData.config = { apiKey: encrypt(process.env.SERPER_API_KEY) };
             createData.isConnected = true;
         }
+        if (d.platform === "google_calendar" && process.env.GOOGLE_CLIENT_ID) {
+            createData.config = {
+                clientId: encrypt(process.env.GOOGLE_CLIENT_ID),
+                clientSecret: process.env.GOOGLE_CLIENT_SECRET ? encrypt(process.env.GOOGLE_CLIENT_SECRET) : undefined,
+                redirectUri: process.env.GOOGLE_REDIRECT_URI,
+            };
+            createData.isConnected = true;
+        }
         await prisma.integration.upsert({
             where:  { platform: d.platform },
             create: createData,
             update: d.platform === "linkedin_serper" && process.env.SERPER_API_KEY
                 ? { config: { apiKey: encrypt(process.env.SERPER_API_KEY) }, isConnected: true }
-                : {},
+                : (d.platform === "google_calendar" && process.env.GOOGLE_CLIENT_ID
+                    ? {
+                        config: {
+                            clientId: encrypt(process.env.GOOGLE_CLIENT_ID),
+                            clientSecret: process.env.GOOGLE_CLIENT_SECRET ? encrypt(process.env.GOOGLE_CLIENT_SECRET) : undefined,
+                            redirectUri: process.env.GOOGLE_REDIRECT_URI,
+                        },
+                        isConnected: true,
+                      }
+                    : {}),
         });
     }
     _defaultsSeeded = true;
@@ -47,6 +67,11 @@ function safeIntegration(i) {
     // Strip all sensitive / encrypted fields before sending to client
     // eslint-disable-next-line no-unused-vars
     const { accessToken, refreshToken, config, ...rest } = i;
+    // Google Sheet URLs aren't secrets (they're link-shared) and the UI needs them
+    // to show/edit the connected sheets, so surface them after stripping config.
+    if (i.platform === "google_sheets") {
+        rest.sheets = Array.isArray(config?.sheets) ? config.sheets : (config?.sheetUrl ? [config.sheetUrl] : []);
+    }
     return rest;
 }
 
@@ -209,6 +234,8 @@ const configure = async (req, res, next) => {
             if (safeConfig.developerToken) safeConfig.developerToken = encrypt(safeConfig.developerToken);
             if (safeConfig.appSecret)     safeConfig.appSecret     = encrypt(safeConfig.appSecret);
             if (safeConfig.apiSecret)     safeConfig.apiSecret     = encrypt(safeConfig.apiSecret);
+            if (safeConfig.clientId)      safeConfig.clientId      = encrypt(safeConfig.clientId);
+            if (safeConfig.clientSecret)  safeConfig.clientSecret  = encrypt(safeConfig.clientSecret);
             updateData.config = safeConfig;
         }
         if (metadata) {
@@ -377,6 +404,48 @@ const sync = async (req, res, next) => {
     }
 };
 
+// Lead-pull sources synced together by the board's Sync button. Webhook-based
+// providers (Google Ads, Fasterq, WhatsApp, website) push leads in real time and
+// have no manual sync, so they're intentionally excluded.
+const SYNCABLE_PLATFORMS = ["meta_leads", "google_sheets"];
+
+// POST /sync-all — sync every connected lead-pull integration and aggregate the
+// result. Used by the board's ENQUIRY Sync button so one click refreshes all sources.
+const syncAll = async (req, res, next) => {
+    try {
+        const integrations = await prisma.integration.findMany({
+            where: { isConnected: true, platform: { in: SYNCABLE_PLATFORMS } },
+        });
+
+        let synced = 0;
+        const results = [];
+        for (const integration of integrations) {
+            try {
+                const provider = getProvider(integration.platform, integration);
+                const r = await provider.sync();
+                synced += r.synced ?? 0;
+                results.push({ platform: integration.platform, ...r });
+                await prisma.integration.update({
+                    where: { platform: integration.platform },
+                    data: { lastSynced: new Date(), status: "CONNECTED", errorMessage: null },
+                });
+                await addLog(integration.id, "SYNC_COMPLETED", `Synced ${r.synced ?? 0} records`, "SUCCESS", r);
+            } catch (syncErr) {
+                results.push({ platform: integration.platform, error: syncErr.message });
+                await prisma.integration.update({
+                    where: { platform: integration.platform },
+                    data: { status: "ERROR", errorMessage: syncErr.message },
+                }).catch(() => {});
+                await addLog(integration.id, "SYNC_FAILED", syncErr.message, "ERROR");
+            }
+        }
+
+        res.json({ synced, sources: integrations.length, results });
+    } catch (err) {
+        return next(err);
+    }
+};
+
 const disconnect = async (req, res, next) => {
     const { platform } = req.params;
     try {
@@ -440,4 +509,4 @@ const getAllLogs = async (req, res, next) => {
     }
 };
 
-module.exports = { getAll, startOAuth, oauthCallback, configure, listPages, selectMetaPage, testConnection, sync, disconnect, getLogs, getAllLogs, ensureIntegrationDefaults: ensureDefaults };
+module.exports = { getAll, startOAuth, oauthCallback, configure, listPages, selectMetaPage, testConnection, sync, syncAll, disconnect, getLogs, getAllLogs, ensureIntegrationDefaults: ensureDefaults };

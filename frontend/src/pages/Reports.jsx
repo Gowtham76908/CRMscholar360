@@ -18,7 +18,7 @@ import { useDepartmentSelection } from "../hooks/useDepartments";
 
 const SOURCE_COLORS = {
     FACEBOOK: "#1877F2", INSTAGRAM: "#E1306C", GMAIL: "#EA4335",
-    WEBSITE: "#34A853", PHONE_CALL: "#F97316", LINKEDIN: "#0A66C2",
+    WEBSITE: "#34A853", PHONE_CALL: "#F97316", LINKEDIN: "#0A66C2", SHEETS: "#0F9D58",
 };
 
 const pct = (n, d) => d > 0 ? +((n / d) * 100).toFixed(1) : 0;

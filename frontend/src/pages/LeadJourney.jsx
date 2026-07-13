@@ -29,7 +29,7 @@ const FILTERS = [
 
 const SOURCE_LABEL = {
     FACEBOOK: "Facebook", INSTAGRAM: "Instagram", GMAIL: "Gmail",
-    WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn",
+    WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn", SHEETS: "Google Sheet",
 };
 
 const CHANNEL_CONFIG = {

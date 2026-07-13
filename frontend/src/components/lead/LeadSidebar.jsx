@@ -15,7 +15,7 @@ const SCORE_CONFIG = getScoreStyle;
 
 const SOURCE_LABELS = {
     FACEBOOK: "Facebook", INSTAGRAM: "Instagram", GMAIL: "Gmail",
-    WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn",
+    WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn", SHEETS: "Google Sheet",
 };
 
 const relativeTime = (date) => {

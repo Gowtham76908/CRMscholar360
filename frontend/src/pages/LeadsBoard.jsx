@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
     Building2, Loader2, Mail, Phone, Globe, Tag, Calendar,
-    ClipboardList, X, ChevronDown, UserPlus, User, Users, Hash,
+    ClipboardList, X, ChevronDown, UserPlus, User, Users, Hash, RefreshCw,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useWorkflows, useDepartmentBoard, useDepartmentMembers } from "../hooks/useDepartments";
@@ -123,7 +123,24 @@ export default function LeadsBoard({
     const [department, setDepartment] = useState(initialDepartment && categories.includes(initialDepartment) ? initialDepartment : null);
     const [previewTask, setPreviewTask] = useState(null);
     const [assigningLead, setAssigningLead] = useState(null);   // stores the full lead object
+    const [syncing, setSyncing] = useState(false);
     const qc = useQueryClient();
+
+    // Pull new leads from every connected on-demand source (Meta Lead Ads +
+    // Google Sheets) in one call, without leaving the board.
+    const handleSyncMeta = async () => {
+        setSyncing(true);
+        try {
+            const res = await api.post("/integration-hub/sync-all");
+            const total = res.data?.synced ?? 0;
+            toast.success(total ? `Synced ${total} new lead${total === 1 ? "" : "s"}` : "No new leads to import");
+            qc.invalidateQueries({ queryKey: ["department-board"] });
+        } catch (err) {
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Sync failed");
+        } finally {
+            setSyncing(false);
+        }
+    };
 
     // Auto-initialize department when categories load
     if (!department && categories.length > 0) {
@@ -167,17 +184,27 @@ export default function LeadsBoard({
     useLayoutEffect(() => {
         const el = boardScrollRef.current;
         if (!el) return;
+        let raf = 0;
         const update = () => {
-            // Measure distance from top dynamically to size board to fit screen
-            const top = el.getBoundingClientRect().top;
-            setBoardHeight(Math.max(window.innerHeight + top + 124, 220));
+            // Coalesce into a frame; measure the board's offset from the top of the
+            // DOCUMENT (rect.top + scrollY), not the viewport. Viewport-relative top
+            // changes with scroll, so returning to the board with the window scrolled
+            // (from another page) fed a wrong height that, once applied, shifted scroll
+            // and re-triggered the measurement → loop (flicker). Document-relative top
+            // is scroll-independent, and rounding + the equality guard stop subpixel jitter.
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(() => {
+                const docTop = el.getBoundingClientRect().top + window.scrollY;
+                const next = Math.max(Math.round(window.innerHeight + docTop + 124), 220);
+                setBoardHeight(prev => (prev === next ? prev : next));
+            });
         };
         update();
         const ro = new ResizeObserver(update);
         ro.observe(el);
         window.addEventListener("resize", update);
-        return () => { ro.disconnect(); window.removeEventListener("resize", update); };
-    }, [stages.length, department, isLoading, columns]);
+        return () => { cancelAnimationFrame(raf); ro.disconnect(); window.removeEventListener("resize", update); };
+    }, [stages.length, department, isLoading]);
 
     if (workflowsLoading) {
         return <div className="py-20 text-center text-sm text-gray-400">Loading workflow…</div>;
@@ -242,6 +269,8 @@ export default function LeadsBoard({
                                 slaBreachDays={slaBreachDays}
                                 onPreviewTask={setPreviewTask}
                                 onAssignClick={(lead) => setAssigningLead(lead)}
+                                onSyncMeta={handleSyncMeta}
+                                syncing={syncing}
                             />
                         ))}
                     </div>
@@ -276,8 +305,9 @@ function stageColor(code) {
     return "bg-indigo-50 text-indigo-700 border-indigo-200";
 }
 
-function StageColumn({ stage, department, rows, totalInStage, slaWarningDays, slaBreachDays, onPreviewTask, onAssignClick }) {
+function StageColumn({ stage, department, rows, totalInStage, slaWarningDays, slaBreachDays, onPreviewTask, onAssignClick, onSyncMeta, syncing }) {
     const theme = STAGE_THEME[stage.code] || { border: "border-t-indigo-500" };
+    const showSync = stage.code === "ENQUIRY" && typeof onSyncMeta === "function";
 
     return (
         <div className={`w-[390px] min-w-[390px] flex-shrink-0 flex flex-col h-full bg-slate-50/60 backdrop-blur-md rounded-2xl border border-slate-200/50 shadow-sm hover:shadow-md hover:border-slate-300/60 transition-all duration-300 border-t-4 ${theme.border}`}>
@@ -286,9 +316,23 @@ function StageColumn({ stage, department, rows, totalInStage, slaWarningDays, sl
                 <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border whitespace-nowrap shadow-sm ${stageColor(stage.code)}`}>
                     {stage.label}
                 </span>
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200/30">
-                    {totalInStage}
-                </span>
+                <div className="flex items-center gap-2">
+                    {showSync && (
+                        <button
+                            type="button"
+                            onClick={onSyncMeta}
+                            disabled={syncing}
+                            title="Fetch new Facebook (Meta) leads"
+                            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200/60 hover:bg-indigo-100 transition-colors disabled:opacity-60 cursor-pointer"
+                        >
+                            <RefreshCw className={`h-3 w-3 ${syncing ? "animate-spin" : ""}`} />
+                            {syncing ? "Syncing…" : "Sync"}
+                        </button>
+                    )}
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200/30">
+                        {totalInStage}
+                    </span>
+                </div>
             </div>
             {/* Column card container — scrolls internally when columns stretch to h-full */}
             <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">

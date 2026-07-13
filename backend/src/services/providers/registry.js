@@ -6,6 +6,8 @@ const LinkedInProvider = require("./LinkedInProvider");
 const FasterqProvider = require("./FasterqProvider");
 const WebhookProvider = require("./WebhookProvider");
 const LiveKitProvider = require("./LiveKitProvider");
+const GoogleSheetsProvider = require("./GoogleSheetsProvider");
+const GoogleCalendarProvider = require("./GoogleCalendarProvider");
 
 const PROVIDERS = {
     meta_leads:      MetaProvider,
@@ -16,6 +18,8 @@ const PROVIDERS = {
     fasterq:         FasterqProvider,
     website_webhook: WebhookProvider,
     livekit:         LiveKitProvider,
+    google_sheets:   GoogleSheetsProvider,
+    google_calendar: GoogleCalendarProvider,
 };
 
 function getProvider(platform, integration) {

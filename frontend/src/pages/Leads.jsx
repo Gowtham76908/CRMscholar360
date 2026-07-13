@@ -517,10 +517,10 @@ const Leads = () => {
                         <div>
                             <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2"><Globe className="h-3 w-3" />Source</label>
                             <div className="flex flex-wrap gap-1.5">
-                                {["FACEBOOK","INSTAGRAM","GMAIL","WEBSITE","PHONE_CALL","LINKEDIN"].map(s => (
+                                {["FACEBOOK","INSTAGRAM","GMAIL","WEBSITE","PHONE_CALL","LINKEDIN","SHEETS"].map(s => (
                                     <button key={s} onClick={() => setParam("source", sourceFilter === s ? "" : s)}
                                         className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all ${sourceFilter === s ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"}`}>
-                                        {s === "PHONE_CALL" ? "Phone" : s.charAt(0) + s.slice(1).toLowerCase()}
+                                        {s === "PHONE_CALL" ? "Phone" : s === "SHEETS" ? "Google Sheet" : s.charAt(0) + s.slice(1).toLowerCase()}
                                     </button>
                                 ))}
                             </div>

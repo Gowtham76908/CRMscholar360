@@ -28,7 +28,21 @@ const popupResultHtml = (ok, payload) => {
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar.events"];
 
-function createOAuth2Client() {
+async function createOAuth2Client() {
+    try {
+        const row = await prisma.integration.findUnique({ where: { platform: "google_calendar" } });
+        if (row?.config) {
+            const cfg = row.config;
+            const clientId = cfg.clientId ? decrypt(cfg.clientId) : null;
+            const clientSecret = cfg.clientSecret ? decrypt(cfg.clientSecret) : null;
+            const redirectUri = cfg.redirectUri || null;
+            if (clientId && clientSecret && redirectUri) {
+                return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+            }
+        }
+    } catch (err) {
+        // fall through to env
+    }
     return new google.auth.OAuth2(
         process.env.GOOGLE_CLIENT_ID,
         process.env.GOOGLE_CLIENT_SECRET,
@@ -44,7 +58,7 @@ async function getAuthorizedClient(userId) {
         throw new ApiError(401, "GOOGLE_NOT_CONNECTED", "Google Calendar not connected. Please connect via Settings.");
     }
 
-    const oauth2Client = createOAuth2Client();
+    const oauth2Client = await createOAuth2Client();
     oauth2Client.setCredentials({
         refresh_token: decrypt(gcal.refreshToken),
         access_token: gcal.accessToken ? decrypt(gcal.accessToken) : undefined,
@@ -65,16 +79,20 @@ async function getAuthorizedClient(userId) {
 }
 
 // GET /api/google/auth
-const initiateAuth = (req, res) => {
-    const popup = req.query.popup === "1" || req.query.popup === "true";
-    const oauth2Client = createOAuth2Client();
-    const url = oauth2Client.generateAuthUrl({
-        access_type: "offline",
-        prompt: "consent",
-        scope: SCOPES,
-        state: signOAuthState(req.user.userId, popup),
-    });
-    res.json({ url, authUrl: url });
+const initiateAuth = async (req, res, next) => {
+    try {
+        const popup = req.query.popup === "1" || req.query.popup === "true";
+        const oauth2Client = await createOAuth2Client();
+        const url = oauth2Client.generateAuthUrl({
+            access_type: "offline",
+            prompt: "consent",
+            scope: SCOPES,
+            state: signOAuthState(req.user.userId, popup),
+        });
+        res.json({ url, authUrl: url });
+    } catch (err) {
+        return next(err);
+    }
 };
 
 // GET /api/google/callback  (public — no authMiddleware, state carries userId)
@@ -90,7 +108,7 @@ const handleCallback = async (req, res, next) => {
         if (error)             return fail("denied");
         if (!code || !userId)  return fail("error");
 
-        const oauth2Client = createOAuth2Client();
+        const oauth2Client = await createOAuth2Client();
         const { tokens } = await oauth2Client.getToken(code);
 
         if (!tokens.refresh_token) return fail("no_refresh_token");

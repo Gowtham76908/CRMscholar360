@@ -46,7 +46,7 @@ import { ACTION_CONFIG, relTime } from "../lib/activity";
 
 const SOURCE_LABEL = {
     FACEBOOK: "Facebook", INSTAGRAM: "Instagram", GMAIL: "Gmail",
-    WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn",
+    WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn", SHEETS: "Google Sheet",
 };
 
 const FILTER_PILLS = [
@@ -745,7 +745,7 @@ const SYSTEM_KEYS = new Set([
 
 const ENUM_LABELS = {
     FACEBOOK: "Facebook", INSTAGRAM: "Instagram", GMAIL: "Gmail",
-    WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn",
+    WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn", SHEETS: "Google Sheet",
     PRODUCT: "Product", WHITE_LABEL: "White Label", LMS: "LMS", SERVICES: "Services",
 };
 

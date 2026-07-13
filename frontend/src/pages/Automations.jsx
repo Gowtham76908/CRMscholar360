@@ -15,7 +15,7 @@ const TRIGGER_TYPES = [
     { value: "MISSED_CALL",    label: "Missed / unanswered call" },
 ];
 
-const SOURCE_OPTIONS       = ["FACEBOOK", "INSTAGRAM", "GMAIL", "WEBSITE", "PHONE_CALL", "LINKEDIN"];
+const SOURCE_OPTIONS       = ["FACEBOOK", "INSTAGRAM", "GMAIL", "WEBSITE", "PHONE_CALL", "LINKEDIN", "SHEETS"];
 const ENQUIRY_TYPE_OPTIONS = ["PRODUCT", "WHITE_LABEL", "LMS", "SERVICES"];
 
 const CONDITION_FIELDS = [
