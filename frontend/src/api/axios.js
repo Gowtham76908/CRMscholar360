@@ -9,6 +9,19 @@ const api = axios.create({
     withCredentials: true,
 });
 
+// Request Interceptor: also send the JWT as a Bearer header.
+// The cookie is SameSite=None in production and gets dropped after cross-site
+// bounces (e.g. returning from the Facebook OAuth popup) or when the browser
+// blocks third-party cookies. The header keeps auth working regardless.
+api.interceptors.request.use((config) => {
+    const token = sessionStorage.getItem("token");
+    if (token) {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
+
 // Response Interceptor: Handle Auth Errors
 // Triggers logout on 401 UNLESS it's the login endpoint itself failing.
 api.interceptors.response.use(

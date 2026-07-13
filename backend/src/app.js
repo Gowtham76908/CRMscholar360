@@ -171,6 +171,7 @@ app.use("/api/email-track", require("./routes/emailTrack"));        // email ope
 app.use("/api/google-ads", require("./routes/googleAdsWebhook"));  // Google Ads lead webhook (key-verified)
 app.use("/api/public/leads", require("./routes/publicLeads"));       // website embed form (API-key auth)
 app.use("/api/google", require("./routes/googleCalendar"));    // OAuth callback is public; other routes self-auth
+app.use("/api/integration-hub", require("./routes/integrationHub")); // Meta/OAuth callback is public; all other routes self-auth
 
 // ─── PROTECTED ROUTES ─────────────────────────────────────────────────────────
 // Every router listed here MUST call router.use(authMiddleware) at its top.
@@ -215,7 +216,6 @@ app.use("/api/whatsapp", require("./routes/whatsapp"));
 app.use("/api/ai", require("./routes/ai"));
 app.use("/api/custom-fields", require("./routes/customField"));
 app.use("/api/facebook", require("./routes/facebook"));
-app.use("/api/integration-hub", require("./routes/integrationHub"));
 app.use("/api/organization", require("./routes/organization"));
 app.use("/api/team-performance", require("./routes/teamPerformance"));
 app.use("/api/employee-report", require("./routes/employeeReport"));
