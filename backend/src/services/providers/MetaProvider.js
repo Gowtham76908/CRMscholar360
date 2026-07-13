@@ -111,33 +111,68 @@ class MetaProvider extends ProviderInterface {
             throw new Error(err.message);
         }
 
-        let synced = 0;
-        for (const form of (formsJson.data || []).slice(0, 5)) {
+        const forms = formsJson.data || [];
+        let synced = 0, leadsSeen = 0, skippedExisting = 0, skippedNoContact = 0;
+        const sampleFieldNames = new Set();
+
+        for (const form of forms) {
             const leadsRes = await fetch(
                 `https://graph.facebook.com/v19.0/${form.id}/leads?access_token=${token}&fields=field_data,created_time`
             );
             const leadsJson = await leadsRes.json();
+            if (leadsJson.error) {
+                console.warn(`[MetaSync] form ${form.id} (${form.name}) leads error:`, leadsJson.error.message);
+                continue;
+            }
             for (const lead of leadsJson.data || []) {
+                leadsSeen++;
                 const fields = Object.fromEntries(
-                    (lead.field_data || []).map(f => [f.name, (f.values || [])[0] || ""])
+                    (lead.field_data || []).map(f => [String(f.name).toLowerCase(), (f.values || [])[0] || ""])
                 );
-                const existing = await prisma.lead.findFirst({
-                    where: { email: fields.email || null, source: "FACEBOOK" },
+                Object.keys(fields).forEach(k => sampleFieldNames.add(k));
+
+                // Facebook field names vary by form (standard, custom, or localized),
+                // so match on common keys and fall back to pattern-matching.
+                const email = fields.email || fields.email_address || fields.work_email ||
+                    Object.entries(fields).find(([k, v]) => k.includes("email") || /@/.test(v))?.[1] || null;
+                const phone = fields.phone_number || fields.phone || fields.mobile ||
+                    fields.mobile_number || fields.contact_number ||
+                    Object.entries(fields).find(([k]) => /phone|mobile|contact/.test(k))?.[1] || null;
+                const name = fields.full_name || fields.name ||
+                    [fields.first_name, fields.last_name].filter(Boolean).join(" ").trim() ||
+                    "Facebook Lead";
+
+                if (!email && !phone) { skippedNoContact++; continue; }
+
+                let existing = null;
+                if (email) existing = await prisma.lead.findFirst({ where: { email, source: "FACEBOOK" } });
+                if (!existing && phone) existing = await prisma.lead.findFirst({ where: { phone, source: "FACEBOOK" } });
+                if (existing) { skippedExisting++; continue; }
+
+                // Centralized creation: Lead + SALES LeadDepartment (unassigned)
+                await leadService.createLead({
+                    name,
+                    email: email || null,
+                    phone: phone || null,
+                    source: "FACEBOOK",
+                    enquiryType: "PRODUCT",
                 });
-                if (!existing && (fields.email || fields.phone_number)) {
-                    // Centralized creation: Lead + SALES LeadDepartment (unassigned)
-                    await leadService.createLead({
-                        name: fields.full_name || fields.first_name || "Facebook Lead",
-                        email: fields.email || null,
-                        phone: fields.phone_number || null,
-                        source: "FACEBOOK",
-                        enquiryType: "PRODUCT",
-                    });
-                    synced++;
-                }
+                synced++;
             }
         }
-        return { synced };
+
+        // Surfaced in the integration log metadata + Render logs so a "0 synced"
+        // result is diagnosable (forms found, leads seen, why each was skipped).
+        const details = {
+            synced,
+            formsFound: forms.length,
+            leadsSeen,
+            skippedExisting,
+            skippedNoContact,
+            fieldNames: [...sampleFieldNames],
+        };
+        console.log("[MetaSync]", JSON.stringify(details));
+        return details;
     }
 
     async disconnect() {
