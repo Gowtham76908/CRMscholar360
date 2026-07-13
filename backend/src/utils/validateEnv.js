@@ -15,6 +15,8 @@ const RECOMMENDED = [
     { keys: ["FRONTEND_URL"], feature: "Password-reset links & CORS origin" },
     // ENCRYPTION_KEY is what encrypts stored Google OAuth tokens and integration configs.
     { keys: ["ENCRYPTION_KEY"], feature: "Token encryption (Google Calendar / WhatsApp)" },
+    // Bunny.net storage — without it uploads fall back to ephemeral local disk.
+    { keys: ["BUNNY_STORAGE_ZONE", "BUNNY_STORAGE_ACCESS_KEY", "BUNNY_PULL_ZONE_HOST"], feature: "Persistent file storage (Bunny.net)" },
 ];
 
 const validateEnv = () => {

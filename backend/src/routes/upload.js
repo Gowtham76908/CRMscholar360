@@ -7,7 +7,7 @@ const crypto = require("crypto");
 const authMiddleware = require("../middleware/authMiddleware");
 const prisma = require("../utils/prisma");
 const { toSafeUser } = require("../utils/safeUser");
-const { uploadToCloudinary } = require("../utils/cloudinary");
+const { uploadToBunny } = require("../utils/bunny");
 const { signUploadUrl } = require("../utils/signedUpload");
 
 // Ensure upload directory exists
@@ -92,14 +92,14 @@ router.post("/profile-photo", (req, res, next) => {
             return res.status(400).json({ message: "No file uploaded" });
         }
 
-        // Try uploading to Cloudinary
-        let photoUrl = await uploadToCloudinary(req.file.path, "profiles");
+        // Try uploading to Bunny
+        let photoUrl = await uploadToBunny(req.file.path, "profiles");
 
-        // If Cloudinary succeeded, delete the local file immediately.
+        // If Bunny succeeded, delete the local file immediately.
         // Otherwise, fall back to the relative local URL path.
         if (photoUrl) {
             fs.unlink(req.file.path, (err) => {
-                if (err) console.error("Error deleting local file after Cloudinary upload:", err);
+                if (err) console.error("Error deleting local file after Bunny upload:", err);
             });
         } else {
             photoUrl = `/uploads/profiles/${req.file.filename}`;
@@ -152,12 +152,12 @@ router.post("/task-files", (req, res, next) => {
         const filesData = [];
 
         for (const file of req.files) {
-            let fileUrl = await uploadToCloudinary(file.path, "tasks");
+            let fileUrl = await uploadToBunny(file.path, "tasks");
 
             if (fileUrl) {
-                // Delete local file immediately if Cloudinary succeeds
+                // Delete local file immediately if Bunny succeeds
                 fs.unlink(file.path, (err) => {
-                    if (err) console.error("Error deleting local file after Cloudinary task upload:", err);
+                    if (err) console.error("Error deleting local file after Bunny task upload:", err);
                 });
             } else {
                 // Fallback to local URL path
@@ -274,14 +274,14 @@ router.post("/resume/:leadId", (req, res, next) => {
             return res.status(404).json({ message: "Lead not found" });
         }
 
-        // Try uploading to Cloudinary
-        let resumeUrl = await uploadToCloudinary(req.file.path, "resumes", "raw");
+        // Try uploading to Bunny
+        let resumeUrl = await uploadToBunny(req.file.path, "resumes", "raw");
 
-        // If Cloudinary succeeded, delete the local file immediately.
+        // If Bunny succeeded, delete the local file immediately.
         // Otherwise, fall back to local URL path.
         if (resumeUrl) {
             fs.unlink(req.file.path, (err) => {
-                if (err) console.error("Error deleting local file after Cloudinary upload:", err);
+                if (err) console.error("Error deleting local file after Bunny upload:", err);
             });
         } else {
             resumeUrl = `/uploads/resumes/${req.file.filename}`;
@@ -397,13 +397,13 @@ router.post("/document/:leadId", (req, res, next) => {
             return res.status(404).json({ message: "Lead not found" });
         }
 
-        // Try uploading to Cloudinary
-        let documentUrl = await uploadToCloudinary(req.file.path, "documents", "raw");
+        // Try uploading to Bunny
+        let documentUrl = await uploadToBunny(req.file.path, "documents", "raw");
 
-        // If Cloudinary succeeded, delete local file
+        // If Bunny succeeded, delete local file
         if (documentUrl) {
             fs.unlink(req.file.path, (err) => {
-                if (err) console.error("Error deleting local file after Cloudinary upload:", err);
+                if (err) console.error("Error deleting local file after Bunny upload:", err);
             });
         } else {
             documentUrl = `/uploads/documents/${req.file.filename}`;

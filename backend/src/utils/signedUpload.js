@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { isBunnyUrl, signBunnyUrl } = require("./bunny");
 
 // Sensitive upload subtrees that must not be publicly downloadable. Profile
 // photos (avatars) are intentionally excluded — they're embedded as <img>
@@ -27,6 +28,9 @@ const pathOnly = (relPath) => {
  * Non-gated paths (avatars, external URLs) are returned unchanged.
  */
 const signUploadUrl = (relPath) => {
+    // Bunny CDN URLs are gated at the edge via Token Authentication, not by our
+    // JWT scheme, so hand those to the Bunny signer.
+    if (isBunnyUrl(relPath)) return signBunnyUrl(relPath);
     if (!isGatedPath(relPath)) return relPath;
     const p = pathOnly(relPath);
     const token = jwt.sign({ p }, process.env.JWT_SECRET, { expiresIn: TTL_SECONDS });

@@ -308,8 +308,8 @@ const getLead = async (req, res, next) => {
         if (!(await canAccessLead(userId, role, lead))) {
             throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "Access denied");
         }
-        // Sign locally-stored resumes so the cross-origin <a> link can fetch them
-        // without relying on third-party cookies (Cloudinary URLs pass through unchanged).
+        // Sign resumes so the cross-origin <a> link can fetch them without relying
+        // on third-party cookies (Bunny URLs get a token; local paths get a JWT).
         if (lead.resumeUrl) lead.resumeUrl = signUploadUrl(lead.resumeUrl);
 
         // Sign customFields documents
