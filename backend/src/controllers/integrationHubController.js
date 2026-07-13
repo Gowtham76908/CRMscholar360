@@ -95,13 +95,32 @@ const oauthCallback = async (req, res, next) => {
     const { platform } = req.params;
     const { code, error, state } = req.query;
 
+    // This popup must keep window.opener so it can postMessage the result back to
+    // the app that opened it. Helmet's default Cross-Origin-Opener-Policy:same-origin
+    // severs that link for a cross-origin popup (frontend and backend are different
+    // domains), leaving the popup blank. Relax COOP for this response only.
+    res.set("Cross-Origin-Opener-Policy", "unsafe-none");
+
     // This endpoint is loaded inside a popup — always respond with HTML that postMessages the result
     const closeWithResult = (ok, payload) => {
         const msg = JSON.stringify({ type: "SCHOLAR360_OAUTH", ok, payload });
-        res.send(`<script>
-            window.opener && window.opener.postMessage(${JSON.stringify(msg)}, "*");
-            window.close();
-        </script>`);
+        res.send(`<!doctype html><html><body style="font-family:system-ui;padding:24px;text-align:center;color:#334155">
+            <p id="m">Finishing sign-in… you can close this window.</p>
+            <script>
+                try {
+                    if (window.opener) {
+                        window.opener.postMessage(${JSON.stringify(msg)}, "*");
+                        window.close();
+                    } else {
+                        document.getElementById("m").textContent =
+                            "Sign-in complete. Please close this window and return to the app.";
+                    }
+                } catch (e) {
+                    document.getElementById("m").textContent =
+                        "Sign-in complete. Please close this window and return to the app.";
+                }
+            </script>
+        </body></html>`);
     };
 
     if (error) {
