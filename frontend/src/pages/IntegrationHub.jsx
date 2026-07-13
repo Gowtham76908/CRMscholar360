@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -606,12 +606,25 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
     const [fbPages, setFbPages]     = useState(null);
     const [selectedPage, setSelectedPage] = useState("");
     const [fbBusy, setFbBusy]       = useState(false);
+    const [fbWaiting, setFbWaiting] = useState(false);
+    const fbPollRef = useRef(null);
 
-    const { pending: fbPending, open: openFb } = useOAuthPopup((payload) => {
-        const pages = payload?.pages || [];
+    const stopFbPoll = () => {
+        if (fbPollRef.current) { clearInterval(fbPollRef.current); fbPollRef.current = null; }
+        setFbWaiting(false);
+    };
+
+    // Show the Page picker once we have the account's Pages, from either the
+    // popup postMessage (fast path) or the listPages poll (fallback).
+    const receiveFbPages = (pages) => {
+        stopFbPoll();
         setFbPages(pages);
         if (pages.length === 1) setSelectedPage(pages[0].id);
         if (!pages.length) toast.error("No Facebook Pages found for this account — you must be a Page admin.");
+    };
+
+    const { pending: fbPending, open: openFb } = useOAuthPopup((payload) => {
+        receiveFbPages(payload?.pages || []);
     });
 
     const handleFbConnect = async () => {
@@ -621,6 +634,20 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
             await api.put(`/integration-hub/${provider.key}/configure`, { config: { appId: form.appId, appSecret: form.appSecret } });
             const res = await api.get(`/integration-hub/${provider.key}/oauth/start`);
             openFb(res.data.authUrl);
+
+            // Facebook's dialog severs window.opener, so the popup often can't
+            // postMessage the result back. Poll listPages instead: once the OAuth
+            // callback has stored the user token, this returns the account's Pages.
+            stopFbPoll();
+            setFbWaiting(true);
+            let attempts = 0;
+            fbPollRef.current = setInterval(async () => {
+                if (++attempts > 48) { stopFbPoll(); return; }   // ~2 min max
+                try {
+                    const r = await api.post(`/integration-hub/${provider.key}/pages`);
+                    if (Array.isArray(r.data) && r.data.length) receiveFbPages(r.data);
+                } catch { /* 400 until the token is stored — keep polling */ }
+            }, 2500);
         } catch (err) {
             toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Could not start Facebook login");
         } finally { setFbBusy(false); }
@@ -639,6 +666,9 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
     };
 
     useEffect(() => {
+        // Stop any in-flight Page poll whenever the sheet opens or closes.
+        if (fbPollRef.current) { clearInterval(fbPollRef.current); fbPollRef.current = null; }
+        setFbWaiting(false);
         if (open) {
             setTab("configure");
             setActiveStep(0);
@@ -655,6 +685,9 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
             }
         }
     }, [open, provider, integration]);
+
+    // Safety net: clear the poll interval if the component unmounts mid-wait.
+    useEffect(() => () => { if (fbPollRef.current) clearInterval(fbPollRef.current); }, []);
 
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -877,10 +910,18 @@ document.getElementById('crm-lead-form').onsubmit = async function(e) {
                                         </div>
 
                                         {!fbPages ? (
-                                            <button type="button" onClick={handleFbConnect} disabled={fbBusy || fbPending}
-                                                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 rounded-xl transition-all shadow-sm disabled:opacity-60">
-                                                {(fbBusy || fbPending) ? <><Loader2 size={14} className="animate-spin" />Connecting…</> : <>Connect with Facebook</>}
-                                            </button>
+                                            <>
+                                                <button type="button" onClick={handleFbConnect} disabled={fbBusy || fbPending || fbWaiting}
+                                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 rounded-xl transition-all shadow-sm disabled:opacity-60">
+                                                    {(fbBusy || fbPending || fbWaiting) ? <><Loader2 size={14} className="animate-spin" />{fbWaiting ? "Waiting for sign-in…" : "Connecting…"}</> : <>Connect with Facebook</>}
+                                                </button>
+                                                {fbWaiting && (
+                                                    <p className="text-xs text-zinc-400 text-center mt-2">
+                                                        Complete the sign-in in the popup, then close it. Your Pages will appear here automatically.{" "}
+                                                        <button type="button" onClick={stopFbPoll} className="underline hover:text-zinc-600">Cancel</button>
+                                                    </p>
+                                                )}
+                                            </>
                                         ) : (
                                             <div className="space-y-3">
                                                 <label className={labelCls}>Select a Page to sync leads from</label>
