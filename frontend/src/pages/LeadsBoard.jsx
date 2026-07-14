@@ -10,6 +10,7 @@ import { useAuth } from "../context/AuthContext";
 import { useWorkflows, useDepartmentBoard, useDepartmentMembers } from "../hooks/useDepartments";
 import { DEPARTMENT_ORDER, departmentLabel, departmentStyle } from "../lib/departments";
 import { getCategoryFromScore, getSLAStatus } from "../utils/leadScore";
+import { getSourceLabel } from "../utils/leadSource";
 import api from "../api/axios";
 import Avatar from "../components/Avatar";
 
@@ -456,7 +457,7 @@ function LeadCard({ row, department, slaWarningDays, slaBreachDays, onPreviewTas
                 <div className="mt-3 flex items-center gap-1.5 flex-wrap">
                     {lead.source && (
                         <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/40">
-                            <Globe className="h-3 w-3 shrink-0 text-slate-400" /> {lead.source.toLowerCase().replace(/_/g, " ")}
+                            <Globe className="h-3 w-3 shrink-0 text-slate-400" /> {getSourceLabel(lead)}
                         </span>
                     )}
                     {lead.enquiryType && (

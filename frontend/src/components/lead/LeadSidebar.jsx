@@ -3,6 +3,7 @@ import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import api from "../../api/axios";
 import { toast } from "sonner";
 import { getScoreStyle } from "../../utils/leadScore";
+import { getSourceLabel } from "../../utils/leadSource";
 import { fileUrl } from "../../utils/fileUrl";
 import {
     Phone, Mail, Building2, Briefcase, Linkedin,
@@ -12,11 +13,6 @@ import {
 
 // Canonical temperature styling, shared with every other lead screen.
 const SCORE_CONFIG = getScoreStyle;
-
-const SOURCE_LABELS = {
-    FACEBOOK: "Facebook", INSTAGRAM: "Instagram", GMAIL: "Gmail",
-    WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn", SHEETS: "Google Sheet",
-};
 
 const relativeTime = (date) => {
     const diff = Date.now() - new Date(date).getTime();
@@ -183,7 +179,7 @@ export default function LeadSidebar({ lead, leadId, hideContact = false, calls, 
                 <dl className="space-y-2">
                     <div className="flex justify-between text-sm">
                         <dt className="text-gray-500">Source</dt>
-                        <dd className="font-medium text-gray-800">{SOURCE_LABELS[lead.source] ?? lead.source}</dd>
+                        <dd className="font-medium text-gray-800">{getSourceLabel(lead)}</dd>
                     </div>
                     <div className="flex justify-between text-sm">
                         <dt className="text-gray-500">Enquiry</dt>

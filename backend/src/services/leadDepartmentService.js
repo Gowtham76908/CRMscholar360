@@ -971,7 +971,7 @@ async function getDepartmentQueue({ department, actor, filters = {} }) {
 }
 
 const LEAD_SELECT_FOR_BOARD = {
-    id: true, leadId: true, name: true, email: true, phone: true, source: true,
+    id: true, leadId: true, name: true, email: true, phone: true, source: true, sourceLabel: true,
     enquiryType: true, score: true, category: true, updatedAt: true, customFields: true,
     tasks: {
         orderBy: { createdAt: "desc" },

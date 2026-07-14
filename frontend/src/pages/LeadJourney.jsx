@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import api from "../api/axios";
 import Avatar from "../components/Avatar";
+import { getSourceLabel } from "../utils/leadSource";
 import {
     AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
     Tooltip, ResponsiveContainer, Legend,
@@ -27,10 +28,6 @@ const FILTERS = [
     { id: "assignment", label: "Assignments" },
 ];
 
-const SOURCE_LABEL = {
-    FACEBOOK: "Facebook", INSTAGRAM: "Instagram", GMAIL: "Gmail",
-    WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn", SHEETS: "Google Sheet",
-};
 
 const CHANNEL_CONFIG = {
     call:       { icon: Phone,          color: "text-green-600",   bg: "bg-green-50  border-green-200",  dot: "bg-green-500" },
@@ -270,7 +267,7 @@ export default function LeadJourney() {
                                     )}
                                     {lead.source && (
                                         <span className="flex items-center gap-1">
-                                            <Zap className="h-3 w-3" />{SOURCE_LABEL[lead.source] ?? lead.source}
+                                            <Zap className="h-3 w-3" />{getSourceLabel(lead)}
                                         </span>
                                     )}
                                     <span className="flex items-center gap-1">
