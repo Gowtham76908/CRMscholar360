@@ -23,13 +23,9 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-crm}:${POSTGRES_PASSWORD:-crm}@db:5432/${POSTGRES_DB:-crmscholar360}
       PORT: 5001
     ports:
       - "5001:5001"
-    depends_on:
-      db:
-        condition: service_healthy
     volumes:
       - ./backend/uploads:/app/uploads
 

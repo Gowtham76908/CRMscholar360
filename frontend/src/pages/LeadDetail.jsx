@@ -19,6 +19,7 @@ import {
 import { Modal } from "../components/Modal";
 import SlidePanel from "../components/SlidePanel";
 import { getScoreLabel } from "../utils/leadScore";
+import { getSourceLabel } from "../utils/leadSource";
 import { fileUrl } from "../utils/fileUrl";
 import AddTaskForm from "../components/AddTaskForm";
 import AddLeadForm from "../components/AddLeadForm";
@@ -43,11 +44,6 @@ import { departmentLabel } from "../lib/departments";
 import { ACTION_CONFIG, relTime } from "../lib/activity";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const SOURCE_LABEL = {
-    FACEBOOK: "Facebook", INSTAGRAM: "Instagram", GMAIL: "Gmail",
-    WEBSITE: "Website", PHONE_CALL: "Phone Call", LINKEDIN: "LinkedIn", SHEETS: "Google Sheet",
-};
 
 const FILTER_PILLS = [
     { id: "all", label: "All", icon: SlidersHorizontal },
@@ -1787,7 +1783,7 @@ export default function LeadDetail() {
                                 )}
                                 <span className="gap-1.5">
                                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Source</span>
-                                    <span className="font-semibold text-gray-700">{SOURCE_LABEL[lead.source] ?? lead.source}</span>
+                                    <span className="font-semibold text-gray-700">{getSourceLabel(lead)}</span>
                                 </span>
                                 {lead.enquiryType && (
                                     <span className="gap-1.5">

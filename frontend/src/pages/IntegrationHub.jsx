@@ -638,9 +638,10 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
     const [fbBusy, setFbBusy]       = useState(false);
     const [fbWaiting, setFbWaiting] = useState(false);
     const fbPollRef = useRef(null);
-    const [sheetUrls, setSheetUrls] = useState([""]);   // Google Sheets: one input per connected sheet
-    const setSheetAt = (i, v) => setSheetUrls(a => a.map((u, idx) => (idx === i ? v : u)));
-    const addSheet = () => setSheetUrls(a => [...a, ""]);
+    const [sheetUrls, setSheetUrls] = useState([{ url: "", name: "" }]);   // Google Sheets: one row per connected sheet
+    const setSheetAt = (i, v) => setSheetUrls(a => a.map((s, idx) => (idx === i ? { ...s, url: v } : s)));
+    const setSheetNameAt = (i, v) => setSheetUrls(a => a.map((s, idx) => (idx === i ? { ...s, name: v } : s)));
+    const addSheet = () => setSheetUrls(a => [...a, { url: "", name: "" }]);
     const removeSheet = (i) => setSheetUrls(a => (a.length > 1 ? a.filter((_, idx) => idx !== i) : a));
 
     const stopFbPoll = () => {
@@ -718,8 +719,10 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
                 setShowEmbed(!!existing);
             }
             if (provider?.key === "google_sheets") {
-                const existing = (integration?.sheets || []).map(s => (typeof s === "string" ? s : s?.url)).filter(Boolean);
-                setSheetUrls(existing.length ? existing : [""]);
+                const existing = (integration?.sheets || [])
+                    .map(s => (typeof s === "string" ? { url: s, name: "" } : { url: s?.url || "", name: s?.name || "" }))
+                    .filter(s => s.url);
+                setSheetUrls(existing.length ? existing : [{ url: "", name: "" }]);
             }
         }
     }, [open, provider, integration]);
@@ -742,7 +745,9 @@ function ConfigSheet({ open, onClose, provider, integration, onSaved, backendUrl
             let config;
             if (provider?.embedWidget) config = { apiKey };
             else if (provider?.key === "google_sheets") {
-                const sheets = sheetUrls.map(u => u.trim()).filter(Boolean);
+                const sheets = sheetUrls
+                    .map(s => ({ url: s.url.trim(), name: s.name.trim() }))
+                    .filter(s => s.url);
                 if (!sheets.length) { toast.error("Add at least one Google Sheet URL"); setSaving(false); return; }
                 config = { sheets };
             } else config = { ...form };
@@ -944,15 +949,22 @@ document.getElementById('crm-lead-form').onsubmit = async function(e) {
                                     <div className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4 space-y-3">
                                         <div className="flex items-center justify-between">
                                             <span className="text-xs font-bold text-zinc-600 uppercase tracking-wide">Connected Sheets</span>
-                                            <span className="text-[10px] font-semibold text-zinc-400">{sheetUrls.filter(u => u.trim()).length} added</span>
+                                            <span className="text-[10px] font-semibold text-zinc-400">{sheetUrls.filter(s => s.url.trim()).length} added</span>
                                         </div>
                                         <div className="space-y-2">
-                                            {sheetUrls.map((url, i) => (
+                                            {sheetUrls.map((sheet, i) => (
                                                 <div key={i} className="flex items-center gap-2">
                                                     <input
                                                         type="text"
+                                                        placeholder="Sheet name (shown as lead source)"
+                                                        value={sheet.name}
+                                                        onChange={e => setSheetNameAt(i, e.target.value)}
+                                                        className={inputCls + " max-w-[40%]"}
+                                                    />
+                                                    <input
+                                                        type="text"
                                                         placeholder="https://docs.google.com/spreadsheets/d/…"
-                                                        value={url}
+                                                        value={sheet.url}
                                                         onChange={e => setSheetAt(i, e.target.value)}
                                                         className={inputCls}
                                                     />

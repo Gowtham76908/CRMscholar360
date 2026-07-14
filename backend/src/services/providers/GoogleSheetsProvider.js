@@ -28,12 +28,19 @@ function parseCSV(text) {
 // (or Published to web). No OAuth — we fetch the sheet's CSV export and parse it.
 // Runs on demand from the Integration Hub or the board's Sync button.
 class GoogleSheetsProvider extends ProviderInterface {
-    // Connected sheet URLs. Stored as config.sheets (array of URL strings); falls
-    // back to the legacy single config.sheetUrl for older saved configs.
-    _sheetUrls() {
+    // Connected sheets. Stored as config.sheets (array of { url, name } objects, or
+    // legacy plain URL strings); falls back to the legacy single config.sheetUrl.
+    _sheets() {
         const cfg = this.integration?.config || {};
         const list = Array.isArray(cfg.sheets) ? cfg.sheets : (cfg.sheetUrl ? [cfg.sheetUrl] : []);
-        return list.map(s => (typeof s === "string" ? s : s?.url)).map(u => (u || "").trim()).filter(Boolean);
+        return list
+            .map(s => (typeof s === "string" ? { url: s, name: "" } : { url: s?.url || "", name: s?.name || "" }))
+            .map(s => ({ url: s.url.trim(), name: s.name.trim() }))
+            .filter(s => s.url);
+    }
+
+    _sheetUrls() {
+        return this._sheets().map(s => s.url);
     }
 
     // Turn a Google Sheets URL into its anonymous CSV export URL.
@@ -104,11 +111,11 @@ class GoogleSheetsProvider extends ProviderInterface {
     }
 
     async sync() {
-        const urls = this._sheetUrls();
-        if (!urls.length) throw new Error("No Google Sheet connected — add a sheet URL and Save first.");
+        const sheets = this._sheets();
+        if (!sheets.length) throw new Error("No Google Sheet connected — add a sheet URL and Save first.");
 
         let synced = 0, rowsSeen = 0, skippedExisting = 0, skippedNoContact = 0;
-        for (const url of urls) {
+        for (const { url, name: sheetName } of sheets) {
             const rows = await this._fetchRows(url);
             for (const row of rows) {
                 rowsSeen++;
@@ -130,6 +137,7 @@ class GoogleSheetsProvider extends ProviderInterface {
                     email: email || null,
                     phone: phone || null,
                     source: "SHEETS",
+                    sourceLabel: sheetName || null,
                     enquiryType: "SERVICES",
                     biodata,
                 });
@@ -137,7 +145,7 @@ class GoogleSheetsProvider extends ProviderInterface {
             }
         }
 
-        const details = { synced, sheets: urls.length, rowsSeen, skippedExisting, skippedNoContact };
+        const details = { synced, sheets: sheets.length, rowsSeen, skippedExisting, skippedNoContact };
         console.log("[GoogleSheetsSync]", JSON.stringify(details));
         return details;
     }

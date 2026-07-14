@@ -15,6 +15,7 @@ import ImportLeadsModal from "../components/ImportLeadsModal";
 import { useAuth } from "../context/AuthContext";
 import { LeadsSkeleton } from "../components/ui/Skeleton";
 import { getCategoryFromScore, getSLAStatus } from "../utils/leadScore";
+import { getSourceLabel } from "../utils/leadSource";
 import { useWorkflows, useMyDepartments, useClaimService } from "../hooks/useDepartments";
 import { DEPARTMENT_ORDER, departmentLabel } from "../lib/departments";
 import LeadsBoard from "./LeadsBoard";
@@ -842,7 +843,7 @@ const Leads = () => {
                                             {dynamicCategory} · {lead.score ?? 0}
                                         </span>
                                         {lead.source && (
-                                            <span className="text-[10px] text-gray-400 capitalize">{lead.source.toLowerCase().replace(/_/g, " ")}</span>
+                                            <span className="text-[10px] text-gray-400 capitalize">{getSourceLabel(lead)}</span>
                                         )}
                                     </div>
                                 </div>
@@ -951,7 +952,7 @@ const Leads = () => {
                                                     "bg-blue-100 text-blue-700"
                                                 }`}>{dynamicCategory} · {lead.score ?? 0}</span>
                                             </td>
-                                            <td className="px-4 py-3 whitespace-nowrap"><span className="text-xs capitalize text-gray-500">{lead.source?.toLowerCase().replace(/_/g, " ") || "—"}</span></td>
+                                            <td className="px-4 py-3 whitespace-nowrap"><span className="text-xs capitalize text-gray-500">{lead.source ? getSourceLabel(lead) : "—"}</span></td>
                                             <td className="px-4 py-3"><DeptChips leadDepartments={lead.leadDepartments} stageLabel={stageLabel} /></td>
                                             <td className="px-4 py-3 whitespace-nowrap text-right">
                                                 <div className="flex items-center justify-end gap-2">

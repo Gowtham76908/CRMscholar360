@@ -115,6 +115,9 @@ model Lead {
   phone           String?
   phoneNormalized String?     @db.VarChar(15)
   source          LeadSource
+  // Optional per-lead override shown instead of the generic source label — e.g. the
+  // connected Google Sheet's custom name for source == SHEETS.
+  sourceLabel     String?
   enquiryType     EnquiryType?
   mergedIntoId    String?
   createdAt       DateTime    @default(now())
