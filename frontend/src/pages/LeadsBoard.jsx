@@ -173,7 +173,12 @@ export default function LeadsBoard({
     const columns = data?.columns || {};
     const total = data?.total ?? 0;
 
-    const stages = department ? getStages(department) : [];
+    const rawStages = department ? getStages(department) : [];
+    const stages = useMemo(() => {
+        const hasCI = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN" || user?.preferences?.permissions?.commissionInvoicing !== false;
+        if (hasCI) return rawStages;
+        return rawStages.filter(s => s.code !== "COMMISSION_INVOICING");
+    }, [rawStages, user]);
 
     // Columns grow to fit all their cards; the page scrolls vertically to reach
     // the end. A separate horizontal scrollbar, pinned to the bottom of the

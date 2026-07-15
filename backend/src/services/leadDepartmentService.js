@@ -591,6 +591,15 @@ async function updateStage({ leadDepartmentId, stage, actor }) {
         throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, `Invalid stage "${stage}" for ${leadDept.department}`);
     }
 
+    if (stage === "COMMISSION_INVOICING") {
+        const u = await prisma.user.findUnique({ where: { id: actor.userId }, select: { preferences: true } });
+        const permissions = u?.preferences?.permissions || {};
+        const hasAccess = actor.role === "SUPER_ADMIN" || actor.role === "ADMIN" || permissions.commissionInvoicing !== false;
+        if (!hasAccess) {
+            throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You do not have access to move leads to the Commission Invoicing stage");
+        }
+    }
+
     if (stage === leadDept.stage) return leadDept; // no-op (no event for a non-move)
 
     // Validation gates for SALES department stage transitions

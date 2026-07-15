@@ -57,6 +57,27 @@ export default function DepartmentStaffing() {
         onError: (e) => toast.error(e.response?.data?.error?.message || "Could not update membership"),
     });
 
+    const togglePermMut = useMutation({
+        mutationFn: ({ userId, key, isAllowed }) => {
+            const u = users.find(usr => usr.id === userId);
+            const currentPrefs = u?.preferences || {};
+            const currentPerms = currentPrefs.permissions || {};
+            const nextPrefs = {
+                ...currentPrefs,
+                permissions: {
+                    ...currentPerms,
+                    [key]: !isAllowed
+                }
+            };
+            return api.patch(`/team/${userId}`, { preferences: nextPrefs });
+        },
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["team"] });
+            toast.success("Permissions updated");
+        },
+        onError: (e) => toast.error(e.response?.data?.error?.message || "Could not update permission"),
+    });
+
     // Filter users list based on selected role tab and name search
     const filteredUsers = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -169,48 +190,106 @@ export default function DepartmentStaffing() {
                                         {departmentLabel(d)}
                                     </th>
                                 ))}
+                                <th className="text-center font-bold text-violet-650 text-[11px] px-3 py-3 whitespace-nowrap bg-violet-50/20">
+                                    Commission Invoicing
+                                </th>
+                                <th className="text-center font-bold text-violet-650 text-[11px] px-3 py-3 whitespace-nowrap bg-violet-50/20">
+                                    Invoice Access
+                                </th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {filteredUsers.map((u) => (
-                                <tr key={u.id} className="hover:bg-gray-50/40">
-                                    <td className="px-4 py-2.5 sticky left-0 bg-white">
-                                        <div className="font-medium text-gray-900">{u.name}</div>
-                                        <div className="text-[11px] text-gray-400">
-                                            {u.role === "SUPER_ADMIN" ? "Director" : u.role === "ADMIN" ? "Manager" : u.role === "TEAM_LEADER" ? "Team Leader" : "Consultant"}
-                                        </div>
-                                    </td>
-                                    {DEPARTMENT_ORDER.map((d) => {
-                                        const isMember = memberSets[d]?.has(u.id);
-                                        const pending =
-                                            toggleMut.isPending &&
-                                            toggleMut.variables?.userId === u.id &&
-                                            toggleMut.variables?.department === d;
-                                        return (
-                                            <td key={d} className="text-center px-3 py-2.5">
-                                                {pending ? (
-                                                    <Loader2 className="h-4 w-4 animate-spin text-gray-400 mx-auto" />
-                                                ) : (
-                                                    <button
-                                                        onClick={() => toggleMut.mutate({ userId: u.id, department: d, isMember })}
-                                                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-                                                            isMember ? "bg-indigo-600" : "bg-gray-200"
-                                                        }`}
-                                                        role="switch"
-                                                        aria-checked={isMember}
-                                                    >
-                                                        <span
-                                                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                                                                isMember ? "translate-x-4" : "translate-x-0.5"
+                            {filteredUsers.map((u) => {
+                                const hasCI = u.preferences?.permissions?.commissionInvoicing !== false;
+                                const hasInv = u.preferences?.permissions?.invoice !== false;
+
+                                const pendingCI = togglePermMut.isPending && togglePermMut.variables?.userId === u.id && togglePermMut.variables?.key === "commissionInvoicing";
+                                const pendingInv = togglePermMut.isPending && togglePermMut.variables?.userId === u.id && togglePermMut.variables?.key === "invoice";
+
+                                return (
+                                    <tr key={u.id} className="hover:bg-gray-50/40">
+                                        <td className="px-4 py-2.5 sticky left-0 bg-white">
+                                            <div className="font-medium text-gray-900">{u.name}</div>
+                                            <div className="text-[11px] text-gray-400">
+                                                {u.role === "SUPER_ADMIN" ? "Director" : u.role === "ADMIN" ? "Manager" : u.role === "TEAM_LEADER" ? "Team Leader" : "Consultant"}
+                                            </div>
+                                        </td>
+                                        {DEPARTMENT_ORDER.map((d) => {
+                                            const isMember = memberSets[d]?.has(u.id);
+                                            const pending =
+                                                toggleMut.isPending &&
+                                                toggleMut.variables?.userId === u.id &&
+                                                toggleMut.variables?.department === d;
+                                            return (
+                                                <td key={d} className="text-center px-3 py-2.5">
+                                                    {pending ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin text-gray-400 mx-auto" />
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => toggleMut.mutate({ userId: u.id, department: d, isMember })}
+                                                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                                                                isMember ? "bg-indigo-600" : "bg-gray-200"
                                                             }`}
-                                                        />
-                                                    </button>
-                                                )}
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
-                            ))}
+                                                            role="switch"
+                                                            aria-checked={isMember}
+                                                        >
+                                                            <span
+                                                                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                                                                    isMember ? "translate-x-4" : "translate-x-0.5"
+                                                                }`}
+                                                            />
+                                                        </button>
+                                                    )}
+                                                </td>
+                                            );
+                                        })}
+
+                                        {/* Commission Invoicing toggle */}
+                                        <td className="text-center px-3 py-2.5 bg-violet-50/5">
+                                            {pendingCI ? (
+                                                <Loader2 className="h-4 w-4 animate-spin text-gray-400 mx-auto" />
+                                            ) : (
+                                                <button
+                                                    onClick={() => togglePermMut.mutate({ userId: u.id, key: "commissionInvoicing", isAllowed: hasCI })}
+                                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                                                        hasCI ? "bg-violet-600" : "bg-gray-250"
+                                                    }`}
+                                                    role="switch"
+                                                    aria-checked={hasCI}
+                                                >
+                                                    <span
+                                                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                                                            hasCI ? "translate-x-4" : "translate-x-0.5"
+                                                        }`}
+                                                    />
+                                                </button>
+                                            )}
+                                        </td>
+
+                                        {/* Invoice toggle */}
+                                        <td className="text-center px-3 py-2.5 bg-violet-50/5">
+                                            {pendingInv ? (
+                                                <Loader2 className="h-4 w-4 animate-spin text-gray-400 mx-auto" />
+                                            ) : (
+                                                <button
+                                                    onClick={() => togglePermMut.mutate({ userId: u.id, key: "invoice", isAllowed: hasInv })}
+                                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                                                        hasInv ? "bg-violet-600" : "bg-gray-250"
+                                                    }`}
+                                                    role="switch"
+                                                    aria-checked={hasInv}
+                                                >
+                                                    <span
+                                                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                                                            hasInv ? "translate-x-4" : "translate-x-0.5"
+                                                        }`}
+                                                    />
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>

@@ -89,6 +89,7 @@ const getTeam = async (req, res, next) => {
                 breakStartedAt: true,
                 managerId: true,
                 manager: { select: { id: true, name: true } },
+                preferences: true,
             },
             orderBy: { createdAt: "desc" }
         });
@@ -127,7 +128,7 @@ const toggleUserAccess = async (req, res, next) => {
 const updateUser = async (req, res, next) => {
     try {
         const { id } = req.params;
-        let { name, email, password, phone, role, department, jobTitle, managerId } = req.body;
+        let { name, email, password, phone, role, department, jobTitle, managerId, preferences } = req.body;
 
         if (role === "SUPER_ADMIN" && req.user.role !== "SUPER_ADMIN") {
             return res.status(403).json({ message: "Only Directors can assign the Director role" });
@@ -170,6 +171,7 @@ const updateUser = async (req, res, next) => {
             department,
             jobTitle,
             ...(managerId !== undefined && { managerId: managerId || null }),
+            ...(preferences !== undefined && { preferences }),
         };
 
         if (password && password.trim() !== "") {
@@ -190,6 +192,7 @@ const updateUser = async (req, res, next) => {
                 jobTitle: true,
                 managerId: true,
                 manager: { select: { id: true, name: true } },
+                preferences: true,
             }
         });
 

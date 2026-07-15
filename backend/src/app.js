@@ -231,12 +231,18 @@ app.use("/api/lead-departments", require("./routes/leadDepartment"));
 const { ApiError } = require("./utils/apiError");
 const logger = require("./utils/logger");
 app.use((err, req, res, _next) => {
+    let status = err.status || 500;
+    if (status === 401 && !req.url.includes("/api/auth")) {
+        status = 502; // Downstream integration auth failure shouldn't kill user session
+    }
+
     if (err instanceof ApiError) {
-        if (err.status >= 500) logger.error({ method: req.method, url: req.url, code: err.code }, err.message);
-        return res.status(err.status).json(err.toJSON());
+        const finalStatus = (err.status === 401 && !req.url.includes("/api/auth")) ? 502 : err.status;
+        if (finalStatus >= 500) logger.error({ method: req.method, url: req.url, code: err.code }, err.message);
+        return res.status(finalStatus).json(err.toJSON());
     }
     logger.error({ method: req.method, url: req.url, err }, err.message || "Unhandled error");
-    res.status(err.status || 500).json({
+    res.status(status).json({
         error: { code: "INTERNAL_ERROR", message: "Something went wrong." },
     });
 });
