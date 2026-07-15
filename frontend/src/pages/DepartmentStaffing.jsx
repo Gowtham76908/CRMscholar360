@@ -200,8 +200,9 @@ export default function DepartmentStaffing() {
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {filteredUsers.map((u) => {
-                                const hasCI = u.preferences?.permissions?.commissionInvoicing !== false;
-                                const hasInv = u.preferences?.permissions?.invoice !== false;
+                                const isAlwaysAllowed = u.role === "SUPER_ADMIN" || u.role === "ADMIN";
+                                const hasCI = isAlwaysAllowed || u.preferences?.permissions?.commissionInvoicing !== false;
+                                const hasInv = isAlwaysAllowed || u.preferences?.permissions?.invoice !== false;
 
                                 const pendingCI = togglePermMut.isPending && togglePermMut.variables?.userId === u.id && togglePermMut.variables?.key === "commissionInvoicing";
                                 const pendingInv = togglePermMut.isPending && togglePermMut.variables?.userId === u.id && togglePermMut.variables?.key === "invoice";
@@ -250,10 +251,11 @@ export default function DepartmentStaffing() {
                                                 <Loader2 className="h-4 w-4 animate-spin text-gray-400 mx-auto" />
                                             ) : (
                                                 <button
+                                                    disabled={isAlwaysAllowed}
                                                     onClick={() => togglePermMut.mutate({ userId: u.id, key: "commissionInvoicing", isAllowed: hasCI })}
                                                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-                                                        hasCI ? "bg-violet-600" : "bg-gray-250"
-                                                    }`}
+                                                        hasCI ? "bg-indigo-600" : "bg-gray-200"
+                                                    } ${isAlwaysAllowed ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                                                     role="switch"
                                                     aria-checked={hasCI}
                                                 >
@@ -272,10 +274,11 @@ export default function DepartmentStaffing() {
                                                 <Loader2 className="h-4 w-4 animate-spin text-gray-400 mx-auto" />
                                             ) : (
                                                 <button
+                                                    disabled={isAlwaysAllowed}
                                                     onClick={() => togglePermMut.mutate({ userId: u.id, key: "invoice", isAllowed: hasInv })}
                                                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-                                                        hasInv ? "bg-violet-600" : "bg-gray-250"
-                                                    }`}
+                                                        hasInv ? "bg-indigo-600" : "bg-gray-200"
+                                                    } ${isAlwaysAllowed ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                                                     role="switch"
                                                     aria-checked={hasInv}
                                                 >
