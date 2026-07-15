@@ -1600,11 +1600,18 @@ export default function LeadDetail() {
     if (leadLoading) return <LeadDetailSkeleton />;
 
     if (leadError || !lead) {
+        const isAccessDenied = leadError?.response?.status === 403;
+        const errorMessage = isAccessDenied
+            ? "You do not have access to view these details. Only the assigned consultant or a manager can view this lead."
+            : "Lead not found";
         return (
-            <div className="flex flex-col items-center justify-center h-64 gap-3">
-                <AlertCircle className="h-8 w-8 text-red-400" />
-                <p className="text-gray-600 font-medium">Lead not found</p>
-                <Link to={backUrl} className="text-sm text-indigo-600 hover:underline">← Back to {backLabel}</Link>
+            <div className="flex flex-col items-center justify-center h-64 gap-2.5 max-w-sm mx-auto text-center px-4">
+                <AlertCircle className="h-9 w-9 text-rose-500" />
+                <p className="text-slate-800 font-black text-sm">{isAccessDenied ? "Access Denied" : "Lead Not Found"}</p>
+                <p className="text-slate-400 font-semibold text-[11px] leading-normal">{errorMessage}</p>
+                <Link to={backUrl} className="mt-2.5 inline-flex items-center justify-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded-xl shadow-xs transition-colors">
+                    ← Back to {backLabel}
+                </Link>
             </div>
         );
     }
