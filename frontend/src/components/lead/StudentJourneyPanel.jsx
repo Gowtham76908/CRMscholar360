@@ -574,10 +574,10 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             }
             setNewPortalIndex(null);
             setNewPortalVal("");
-            toast.success("Third party option added successfully");
+            toast.success("Application portal option added successfully");
         },
         onError: (e) => {
-            toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to add third party option");
+            toast.error(e.response?.data?.error?.message || e.response?.data?.message || "Failed to add application portal option");
         }
     });
 
@@ -627,7 +627,7 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
             color: "text-amber-600 bg-amber-50 border-amber-200",
             icon: CheckSquare,
             buttonText: "Update University Response",
-            requiredFields: ["Application Ref ID", "Submission Date"],
+            requiredFields: ["Application Ref ID", "University Response Date"],
             instruction: "Set response: Conditional/Unconditional Offer (advances to Deposit) or Reject (archives)."
         },
         DEPOSIT_STATUS: {
@@ -2488,7 +2488,7 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
 
                                                 <div className="space-y-1.5 text-left">
                                                     <div className="flex items-center justify-between">
-                                                        <label className="text-xs font-semibold text-slate-500 uppercase">Third Party Name</label>
+                                                        <label className="text-xs font-semibold text-slate-500 uppercase">Application Portal Service <span className="text-rose-500">*</span></label>
                                                         {newPortalIndex !== index && (
                                                             <button
                                                                 type="button"
@@ -2498,7 +2498,7 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                                                 }}
                                                                 className="text-[10px] font-bold text-indigo-650 hover:text-indigo-850 transition-colors cursor-pointer"
                                                             >
-                                                                + Add Third Party Option
+                                                                + Add Application Portal Option
                                                             </button>
                                                         )}
                                                     </div>
@@ -2506,7 +2506,7 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                                         <div className="flex gap-2">
                                                             <input
                                                                 type="text"
-                                                                placeholder="Enter new third party name"
+                                                                placeholder="Enter new application portal name"
                                                                 value={newPortalVal}
                                                                 onChange={e => setNewPortalVal(e.target.value)}
                                                                 className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white font-medium"
@@ -2540,11 +2540,12 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                                         </div>
                                                     ) : (
                                                         <select
+                                                            required
                                                             value={univ.univ_portal || ""}
                                                             onChange={e => updateUniversityField(index, "univ_portal", e.target.value)}
                                                             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-105 focus:border-indigo-500 bg-white"
                                                         >
-                                                            <option value="">Select Third Party (Optional)</option>
+                                                            <option value="">Select Application Portal Service</option>
                                                             {portals.map(p => (
                                                                 <option key={p.id} value={p.name}>{p.name}</option>
                                                             ))}
@@ -2593,7 +2594,7 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                                     )}
                                                     {univ.univ_portal && (
                                                         <div className="text-[10px] text-indigo-650 font-bold bg-indigo-50/50 w-fit px-1.5 py-0.5 rounded mt-1">
-                                                            Portal: {univ.univ_portal}
+                                                            Application Portal: {univ.univ_portal}
                                                         </div>
                                                     )}
                                                 </div>
@@ -2616,7 +2617,7 @@ export default function StudentJourneyPanel({ lead, onChanged }) {
                                             </div>
 
                                             <div className="space-y-1.5">
-                                                <label className="text-xs font-semibold text-slate-500 uppercase">Submission Date</label>
+                                                <label className="text-xs font-semibold text-slate-500 uppercase">University Response Date</label>
                                                 <input
                                                     type="date"
                                                     required

@@ -7,7 +7,6 @@ import AppLayout from "./layouts/AppLayout";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 // ── Eager: tiny pages needed before auth resolves ────────────────────────────
-import LandingPage    from "./pages/LandingPage";
 import Login          from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword  from "./pages/ResetPassword";
@@ -83,7 +82,7 @@ function App() {
         <Suspense fallback={<PageLoader />}>
           <Routes>
             {/* Public routes */}
-            <Route path="/"                element={<LandingPage />} />
+            <Route path="/"                element={<Navigate to="/login" replace />} />
             <Route path="/login"           element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password"  element={<ResetPassword />} />

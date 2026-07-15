@@ -135,7 +135,9 @@ const saveLeadCustomFields = async (req, res, next) => {
             "hasWorkExperience", "workOrgAddress", "workPosition", "workJobProfile", "workSalaryMode", "workFrom", "workUpto", "workCurrent", "workExperiences",
             "testScores", "documents",
             // Legacy / Sync Keys
-            "ielts_toefl_score", "academic_gpa", "backlogs",
+            "ielts_toefl_score", "academic_gpa", "backlogs", "destinationCountries", "intakeTerm",
+            // Forex Keys
+            "forex_date", "forex_amount", "forex_service_company", "forex_receipt", "forex_swift_copy",
             // Shortlisting / Application Stage Keys
             "shortlisted_universities", "sop_status", "lor_status", "transcripts_status", "univ_country", "univ_name", "univ_course", "univ_link",
             // Deposit / payment stage keys

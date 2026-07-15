@@ -9,6 +9,16 @@ export default class ErrorBoundary extends Component {
 
     componentDidCatch(error, info) {
         console.error("[ErrorBoundary]", error, info.componentStack);
+        
+        // Detect chunk loading errors (caused by new deployments)
+        const isChunkError = 
+            /failed to fetch dynamically imported module/i.test(error?.message) ||
+            /loading chunk/i.test(error?.message);
+            
+        if (isChunkError) {
+            console.log("[ErrorBoundary] Chunk load error detected. Reloading page...");
+            window.location.reload(true);
+        }
     }
 
     render() {

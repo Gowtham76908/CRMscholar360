@@ -33,7 +33,9 @@ import LeadLoanPanel from "../components/lead/LeadLoanPanel";
 import LeadLoanJourneyCard from "../components/lead/LeadLoanJourneyCard";
 import LeadAccommodationPanel from "../components/lead/LeadAccommodationPanel";
 import LeadAccommodationJourneyCard from "../components/lead/LeadAccommodationJourneyCard";
+import LeadForexJourneyCard from "../components/lead/LeadForexJourneyCard";
 import LeadMiscellaneousPanel from "../components/lead/LeadMiscellaneousPanel";
+import LeadForexPanel from "../components/lead/LeadForexPanel";
 import SmartSuggestions from "../components/lead/SmartSuggestions";
 import WhatsAppModal from "../components/lead/WhatsAppModal";
 import PostCallPanel from "../components/lead/PostCallPanel";
@@ -1117,6 +1119,10 @@ export default function LeadDetail() {
     const [reminderAt, setReminderAt] = useState("");
     const [addToGcal, setAddToGcal] = useState(false);
     const [showStageDropdown, setShowStageDropdown] = useState(false);
+    const [showCountryPicker, setShowCountryPicker] = useState(false);
+    const countryPickerRef = useRef(null);
+    const countryButtonRef = useRef(null);
+    const [countryPickerPos, setCountryPickerPos] = useState({ top: 0, left: 0 });
 
     // ─── Queries (all parallel) ───────────────────────────────────────────────
     const { data: lead, isLoading: leadLoading, error: leadError } = useQuery({
@@ -1355,6 +1361,40 @@ export default function LeadDetail() {
         }
     }, [showStageDropdown]);
 
+    // Close country picker when clicking outside
+    useEffect(() => {
+        if (!showCountryPicker) return;
+        const handler = (e) => {
+            if (countryPickerRef.current && !countryPickerRef.current.contains(e.target)) {
+                setShowCountryPicker(false);
+            }
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [showCountryPicker]);
+
+    // Calculate country picker position when it opens
+    useEffect(() => {
+        if (showCountryPicker && countryButtonRef.current) {
+            const rect = countryButtonRef.current.getBoundingClientRect();
+            setCountryPickerPos({
+                top: rect.bottom + window.scrollY + 6,
+                left: rect.left + window.scrollX,
+            });
+
+            const handleScroll = (e) => {
+                // If scrolling inside the picker list, do not close it
+                if (countryPickerRef.current && countryPickerRef.current.contains(e.target)) {
+                    return;
+                }
+                setShowCountryPicker(false);
+            };
+            window.addEventListener("scroll", handleScroll, true);
+            return () => window.removeEventListener("scroll", handleScroll, true);
+        }
+    }, [showCountryPicker]);
+
+
     const calls = Array.isArray(callsData) ? callsData : (callsData?.data ?? []);
     const tasks = tasksData?.data ?? [];
     const activeAutomations = Array.isArray(automationsRaw) ? automationsRaw.filter(a => a.active) : [];
@@ -1512,6 +1552,7 @@ export default function LeadDetail() {
         { id: "visa", label: "Visa" },
         { id: "loan", label: "Loan" },
         { id: "accommodation", label: "Accommodation" },
+        { id: "forex", label: "Forex" },
         { id: "miscellaneous", label: "Miscellaneous" },
     ];
     const effectiveTab = activityTabs.some(t => t.id === activityTab) ? activityTab : "timeline";
@@ -1795,6 +1836,124 @@ export default function LeadDetail() {
                         </div>
                     </div>
 
+                    {/* ── Preferred Countries row ── */}
+                    {(() => {
+                        const ALL_COUNTRIES = [
+                            "United Kingdom", "United States", "Canada", "Australia", "Ireland",
+                            "Germany", "New Zealand", "Singapore", "France", "Sweden",
+                            "Netherlands", "Italy", "Spain", "Switzerland", "United Arab Emirates",
+                            "Malaysia", "Japan", "South Korea", "Finland", "Norway", "Denmark", "Other"
+                        ];
+                        const FLAG_MAP = {
+                            "United Kingdom": "🇬🇧", "United States": "🇺🇸", "Canada": "🇨🇦",
+                            "Australia": "🇦🇺", "Ireland": "🇮🇪", "Germany": "🇩🇪",
+                            "New Zealand": "🇳🇿", "Singapore": "🇸🇬", "France": "🇫🇷",
+                            "Sweden": "🇸🇪", "Netherlands": "🇳🇱", "Italy": "🇮🇹",
+                            "Spain": "🇪🇸", "Switzerland": "🇨🇭", "United Arab Emirates": "🇦🇪",
+                            "Malaysia": "🇲🇾", "Japan": "🇯🇵", "South Korea": "🇰🇷",
+                            "Finland": "🇫🇮", "Norway": "🇳🇴", "Denmark": "🇩🇰", "Other": "🌍",
+                        };
+                        const raw = lead.customFields?.destinationCountries || "";
+                        const preferred = raw ? raw.split(", ").filter(Boolean) : [];
+
+                        const savePrefCountries = async (newList) => {
+                            try {
+                                await api.patch(`/leads/${id}/custom-fields`, {
+                                    fields: { destinationCountries: newList.join(", ") }
+                                });
+                                queryClient.invalidateQueries(["lead", id]);
+                                toast.success("Preferred countries updated");
+                            } catch {
+                                toast.error("Failed to update countries");
+                            }
+                        };
+
+                        const removeCountry = (c) => savePrefCountries(preferred.filter(x => x !== c));
+                        const addCountry = (c) => {
+                            if (!preferred.includes(c)) savePrefCountries([...preferred, c]);
+                            setShowCountryPicker(false);
+                        };
+                        const available = ALL_COUNTRIES.filter(c => !preferred.includes(c));
+
+                        return (
+                            <div className="flex items-center gap-2 mt-2.5 mb-3 flex-wrap">
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider shrink-0">Preferred Countries</span>
+                                {preferred.map(c => (
+                                    <span key={c} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 group">
+                                        <span>{FLAG_MAP[c] || "🌍"}</span>
+                                        <span>{c}</span>
+                                        <button
+                                            onClick={() => removeCountry(c)}
+                                            className="ml-0.5 rounded-full hover:bg-indigo-200 p-0.5 transition-colors opacity-0 group-hover:opacity-100"
+                                            title={`Remove ${c}`}
+                                        >
+                                            <svg className="h-2.5 w-2.5" viewBox="0 0 8 8" fill="none"><path d="M1.5 1.5l5 5M6.5 1.5l-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                                        </button>
+                                    </span>
+                                ))}
+                                {preferred.length === 0 && (
+                                    <span className="text-[11px] text-gray-400 italic">None set</span>
+                                )}
+                                <div className="relative" ref={countryPickerRef}>
+                                    <button
+                                        ref={countryButtonRef}
+                                        onClick={() => setShowCountryPicker(p => !p)}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-white border border-dashed border-indigo-300 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-400 transition-colors cursor-pointer"
+                                        title="Add preferred country"
+                                    >
+                                        <Plus className="h-3 w-3" /> Add
+                                    </button>
+                                    {showCountryPicker && (
+                                        <div 
+                                            style={{
+                                                position: "fixed",
+                                                top: `${countryPickerPos.top - window.scrollY}px`,
+                                                left: `${countryPickerPos.left - window.scrollX}px`,
+                                            }}
+                                            className="z-[9999] bg-white border border-gray-200 rounded-xl shadow-xl min-w-[240px] max-h-80 overflow-hidden flex flex-col p-1"
+                                        >
+                                            {/* Custom Country Creator Input */}
+                                            <div className="p-2 border-b border-gray-100">
+                                                <form onSubmit={(e) => {
+                                                    e.preventDefault();
+                                                    const val = e.target.customCountry.value.trim();
+                                                    if (val) {
+                                                        addCountry(val);
+                                                        e.target.reset();
+                                                    }
+                                                }} className="flex gap-1.5">
+                                                    <input
+                                                        name="customCountry"
+                                                        placeholder="Type new country..."
+                                                        autoFocus
+                                                        className="flex-1 px-2.5 py-1 text-xs border border-gray-200 rounded-lg focus:border-indigo-400 focus:outline-none"
+                                                    />
+                                                    <button type="submit" className="px-2.5 py-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">
+                                                        Add
+                                                    </button>
+                                                </form>
+                                            </div>
+                                            
+                                            {/* Predefined list */}
+                                            <div className="overflow-y-auto max-h-48 py-1">
+                                                {available.map(c => (
+                                                    <button
+                                                        key={c}
+                                                        onClick={() => addCountry(c)}
+                                                        className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-left"
+                                                    >
+                                                        <span className="text-base">{FLAG_MAP[c] || "🌍"}</span>
+                                                        {c}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
                     {/* Action bar — primary on left, secondary on right */}
                     <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -2032,6 +2191,8 @@ export default function LeadDetail() {
                             <LeadLoanPanel leadId={id} lead={lead} embedded />
                         ) : effectiveTab === "accommodation" ? (
                             <LeadAccommodationPanel leadId={id} lead={lead} embedded />
+                        ) : effectiveTab === "forex" ? (
+                            <LeadForexPanel leadId={id} lead={lead} embedded />
                         ) : effectiveTab === "miscellaneous" ? (
                             <LeadMiscellaneousPanel leadId={id} lead={lead} embedded />
                         ) : (
@@ -2044,19 +2205,19 @@ export default function LeadDetail() {
                                             <div className="inline-flex items-center gap-0.5 p-0.5 bg-gray-100 rounded-lg">
                                                 <button
                                                     type="button"
+                                                    onClick={() => setShowReminder(true)}
+                                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${showReminder ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                                                        }`}
+                                                >
+                                                    <Bell className="h-3.5 w-3.5" /> Comment
+                                                </button>
+                                                <button
+                                                    type="button"
                                                     onClick={() => { setShowReminder(false); setReminderAt(""); }}
                                                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${!showReminder ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
                                                         }`}
                                                 >
                                                     <FileText className="h-3.5 w-3.5" /> Note
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowReminder(true)}
-                                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${showReminder ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                                                        }`}
-                                                >
-                                                    <Bell className="h-3.5 w-3.5" /> Reminder
                                                 </button>
                                             </div>
 
@@ -2072,7 +2233,7 @@ export default function LeadDetail() {
                                                         }
                                                     }}
                                                     placeholder={showReminder
-                                                        ? "What's this reminder about? (optional)"
+                                                        ? "What's this comment about? (optional)"
                                                         : "Add a note… (Enter to save, Shift+Enter for new line)"}
                                                     rows={2}
                                                     className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400"
@@ -2083,6 +2244,7 @@ export default function LeadDetail() {
                                                     onChange={handleFileChange}
                                                     accept=".pdf,.doc,.docx,.txt"
                                                     className="hidden"
+                                                    id="file-upload-input"
                                                 />
                                                 <button
                                                     type="button"
@@ -2107,18 +2269,18 @@ export default function LeadDetail() {
                                                 >
                                                     {(addNote.isPending || addReminder.isPending)
                                                         ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                        : showReminder ? <><Bell className="h-3.5 w-3.5" /> Set Reminder</> : "Save Note"}
+                                                        : showReminder ? <><Bell className="h-3.5 w-3.5" /> Save Comment</> : "Save Note"}
                                                 </button>
                                             </div>
 
-                                            {/* Reminder date/time — required in Reminder mode */}
+                                            {/* Comment date/time — required in Comment mode */}
                                             {showReminder && (
                                                 <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between rounded-lg bg-amber-50/60 border border-amber-100 px-3 py-2">
-                                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
-                                                        <span className="flex items-center gap-1 text-xs font-bold text-amber-700 whitespace-nowrap">
-                                                            <Calendar className="h-3.5 w-3.5" /> Remind me at
-                                                            <span className="text-red-500">*</span>
-                                                        </span>
+                                                    <span className="flex items-center gap-1 text-xs font-bold text-amber-700 whitespace-nowrap">
+                                                        <Calendar className="h-3.5 w-3.5" /> Remind me at
+                                                        <span className="text-red-500">*</span>
+                                                    </span>
+                                                    <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
                                                         <input
                                                             type="datetime-local"
                                                             value={reminderAt}
@@ -2128,20 +2290,20 @@ export default function LeadDetail() {
                                                                     : "border-red-300 focus:border-red-400 focus:ring-red-100"
                                                                 }`}
                                                         />
+                                                        {gcalConnected && (
+                                                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={addToGcal}
+                                                                    onChange={e => setAddToGcal(e.target.checked)}
+                                                                    className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
+                                                                />
+                                                                <span className="flex items-center gap-1 text-xs text-gray-600 font-semibold">
+                                                                    <Calendar className="h-3.5 w-3.5 text-blue-500" /> Add to GCal
+                                                                </span>
+                                                            </label>
+                                                        )}
                                                     </div>
-                                                    {gcalConnected && (
-                                                        <label className="flex items-center gap-2 cursor-pointer select-none">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={addToGcal}
-                                                                onChange={e => setAddToGcal(e.target.checked)}
-                                                                className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
-                                                            />
-                                                            <span className="flex items-center gap-1 text-xs text-gray-600 font-semibold">
-                                                                <Calendar className="h-3.5 w-3.5 text-blue-500" /> Add to GCal
-                                                            </span>
-                                                        </label>
-                                                    )}
                                                 </div>
                                             )}
                                         </form>
@@ -2353,6 +2515,10 @@ export default function LeadDetail() {
 
                         {lead.leadDepartments?.some(ld => ld.department === "ACCOMMODATION_TICKETS") && (
                             <LeadAccommodationJourneyCard leadId={id} lead={lead} />
+                        )}
+
+                        {lead.leadDepartments?.some(ld => ld.department === "FOREX") && (
+                            <LeadForexJourneyCard leadId={id} lead={lead} />
                         )}
 
                         {lead.leadDepartments?.some(ld => ld.department === "MISCELLANEOUS") && (

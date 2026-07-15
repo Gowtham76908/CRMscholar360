@@ -127,7 +127,7 @@ const toggleUserAccess = async (req, res, next) => {
 const updateUser = async (req, res, next) => {
     try {
         const { id } = req.params;
-        let { name, phone, role, department, jobTitle, managerId } = req.body;
+        let { name, email, password, phone, role, department, jobTitle, managerId } = req.body;
 
         if (role === "SUPER_ADMIN" && req.user.role !== "SUPER_ADMIN") {
             return res.status(403).json({ message: "Only Directors can assign the Director role" });
@@ -139,6 +139,17 @@ const updateUser = async (req, res, next) => {
         if (!(await canManage(req.user, id))) {
             return res.status(403).json({ message: "You can only manage members of your own team" });
         }
+
+        // Check if email is already taken by another user
+        if (email) {
+            const existingUser = await prisma.user.findFirst({
+                where: { email, NOT: { id } }
+            });
+            if (existingUser) {
+                return res.status(400).json({ message: "Email is already in use by another team member" });
+            }
+        }
+
         // Managers cannot change a member's role or reassign them to another team.
         if (req.user.role === "ADMIN") {
             role = undefined;
@@ -151,16 +162,23 @@ const updateUser = async (req, res, next) => {
             if (!check.ok) return res.status(400).json({ message: check.message });
         }
 
+        const updateData = {
+            name,
+            email,
+            phone,
+            role,
+            department,
+            jobTitle,
+            ...(managerId !== undefined && { managerId: managerId || null }),
+        };
+
+        if (password && password.trim() !== "") {
+            updateData.password = await bcrypt.hash(password, 10);
+        }
+
         const updatedUser = await prisma.user.update({
             where: { id },
-            data: {
-                name,
-                phone,
-                role,
-                department,
-                jobTitle,
-                ...(managerId !== undefined && { managerId: managerId || null }),
-            },
+            data: updateData,
             select: {
                 id: true,
                 name: true,

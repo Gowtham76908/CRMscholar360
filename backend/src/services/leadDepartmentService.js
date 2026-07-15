@@ -603,6 +603,11 @@ async function updateStage({ leadDepartmentId, stage, actor }) {
         await validateLoanStageMove(leadDept, leadDept.stage, stage, prisma);
     }
 
+    // Validation gates for FOREX department stage transitions
+    if (leadDept.department === "FOREX") {
+        await validateForexStageMove(leadDept, leadDept.stage, stage, prisma);
+    }
+
     // Validation gates for ACCOMMODATION_TICKETS department stage transitions
     if (leadDept.department === "ACCOMMODATION_TICKETS") {
         await validateAccommodationStageMove(leadDept, leadDept.stage, stage, prisma);
@@ -1284,9 +1289,9 @@ async function validateLoanStageMove(leadDept, currentStage, targetStage, txOrPr
     if (currentStage === "LOAN_DOCUMENTATION") {
         const filled = (v) => v !== undefined && v !== null && String(v).trim() !== "";
         const isComplete = (b) =>
-            filled(b?.bank_name) && filled(b?.loan_type) && filled(b?.application_ref) && filled(b?.documents_submitted_date);
+            filled(b?.bank_name) && filled(b?.loan_type) && filled(b?.documents_submitted_date);
         if (!banks.some(isComplete)) {
-            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Loan Documentation stage: Add at least one bank with Bank, Loan Type, Application Ref and Documents Submitted Date filled.");
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Loan Documentation stage: Add at least one bank with Bank, Loan Type, and Documents Submitted Date filled.");
         }
     }
 
@@ -1415,6 +1420,59 @@ async function validateAccommodationStageMove(leadDept, currentStage, targetStag
         });
         if (paidInvoice === 0) {
             throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move to Commission Invoicing: create an Accommodation invoice for this lead and collect full payment first.");
+        }
+    }
+}
+
+async function validateForexStageMove(leadDept, currentStage, targetStage, txOrPrisma = prisma) {
+    if (currentStage === targetStage) return;
+
+    if (targetStage === "ARCHIVE" || targetStage === "REJECTED") return;
+
+    const stages = getStages(leadDept.department);
+    const currentIndex = stages.indexOf(currentStage);
+    const targetIndex = stages.indexOf(targetStage);
+    const isMovingForward = targetIndex > currentIndex;
+
+    if (!isMovingForward) return;
+
+    const lead = await txOrPrisma.lead.findUnique({
+        where: { id: leadDept.leadId },
+        select: { id: true, customFields: true },
+    });
+    if (!lead) return;
+
+    const cf = lead.customFields || {};
+    const filled = (v) => v !== undefined && v !== null && String(v).trim() !== "";
+    const isPdf = (v) => {
+        if (!filled(v)) return false;
+        return String(v).toLowerCase().endsWith(".pdf");
+    };
+
+    // 1. Enquiry → On Progress: must have date, amount, service company name filled
+    if (currentStage === "ENQUIRY") {
+        if (!filled(cf.forex_date) || !filled(cf.forex_amount) || !filled(cf.forex_service_company)) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of Enquiry stage: Date, Amount, and Service Company Name must be filled.");
+        }
+    }
+
+    // 2. On Progress → Process Completed: must have receipt and swift copy (both must be PDF)
+    if (currentStage === "ON_PROGRESS") {
+        if (!isPdf(cf.forex_receipt)) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of On Progress stage: Receipt must be uploaded and must be in PDF format.");
+        }
+        if (!isPdf(cf.forex_swift_copy)) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move lead out of On Progress stage: SWIFT Copy must be uploaded and must be in PDF format.");
+        }
+    }
+
+    // 3. Process Completed → Commission Invoicing: must have paid Forex invoice
+    if (targetStage === "COMMISSION_INVOICING") {
+        const paidInvoice = await txOrPrisma.invoice.count({
+            where: { leadId: leadDept.leadId, department: "FOREX", status: "PAID", deletedAt: null },
+        });
+        if (paidInvoice === 0) {
+            throw new ApiError(400, ERROR_CODES.VALIDATION_ERROR, "Cannot move to Commission Invoicing: Create a Forex invoice for this lead and collect full payment first.");
         }
     }
 }

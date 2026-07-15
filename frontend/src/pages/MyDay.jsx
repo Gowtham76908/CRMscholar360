@@ -9,7 +9,7 @@ import {
     CheckCircle, Circle, Bell, Phone, MessageSquare, X,
     ClipboardList, Calendar, Search, ChevronDown, Check, Users, Loader2,
     Building2, GraduationCap, FileCheck, Landmark, Home, Banknote, Briefcase,
-    UserCircle2, History, ArrowRight, Plus, Hash,
+    UserCircle2, History, ArrowRight, Plus, Hash, Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../lib/utils";
@@ -532,6 +532,105 @@ function DepartmentFilter({ selected, onSelect }) {
     );
 }
 
+// ─── Country Filter ─────────────────────────────────────────────────────────────
+
+const ALL_DEST_COUNTRIES = [
+    "United Kingdom", "United States", "Canada", "Australia", "Ireland",
+    "Germany", "New Zealand", "Singapore", "France", "Sweden",
+    "Netherlands", "Italy", "Spain", "Switzerland", "United Arab Emirates",
+    "Malaysia", "Japan", "South Korea", "Finland", "Norway", "Denmark", "Other"
+];
+
+const COUNTRY_FLAG = {
+    "United Kingdom": "🇬🇧", "United States": "🇺🇸", "Canada": "🇨🇦",
+    "Australia": "🇦🇺", "Ireland": "🇮🇪", "Germany": "🇩🇪",
+    "New Zealand": "🇳🇿", "Singapore": "🇸🇬", "France": "🇫🇷",
+    "Sweden": "🇸🇪", "Netherlands": "🇳🇱", "Italy": "🇮🇹",
+    "Spain": "🇪🇸", "Switzerland": "🇨🇭", "United Arab Emirates": "🇦🇪",
+    "Malaysia": "🇲🇾", "Japan": "🇯🇵", "South Korea": "🇰🇷",
+    "Finland": "🇫🇮", "Norway": "🇳🇴", "Denmark": "🇩🇰", "Other": "🌍",
+};
+
+function CountryFilter({ selected, onSelect }) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState("");
+    const ref = useRef(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [open]);
+
+    const filtered = ALL_DEST_COUNTRIES.filter(c =>
+        c.toLowerCase().includes(query.trim().toLowerCase())
+    );
+
+    const choose = (c) => { onSelect(c); setOpen(false); setQuery(""); };
+
+    return (
+        <div className="relative" ref={ref}>
+            <button
+                onClick={() => setOpen(o => !o)}
+                className={cn(
+                    "inline-flex items-center gap-2 h-9 pl-2.5 pr-2 rounded-xl border bg-white text-sm font-semibold transition-colors shadow-sm",
+                    selected
+                        ? "border-indigo-200 text-indigo-700"
+                        : "border-gray-200/70 text-gray-600 hover:border-indigo-300 hover:text-indigo-600"
+                )}
+            >
+                <Globe className="h-4 w-4 text-indigo-500" />
+                <span className="max-w-[10rem] truncate">
+                    {selected ? <>{COUNTRY_FLAG[selected] || "🌍"} {selected}</> : "All Countries"}
+                </span>
+                <ChevronDown className={cn("h-3.5 w-3.5 text-gray-400 transition-transform", open && "rotate-180")} />
+            </button>
+
+            {open && (
+                <div className="absolute right-0 mt-2 w-72 rounded-xl border border-gray-200/70 bg-white shadow-lg shadow-gray-200/50 z-30 overflow-hidden">
+                    <div className="p-2 border-b border-gray-100">
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                            <input
+                                autoFocus
+                                value={query}
+                                onChange={e => setQuery(e.target.value)}
+                                placeholder="Search country…"
+                                className="w-full h-9 pl-8 pr-3 text-sm rounded-lg border border-gray-200 bg-gray-50 focus:bg-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none placeholder:text-gray-400"
+                            />
+                        </div>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto p-1">
+                        <button
+                            onClick={() => choose(null)}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                        >
+                            <span className="h-7 w-7 rounded-full bg-gray-100 flex items-center justify-center shrink-0 text-base">🌐</span>
+                            <span className="flex-1 text-left font-semibold text-gray-700">All Countries</span>
+                            {!selected && <Check className="h-4 w-4 text-indigo-600 shrink-0" />}
+                        </button>
+                        {filtered.map(c => (
+                            <button
+                                key={c}
+                                onClick={() => choose(c)}
+                                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                            >
+                                <span className="h-7 w-7 rounded-full bg-indigo-50 flex items-center justify-center shrink-0 text-base">{COUNTRY_FLAG[c] || "🌍"}</span>
+                                <span className="flex-1 text-left font-semibold text-gray-800 truncate">{c}</span>
+                                {selected === c && <Check className="h-4 w-4 text-indigo-600 shrink-0" />}
+                            </button>
+                        ))}
+                        {filtered.length === 0 && (
+                            <p className="text-xs text-gray-400 text-center py-6">No countries found</p>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── Date Range Filter ──────────────────────────────────────────────────────────
 
 const RANGE_MODES = [
@@ -681,9 +780,10 @@ const MyDay = () => {
     // Filters
     const [consultant, setConsultant] = useState(null);
     const [department, setDepartment] = useState(null);
+    const [country, setCountry] = useState(null);
     const [range, setRange] = useState({ mode: "today" });
-    const hasFilters = consultant || department || range.mode !== "today";
-    const clearFilters = () => { setConsultant(null); setDepartment(null); setRange({ mode: "today" }); };
+    const hasFilters = consultant || department || country || range.mode !== "today";
+    const clearFilters = () => { setConsultant(null); setDepartment(null); setCountry(null); setRange({ mode: "today" }); };
 
     // Personal Reminder Form State
     const [showAddReminder, setShowAddReminder] = useState(false);
@@ -703,10 +803,10 @@ const MyDay = () => {
 
     // Fetch action queue (leads needing follow-up) — scoped to the active filters
     const { data: leadsData, isLoading: leadsLoading } = useQuery({
-        queryKey: ["leads", "action-queue", consultant?.id ?? "all", department ?? "all"],
+        queryKey: ["leads", "action-queue", consultant?.id ?? "all", department ?? "all", country ?? "all"],
         queryFn: () => api.get("/leads", {
             params: {
-                limit: 10, status: "FOLLOW_UP,CONTACTED,NEW", sortBy: "updatedAt", sortOrder: "asc",
+                limit: 200, status: "FOLLOW_UP,CONTACTED,NEW", sortBy: "updatedAt", sortOrder: "asc",
                 ...(consultant ? { assignedTo: consultant.id } : {}),
                 ...(department ? { department } : {}),
             }
@@ -823,15 +923,24 @@ const MyDay = () => {
     const leadInDept = (lead) =>
         !department || (lead?.leadDepartments || []).some(d => d.department === department);
 
-    // Base scope (consultant + department). Open = not yet completed/resolved.
+    const leadInCountry = (lead) => {
+        if (!country) return true;
+        const raw = lead?.customFields?.destinationCountries || "";
+        const countries = raw ? raw.split(", ").map(c => c.trim()) : [];
+        return countries.includes(country);
+    };
+
+    // Base scope (consultant + department + country). Open = not yet completed/resolved.
     const tasksScoped = (tasks || [])
         .filter(t => t.status === "PENDING")
         .filter(t => !consultant || t.assignedTo?.id === consultant.id)
-        .filter(t => leadInDept(t.lead));
+        .filter(t => leadInDept(t.lead))
+        .filter(t => leadInCountry(t.lead));
     const remindersScoped = (reminders || [])
         .filter(r => !r.dismissed && r.outcome !== "SUCCESSFUL")
         .filter(r => !consultant || r.userId === consultant.id)
-        .filter(r => leadInDept(r.lead));
+        .filter(r => leadInDept(r.lead))
+        .filter(r => leadInCountry(r.lead));
 
     const now = Date.now();
     const isPast = (d) => d && new Date(d).getTime() < now;
@@ -912,6 +1021,7 @@ const MyDay = () => {
                     )}
                     <DateRangeFilter range={range} onChange={setRange} />
                     <DepartmentFilter selected={department} onSelect={setDepartment} />
+                    <CountryFilter selected={country} onSelect={setCountry} />
                     <ConsultantFilter consultants={consultants} selected={consultant} onSelect={setConsultant} />
                 </div>
             </div>

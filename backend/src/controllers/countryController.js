@@ -136,10 +136,34 @@ const createUniversity = async (req, res, next) => {
 
         const formattedName = toTitleCase(name.trim());
 
-        // Check if country exists
-        const country = await prisma.country.findUnique({
-            where: { id: countryId }
-        });
+        let country;
+        let resolvedCountryId = countryId;
+
+        if (countryId.startsWith("default-") || countryId.startsWith("extra-")) {
+            // It's a virtual country option. Let's create it in the database if it doesn't exist.
+            const rawName = countryId.replace(/^(default-|extra-)/, "").replace(/-/g, " ");
+            // Special mapping for common abbreviations
+            let countryName = toTitleCase(rawName);
+            if (countryName.toLowerCase() === "usa") countryName = "USA";
+            if (countryName.toLowerCase() === "uk") countryName = "UK";
+            if (countryName.toLowerCase() === "uae") countryName = "UAE";
+
+            country = await prisma.country.findFirst({
+                where: { name: { equals: countryName, mode: "insensitive" } }
+            });
+
+            if (!country) {
+                country = await prisma.country.create({
+                    data: { name: countryName }
+                });
+            }
+            resolvedCountryId = country.id;
+        } else {
+            country = await prisma.country.findUnique({
+                where: { id: countryId }
+            });
+        }
+
         if (!country) {
             throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Country not found");
         }
@@ -151,7 +175,7 @@ const createUniversity = async (req, res, next) => {
                     equals: formattedName,
                     mode: "insensitive"
                 },
-                countryId
+                countryId: resolvedCountryId
             }
         });
         if (existing) {
@@ -161,7 +185,7 @@ const createUniversity = async (req, res, next) => {
         const university = await prisma.university.create({
             data: {
                 name: formattedName,
-                countryId
+                countryId: resolvedCountryId
             }
         });
 

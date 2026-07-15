@@ -79,17 +79,26 @@ class GoogleSheetsProvider extends ProviderInterface {
         for (const [k, v] of Object.entries(row)) {
             fields[String(k).trim().toLowerCase()] = typeof v === "string" ? v.trim() : v;
         }
-        const find = (patterns) => {
+        const find = (patterns, exclude = []) => {
+            // First, try exact matches
             for (const [k, v] of Object.entries(fields)) {
-                if (v && patterns.some(p => k.includes(p))) return v;
+                if (v && !exclude.includes(k) && patterns.some(p => k === p)) return v;
+            }
+            // Next, try fuzzy substring matches
+            for (const [k, v] of Object.entries(fields)) {
+                if (v && !exclude.includes(k) && patterns.some(p => k.includes(p))) return v;
             }
             return null;
         };
         const email = fields.email || find(["email", "e-mail", "mail"]) ||
             Object.values(fields).find(v => typeof v === "string" && /@/.test(v)) || null;
         const phone = fields.phone || fields.mobile || find(["phone", "mobile", "contact", "whatsapp", "number"]) || null;
-        const name = fields.name || fields["full name"] || find(["name"]) ||
+        
+        // Exclude Meta metadata column names when looking for the lead's name
+        const name = fields.name || fields["full name"] || 
+            find(["name"], ["ad_name", "adset_name", "campaign_name", "form_name"]) ||
             [find(["first"]), find(["last"])].filter(Boolean).join(" ").trim() || null;
+
         const course = fields.course || find(["course", "program", "programme", "interested"]) || null;
         const message = fields.message || fields.notes || find(["message", "note", "enquiry", "inquiry", "comment", "query", "remark"]) || null;
         return { name, email: email || null, phone: phone || null, course: course || null, message: message || null };

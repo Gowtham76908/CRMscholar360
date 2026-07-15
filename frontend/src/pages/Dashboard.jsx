@@ -731,12 +731,14 @@ const Dashboard = () => {
 
     // ── Query for leads by stage (for modal) ──────────────────────────────────
     const { data: stageLeadsData, isLoading: stageLeadsLoading } = useQuery({
-        queryKey: ["stage-leads", selectedStage?.code, department, selectedConsultantId, stageLeadsPage],
+        queryKey: ["stage-leads", selectedStage?.code, department, selectedConsultantId, stageLeadsPage, user?.role],
         queryFn: () => api.get("/leads", {
             params: {
                 department,
                 stage: selectedStage?.code,
                 assignedTo: selectedConsultantId || undefined,
+                // For consultants, restrict to their own leads only
+                mine: user?.role === "EMPLOYEE" ? true : undefined,
                 // Don't apply date filters - we want all leads in this stage
                 // startDate: startDate || undefined,
                 // endDate: endDate || undefined,

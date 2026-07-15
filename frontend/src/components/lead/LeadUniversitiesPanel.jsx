@@ -260,7 +260,7 @@ export default function LeadUniversitiesPanel({ leadId, lead, embedded = false }
                             </select>
                         </div>
                         <div className="space-y-1">
-                            <label className={labelCls}>Submission Date</label>
+                            <label className={labelCls}>University Response Date</label>
                             <input type="date" className={inputCls} value={draft.submission_date || ""} onChange={e => setField("submission_date", e.target.value)} />
                         </div>
                         <div className="space-y-1">
@@ -368,7 +368,7 @@ export default function LeadUniversitiesPanel({ leadId, lead, embedded = false }
                     ) : null}
                 </Field>
                 <Field icon={FileCheck2} label="University Response">{u.university_response}</Field>
-                <Field icon={CalendarDays} label="Submission Date">
+                <Field icon={CalendarDays} label="University Response Date">
                     {u.submission_date ? new Date(u.submission_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : null}
                 </Field>
                 <Field icon={FileCheck2} label="Offer Letter">{u.offerLetterStatus}</Field>

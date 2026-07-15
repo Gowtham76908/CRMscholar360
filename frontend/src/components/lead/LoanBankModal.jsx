@@ -82,7 +82,7 @@ export default function LoanBankModal({ leadId, lead, editIndex, onClose, onSave
     // Loan Documentation) until all of these are filled. Kept in sync with the
     // backend gate in validateLoanStageMove.
     const filled = (v) => v !== undefined && v !== null && String(v).trim() !== "";
-    const REQUIRED_FIELDS = ["bank_name", "loan_type", "application_ref", "documents_submitted_date"];
+    const REQUIRED_FIELDS = ["bank_name", "loan_type", "documents_submitted_date"];
     // A bank marked Accepted must also carry its sanctioned amount (the condition to
     // advance from Awaiting Approval → Approved).
     const acceptedOk = draft.status !== "Accepted" || filled(draft.sanctioned_amount);
@@ -223,7 +223,7 @@ export default function LoanBankModal({ leadId, lead, editIndex, onClose, onSave
                             <input className={inputCls} value={draft.branch || ""} onChange={e => setField("branch", e.target.value)} />
                         </div>
                         <div className="space-y-1">
-                            <label className={labelCls}>Application Ref No. <span className="text-rose-500">*</span></label>
+                            <label className={labelCls}>Application Ref No.</label>
                             <input className={inputCls} value={draft.application_ref || ""} onChange={e => setField("application_ref", e.target.value)} />
                         </div>
                         <div className="space-y-1">
