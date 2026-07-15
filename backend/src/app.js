@@ -38,6 +38,7 @@ const allowedOrigins = [
   "https://scholar360.vercel.app",
   "https://crmscholar360.onrender.com",
   "https://cr-mscholar360.vercel.app",
+  "https://crm.scholars360.org",
 ];
 if (process.env.FRONTEND_URL) {
     allowedOrigins.push(process.env.FRONTEND_URL);
