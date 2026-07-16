@@ -594,7 +594,7 @@ async function updateStage({ leadDepartmentId, stage, actor }) {
     if (stage === "COMMISSION_INVOICING") {
         const u = await prisma.user.findUnique({ where: { id: actor.userId }, select: { preferences: true } });
         const permissions = u?.preferences?.permissions || {};
-        const hasAccess = actor.role === "SUPER_ADMIN" || actor.role === "ADMIN" || permissions.commissionInvoicing !== false;
+        const hasAccess = actor.role === "SUPER_ADMIN" || permissions.commissionInvoicing !== false;
         if (!hasAccess) {
             throw new ApiError(403, ERROR_CODES.ACCESS_DENIED, "You do not have access to move leads to the Commission Invoicing stage");
         }
@@ -1028,6 +1028,9 @@ async function getDepartmentBoardByStage({ department, actor, filters = {}, page
     const perStageResults = await Promise.all(
         stages.map(async (stage) => {
             const stageWhere = { ...where, stage };
+            if (actor.role === "EMPLOYEE" && stage === "ENQUIRY") {
+                delete stageWhere.assignedEmployeeId;
+            }
             const [total, rows] = await Promise.all([
                 prisma.leadDepartment.count({ where: stageWhere }),
                 prisma.leadDepartment.findMany({

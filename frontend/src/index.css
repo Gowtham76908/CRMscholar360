@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+html {
+  font-size: 104%;
+}
+
+aside, nav {
+  font-size: 1.02em;
+}
+
 /* ── Brand: remap colors to violet/purple theme ── */
 @theme {
   /* indigo scale → violet scale */

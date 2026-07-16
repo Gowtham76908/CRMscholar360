@@ -98,6 +98,7 @@ const TASK_STATUS_DOT = {
 export default function LeadsBoard({
     search = "",
     mine = false,
+    assignedEmployeeId,
     initialDepartment,
     slaWarningDays = 3,
     slaBreachDays = 7,
@@ -155,7 +156,11 @@ export default function LeadsBoard({
     const filters = useMemo(() => {
         const f = {};
         if (search) f.search = search;
-        if (mine && user?.id) f.assignedEmployeeId = user.id;
+        if (mine && user?.id) {
+            f.assignedEmployeeId = user.id;
+        } else if (assignedEmployeeId) {
+            f.assignedEmployeeId = assignedEmployeeId;
+        }
         if (source) f.source = source;
         if (category) f.category = category;
         if (enquiryType) f.enquiryType = enquiryType;
@@ -166,7 +171,7 @@ export default function LeadsBoard({
         if (score_max) f.score_max = score_max;
         if (country) f.country = country;
         return f;
-    }, [search, mine, user, source, category, enquiryType, sla, startDate, endDate, score_min, score_max, country]);
+    }, [search, mine, user, assignedEmployeeId, source, category, enquiryType, sla, startDate, endDate, score_min, score_max, country]);
 
     const { data, isLoading, isFetching } = useDepartmentBoard(department, filters, 1, PER_STAGE);
     // Already split server-side, one entry per stage: { [stageCode]: { rows, total, totalPages } }.
@@ -175,7 +180,7 @@ export default function LeadsBoard({
 
     const rawStages = department ? getStages(department) : [];
     const stages = useMemo(() => {
-        const hasCI = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN" || user?.preferences?.permissions?.commissionInvoicing !== false;
+        const hasCI = user?.role === "SUPER_ADMIN" || user?.preferences?.permissions?.commissionInvoicing !== false;
         if (hasCI) return rawStages;
         return rawStages.filter(s => s.code !== "COMMISSION_INVOICING");
     }, [rawStages, user]);

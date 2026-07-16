@@ -2020,7 +2020,7 @@ export default function LeadDetail() {
                                     <Plus className="h-3.5 w-3.5" /> Task
                                 </button>
                             )}
-                            {(user?.role === "SUPER_ADMIN" || user?.role === "ADMIN" || user?.preferences?.permissions?.invoice !== false) && (
+                            {(user?.role === "SUPER_ADMIN" || user?.preferences?.permissions?.invoice !== false) && (
                                 <button
                                     onClick={() => navigate(`/invoices?leadId=${id}&invoiceForLead=1${primaryDept?.department ? `&department=${primaryDept.department}` : ""}`)}
                                     className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-all cursor-pointer shadow-sm"

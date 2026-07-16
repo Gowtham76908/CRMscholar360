@@ -125,11 +125,18 @@ const Leads = () => {
     const departmentFilter = searchParams.get("department") || "";
     const stageFilter      = searchParams.get("stage")      || "";
     const countryFilter    = searchParams.get("country")    || "";
-
+    const assignedToFilter = searchParams.get("assignedTo") || "";
+ 
     const [filterOpen, setFilterOpen] = useState(false);
-
+ 
+    // Fetch users for the Consultant filter
+    const { data: users = [] } = useQuery({
+        queryKey: ["users"],
+        queryFn: () => api.get("/users").then(r => r.data),
+    });
+ 
     // Count active filters (excluding status which has its own tab row)
-    const activeFilterCount = [sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, scoreMin, scoreMax, mineFilter, departmentFilter, stageFilter, countryFilter].filter(Boolean).length;
+    const activeFilterCount = [sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, scoreMin, scoreMax, mineFilter, departmentFilter, stageFilter, countryFilter, assignedToFilter].filter(Boolean).length;
 
     const [localSearch, setLocalSearch] = useState(searchTerm);
 
@@ -160,7 +167,7 @@ const Leads = () => {
     const setPage         = (v) => setSearchParams(p => { const next = new URLSearchParams(p); next.set("page", String(v)); return next; }, { replace: true });
     const clearAllFilters = () => setSearchParams(p => {
         const next = new URLSearchParams(p);
-        ["source","category","enquiryType","sla","startDate","endDate","score_min","score_max","mine","department","stage","country"].forEach(k => next.delete(k));
+        ["source","category","enquiryType","sla","startDate","endDate","score_min","score_max","mine","department","stage","country","assignedTo"].forEach(k => next.delete(k));
         next.set("page", "1");
         return next;
     }, { replace: true });
@@ -169,25 +176,25 @@ const Leads = () => {
     const viewMode = searchParams.get("view") || "grid";
     const setViewMode = (v) => setSearchParams(p => { const next = new URLSearchParams(p); next.set("view", v); return next; }, { replace: true });
     const isBoardView = viewMode === "kanban";
-
+ 
     const limit = 20;
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingLead, setEditingLead] = useState(null);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const queryClient = useQueryClient();
     const { user } = useAuth();
-
+ 
     // Fetch registered countries list for the dropdown filter
     const { data: countriesList = [] } = useQuery({
         queryKey: ["countries"],
         queryFn: () => api.get("/countries").then(r => r.data),
     });
-
+ 
     // Board view fetches its own paginated data per department (see LeadsBoard /
     // useDepartmentBoard) instead of this list query — skip it entirely there so
     // switching to the board doesn't also fire an unused /leads request.
     const { data: leadsData, isLoading, isFetching } = useQuery({
-        queryKey: ["leads", page, limit, searchTerm, activeTab, sortBy, sortOrder, scoreMin, scoreMax, mineFilter, sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, departmentFilter, stageFilter, countryFilter],
+        queryKey: ["leads", page, limit, searchTerm, activeTab, sortBy, sortOrder, scoreMin, scoreMax, mineFilter, sourceFilter, categoryFilter, enquiryFilter, slaFilter, dateFrom, dateTo, departmentFilter, stageFilter, countryFilter, assignedToFilter],
         queryFn: async () => {
             const params = {
                 page,
@@ -208,6 +215,7 @@ const Leads = () => {
                 department: departmentFilter || undefined,
                 stage: stageFilter || undefined,
                 country: countryFilter || undefined,
+                assignedTo: assignedToFilter || undefined,
             };
             const res = await api.get("/leads", { params });
             return res.data;
@@ -504,6 +512,7 @@ const Leads = () => {
                         {departmentFilter && <FilterChip label={`Dept: ${departmentLabel(departmentFilter)}`} onRemove={() => { setParam("department", ""); setParam("stage", ""); }} />}
                         {stageFilter     && <FilterChip label={`Stage: ${stageLabel(departmentFilter, stageFilter)}`} onRemove={() => setParam("stage", "")} />}
                         {countryFilter   && <FilterChip label={`Country: ${countryFilter}`}                 onRemove={() => setParam("country", "")} />}
+                        {assignedToFilter && <FilterChip label={`Consultant: ${users.find(u => u.id === assignedToFilter)?.name || (assignedToFilter === "unassigned" ? "Unassigned" : assignedToFilter)}`} onRemove={() => setParam("assignedTo", "")} />}
                         {(scoreMin || scoreMax) && <FilterChip label={`Score: ${scoreMin||"0"}–${scoreMax||"100"}`} onRemove={() => { setParam("score_min",""); setParam("score_max",""); }} />}
                         {(dateFrom || dateTo)   && <FilterChip label={`Date: ${dateFrom||"…"} → ${dateTo||"…"}`}   onRemove={() => { setParam("startDate",""); setParam("endDate",""); }} />}
                         <button onClick={clearAllFilters} className="text-xs text-red-500 hover:text-red-700 font-semibold ml-1">Clear all</button>
@@ -614,6 +623,26 @@ const Leads = () => {
                                 ))}
                             </select>
                         </div>
+ 
+                        {/* Consultant */}
+                        {user?.role !== "EMPLOYEE" && (
+                            <div>
+                                <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
+                                    <Users className="h-3 w-3" />Consultant
+                                </label>
+                                <select value={assignedToFilter}
+                                    onChange={e => setParam("assignedTo", e.target.value)}
+                                    className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-400 outline-none bg-white bg-no-repeat">
+                                    <option value="">All Consultants</option>
+                                    <option value="unassigned">Unassigned</option>
+                                    {users.map(u => (
+                                        <option key={u.id} value={u.id}>
+                                            {u.name} ({u.role === "SUPER_ADMIN" ? "Director" : u.role === "ADMIN" ? "Manager" : u.role === "TEAM_LEADER" ? "Team Leader" : "Consultant"})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
 
                         {/* Department & Stage — disabled in board view: columns already split by stage */}
                         <div>
@@ -731,6 +760,7 @@ const Leads = () => {
                 <LeadsBoard
                     search={searchTerm}
                     mine={mineFilter === "true"}
+                    assignedEmployeeId={assignedToFilter || undefined}
                     initialDepartment={departmentFilter || undefined}
                     slaWarningDays={slaWarningDays}
                     slaBreachDays={slaBreachDays}

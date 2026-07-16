@@ -242,9 +242,9 @@ function AdminPanel() {
                 <PanelLink to="/leave" icon={Calendar} label="Leave" />
             </PanelSection>
 
-            {(user?.role === "SUPER_ADMIN" || user?.role === "ADMIN" || user?.preferences?.permissions?.invoice !== false) && (
+            {(user?.role === "SUPER_ADMIN" || user?.preferences?.permissions?.invoice !== false) && (
                 <PanelSection title="Billing">
-                    {(user?.role === "SUPER_ADMIN" || user?.role === "ADMIN" || user?.preferences?.permissions?.invoice !== false) && (
+                    {(user?.role === "SUPER_ADMIN" || user?.preferences?.permissions?.invoice !== false) && (
                         <PanelLink to="/invoices" icon={Receipt} label="Invoices" />
                     )}
                     {isSuperAdmin && <PanelLink to="/finance" icon={IndianRupee} label="Finance Tracker" />}

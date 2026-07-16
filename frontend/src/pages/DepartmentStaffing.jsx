@@ -200,7 +200,7 @@ export default function DepartmentStaffing() {
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {filteredUsers.map((u) => {
-                                const isAlwaysAllowed = u.role === "SUPER_ADMIN" || u.role === "ADMIN";
+                                const isAlwaysAllowed = u.role === "SUPER_ADMIN";
                                 const hasCI = isAlwaysAllowed || u.preferences?.permissions?.commissionInvoicing !== false;
                                 const hasInv = isAlwaysAllowed || u.preferences?.permissions?.invoice !== false;
 

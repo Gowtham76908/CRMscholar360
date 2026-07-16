@@ -26,15 +26,15 @@ const authMiddleware = async (req, res, next) => {
     try {
         const user = await prisma.user.findUnique({
             where:  { id: decoded.userId },
-            select: { id: true, role: true, isActive: true },
+            select: { id: true, role: true, isActive: true, preferences: true },
         });
-
+ 
         if (!user || !user.isActive) {
             return res.status(401).json({ error: { code: ERROR_CODES.AUTH_ACCOUNT_INACTIVE, message: "Account not found or inactive" } });
         }
-
+ 
         // Keep all JWT claims (exp, iat, etc.) but override role with live DB value
-        req.user = { ...decoded, role: user.role };
+        req.user = { ...decoded, role: user.role, preferences: user.preferences };
         next();
     } catch {
         res.status(500).json({ message: "Authentication check failed" });

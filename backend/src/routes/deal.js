@@ -17,7 +17,18 @@ router.post("/",       createDeal);
 router.get("/:id",          getDeal);
 router.patch("/:id",        updateDeal);
 router.delete("/:id",       deleteDeal);
-router.get("/:id/invoices", listDealInvoices);
-router.post("/:id/create-invoice", createInvoiceFromDeal);
+const verifyInvoiceAccess = (req, res, next) => {
+    if (req.user.role === "SUPER_ADMIN") {
+        return next();
+    }
+    const permissions = req.user.preferences?.permissions || {};
+    if (permissions.invoice === false) {
+        return res.status(403).json({ error: { message: "Access denied: invoice access is disabled for your account." } });
+    }
+    next();
+};
+
+router.get("/:id/invoices", verifyInvoiceAccess, listDealInvoices);
+router.post("/:id/create-invoice", verifyInvoiceAccess, createInvoiceFromDeal);
 
 module.exports = router;

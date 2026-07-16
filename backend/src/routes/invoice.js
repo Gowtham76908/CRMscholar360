@@ -19,6 +19,19 @@ const { createInvoiceSchema, addPaymentSchema } = require("../middleware/schemas
 
 router.use(authMiddleware);
 
+const verifyInvoiceAccess = (req, res, next) => {
+    if (req.user.role === "SUPER_ADMIN") {
+        return next();
+    }
+    const permissions = req.user.preferences?.permissions || {};
+    if (permissions.invoice === false) {
+        return res.status(403).json({ error: { message: "Access denied: invoice access is disabled for your account." } });
+    }
+    next();
+};
+
+router.use(verifyInvoiceAccess);
+
 // All invoice access is privileged — financials are visible to ADMIN/SUPER_ADMIN
 // (the sidebar already restricts the page to SUPER_ADMIN; managers may read via deal pages).
 // Without this gate, EMPLOYEEs could list/read/aggregate any invoice in the system.
